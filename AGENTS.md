@@ -24,12 +24,14 @@ These apply to people and to coding agents alike.
 ## Review and approval
 
 - The author never approves their own pull request. Approval comes from a second account acting
-  for the maintainers, and a pull request is merged by a person, never automatically.
+  for the maintainers, and a pull request is merged by the maintainers' delegate after the written
+  review; never automatically.
 - An approval is a written review, not a click. Before approving, the reviewer posts a comment
   stating, with links or ids, that: the fixture ids or the verdict report the pull request cites
   were run and are green; no protected path (the harness under `src/`, manifests, existing
-  fixtures, `.github/`) changed in a pull request authored by an automated agent; every commit
-  carries the sign-off and no AI trailer; and the `STATE.md` tracker the stream owner keeps
+  fixtures, `.github/`) changed in a pull request opened by the parity loop (the `agent-task:*`
+  issues), the only pull requests that rule binds; every commit carries the sign-off and no AI
+  trailer; and the `STATE.md` tracker the stream owner keeps
   outside this repository was updated. A pull request missing any of these gets "request
   changes", not a question in chat.
 - Some changes wait for the project sponsor's own approval even when everything else is green:
