@@ -1,4 +1,11 @@
-"""Fixture files: JSON Lines, one case per line, sorted by id, canonical, schema-checked on write."""
+"""Fixture files: JSON Lines, one case per line, sorted by id, canonical, schema-checked on write.
+
+A line is canonical in what bellwether controls: the top-level keys come in a fixed order and the
+reference and witnesses carry sorted keys. The request is written exactly as the corpus gave it,
+because key order inside it is part of what the oracle rendered: a template that serialises tool
+definitions with ``tojson`` writes the keys in the order it received them, so a re-sorted request
+would no longer be the request the reference answers.
+"""
 
 from __future__ import annotations
 
@@ -20,8 +27,24 @@ def validator() -> Draft202012Validator:
     return Draft202012Validator(json.loads(schema_path().read_text()))
 
 
+TOP_LEVEL_ORDER = ("id", "kind", "model", "request", "reference", "witnesses")
+
+
 def canonical_line(case: dict) -> str:
-    return json.dumps(case, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    ordered = {key: case[key] for key in TOP_LEVEL_ORDER if key in case}
+    ordered.update((key, case[key]) for key in sorted(case) if key not in ordered)
+    for key in ("reference", "witnesses"):
+        if key in ordered:
+            ordered[key] = _with_sorted_keys(ordered[key])
+    return json.dumps(ordered, ensure_ascii=False, separators=(",", ":"))
+
+
+def _with_sorted_keys(value):
+    if isinstance(value, dict):
+        return {key: _with_sorted_keys(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_with_sorted_keys(item) for item in value]
+    return value
 
 
 def read_fixture_file(path: Path) -> dict[str, dict]:

@@ -8,7 +8,7 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import read_fixture_file, schema_path, validator, write_fixture_file
+from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -201,9 +201,8 @@ def test_record_writes_sorted_canonical_lines_with_provenance(tmp_path, tiny_mod
     assert "transformers" in first["reference"]["provenance"]
     for line in lines:
         validator().validate(line)
-    assert text == "".join(
-        json.dumps(line, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n" for line in lines
-    )
+    assert text == "".join(f"{canonical_line(line)}\n" for line in lines)
+    assert list(lines[0]) == ["id", "kind", "model", "request", "reference"]
     assert "common.jsonl: 2 cases recorded\n" in capsys.readouterr().out
 
 
@@ -252,6 +251,22 @@ def test_record_removes_fixture_files_of_sets_the_corpus_no_longer_has(tmp_path,
     assert status == 0
     assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
     assert "tools.jsonl: removed, the corpus has no set of that name" in capsys.readouterr().out
+
+
+def test_record_keeps_the_request_key_order_the_oracle_rendered(tmp_path, tiny_model):
+    tool = {"type": "function", "function": {"name": "get_weather", "description": "Weather", "parameters": {}}}
+    cases = [{"name": "tools", "request": {"messages": [user("Hi")], "tools": [tool]}}]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases))
+    assert status == 0
+    raw = (out_dir / "common.jsonl").read_text()
+    # The request keeps the corpus order (type before function, name before description) ...
+    assert (
+        '"tools":[{"type":"function","function":{"name":"get_weather","description":"Weather","parameters":{}}}]' in raw
+    )
+    # ... and the reference shows the template rendered that order, so the two agree.
+    rendered = json.loads(raw)["reference"]["text"]
+    assert '{"type": "function", "function": {"name": "get_weather", "description": "Weather"' in rendered
+    assert raw.startswith('{"id":"tiny-chat/render/tools","kind":"render","model":')
 
 
 def test_record_drops_witnesses_when_the_request_changed(tmp_path, tiny_model, capsys):
@@ -311,7 +326,7 @@ def test_committed_fixtures_are_canonical_sorted_and_valid(path):
     assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
     for raw, case in zip(lines, cases, strict=True):
         validator().validate(case)
-        assert raw == json.dumps(case, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        assert raw == canonical_line(case)
         assert case["id"].startswith(f"{manifest.slug}/{path.parent.name}/")
         assert case["model"] == manifest.model
         assert case["reference"]["provenance"]["revision"] == manifest.revision
