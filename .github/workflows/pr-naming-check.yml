@@ -1,0 +1,112 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  branch-naming:
+    name: Branch Naming Convention
+    runs-on: ubuntu-latest
+    # Only enforce on internal PRs, not forks
+    if: github.event.pull_request.head.repo.full_name == 'smg-project/bellwether' && github.head_ref != 'main'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Validate branch name
+        env:
+          BRANCH: ${{ github.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          REGEX='^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(/[a-zA-Z0-9._-]+)+$'
+
+          if [[ "$BRANCH" =~ $REGEX ]]; then
+            echo "✅ Branch name is valid: '$BRANCH'"
+            exit 0
+          fi
+
+          # Post comment and close the PR
+          gh pr comment "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body "Hi @${PR_AUTHOR}, the branch \`${BRANCH}\` does not follow our naming convention.
+
+          Please use one of the following formats:
+          - \`<type>/<description>\` — e.g. \`feat/add-auth\`, \`fix/null-pointer\`, \`dependabot/cargo/pyo3-0.28.1\`
+          - \`<username>/<description>\` — e.g. \`changsu/fix-routing\`
+
+          Allowed types: \`feat\`, \`fix\`, \`chore\`, \`docs\`, \`refactor\`, \`test\`, \`ci\`, \`perf\`
+
+          To fix, rename your branch locally, push the new branch, and open a new PR:
+          \`\`\`bash
+          git branch -m <new-branch-name>
+          git push origin -u <new-branch-name>
+          \`\`\`"
+
+          gh pr close "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --comment "Closing this PR because the branch name \`${BRANCH}\` does not follow the naming convention."
+
+          exit 1
+
+  pr-validation:
+    name: PR Title & Commit Messages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Validate PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          REGEX='^(feat|fix|chore|docs|refactor|test|ci|perf|lint|style|revert|build)(\([a-z0-9_./-]+\))?!?: .+'
+
+          if [[ ! "$PR_TITLE" =~ $REGEX ]]; then
+            echo "::error::PR title does not follow conventional commits format."
+            echo ""
+            echo "Expected format:"
+            echo "  type(scope): description"
+            echo "  type: description"
+            echo ""
+            echo "Allowed types: feat, fix, chore, docs, refactor, test, ci, perf, lint, style, revert, build"
+            echo ""
+            echo "Examples:"
+            echo "  feat(auth): add OAuth2 support"
+            echo "  fix: resolve null pointer in parser"
+            echo "  refactor(grpc): simplify connection pooling"
+            echo "  perf: optimize JSON streaming validation"
+            echo "  feat!: breaking change"
+            echo "  feat(api)!: breaking change with scope"
+            echo ""
+            echo "Your title: '$PR_TITLE'"
+            exit 1
+          fi
+
+          echo "✅ PR title is valid: '$PR_TITLE'"
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages for forbidden AI co-authors
+        run: |
+          FORBIDDEN=$(git log --format='%B' origin/${{ github.base_ref }}..HEAD | \
+            grep -iE "^(Co-authored-by|Signed-off-by):.*(Claude|noreply@anthropic\.com)" || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "::error::Commit messages must not reference Claude or noreply@anthropic.com in Co-authored-by/Signed-off-by lines."
+            echo ""
+            echo "Offending lines:"
+            echo "$FORBIDDEN"
+            echo ""
+            echo "Please amend the offending commits to remove these lines."
+            exit 1
+          fi
+
+          echo "✅ No forbidden AI co-author/sign-off lines found."

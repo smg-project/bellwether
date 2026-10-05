@@ -5,10 +5,15 @@ These apply to people and to coding agents alike.
 ## Branches, commits and pull requests
 
 - Never commit to `main`. Every change, including the smallest, goes through a pull request from
-  a `<type>/<topic>` branch (`feat/gaps-matrix`, `fix/schema-ids`). `main` is protected: one
-  approving review and a green `test` check are required, administrators included, and nothing is
-  force-pushed. The only commit that ever landed without a pull request is the initial scaffold on
-  the empty repository; it is not a precedent.
+  a `<type>/<topic>` branch (`feat/gaps-matrix`, `fix/schema-ids`). `main` carries the same rules
+  as `smg-project/smg`: a pull request with one approving review from a code owner
+  (`.github/CODEOWNERS`), every review thread resolved, green `DCO` and `test` checks, squash as
+  the only merge method, and no force push or deletion. The only commit that ever landed without
+  a pull request is the initial scaffold on the empty repository; it is not a precedent.
+- A squash merge takes its title from the pull request and has an empty body unless the person
+  merging writes one, so the merge always passes the author's `Signed-off-by` line in the body.
+  Pull request titles follow conventional commits (`type(scope): description`); the
+  `PR Validation` workflow checks the title, the branch name and the absence of AI trailers.
 - Sign off every commit with your own identity (`git commit -s`). Do not add `Co-Authored-By`
   trailers naming an AI tool.
 - One concern per pull request. The body names the fixture ids or the verdict report the change
@@ -19,12 +24,14 @@ These apply to people and to coding agents alike.
 ## Review and approval
 
 - The author never approves their own pull request. Approval comes from a second account acting
-  for the maintainers, and a pull request is merged by a person, never automatically.
+  for the maintainers, and a pull request is merged by the maintainers' delegate after the written
+  review; never automatically.
 - An approval is a written review, not a click. Before approving, the reviewer posts a comment
   stating, with links or ids, that: the fixture ids or the verdict report the pull request cites
   were run and are green; no protected path (the harness under `src/`, manifests, existing
-  fixtures, `.github/`) changed in a pull request authored by an automated agent; every commit
-  carries the sign-off and no AI trailer; and the `STATE.md` tracker the stream owner keeps
+  fixtures, `.github/`) changed in a pull request opened by the parity loop (the `agent-task:*`
+  issues), the only pull requests that rule binds; every commit carries the sign-off and no AI
+  trailer; and the `STATE.md` tracker the stream owner keeps
   outside this repository was updated. A pull request missing any of these gets "request
   changes", not a question in chat.
 - Some changes wait for the project sponsor's own approval even when everything else is green:
