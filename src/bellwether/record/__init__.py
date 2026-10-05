@@ -1,8 +1,8 @@
 """bellwether record: run a corpus through one oracle and write or update fixtures.
 
-The reference oracle for ``render`` is implemented (M2). Engine oracles and the other kinds exit
-with status 2 until their milestone lands, so a script never mistakes a missing oracle for a
-recorded one.
+The reference oracles for ``render`` (the checkpoint's template) and ``parse`` (the round trip through
+that template) are implemented. Engine oracles and the other kinds exit with status 2 until their
+milestone lands, so a script never mistakes a missing oracle for a recorded one.
 """
 
 from __future__ import annotations
@@ -13,18 +13,23 @@ import sys
 from bellwether import __version__
 from bellwether.manifest import find_manifest
 
-from .corpus import load_corpus
+from .chunks import chunk_plans
+from .corpus import Case, load_corpus
 from .fixtures import read_fixture_file, write_fixture_file
-from .reference import SOURCE, HfTemplateOracle
+from .reference import SOURCE as RENDER_SOURCE
+from .reference import HfTemplateOracle
+from .roundtrip import SOURCE as PARSE_SOURCE
+from .roundtrip import RoundtripOracle
 
 NOT_IMPLEMENTED = 2
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.kind != "render" or args.oracle != "reference":
+    if args.oracle != "reference" or args.kind not in ("render", "parse"):
         print(
             f"bellwether record: kind={args.kind} oracle={args.oracle} is not implemented yet "
-            "(render/reference landed in M2; engine oracles and the other kinds follow).",
+            "(render and parse with the reference oracle landed in M2 and M4; engine oracles and the other "
+            "kinds follow).",
             file=sys.stderr,
         )
         return NOT_IMPLEMENTED
@@ -33,36 +38,29 @@ def run(args: argparse.Namespace) -> int:
     if not sets:
         print(f"bellwether record: no corpus under {args.corpus / args.kind}", file=sys.stderr)
         return NOT_IMPLEMENTED
-    oracle = HfTemplateOracle(manifest.model, manifest.revision)
+    oracle = (
+        HfTemplateOracle(manifest.model, manifest.revision)
+        if args.kind == "render"
+        else RoundtripOracle(manifest.model, manifest.revision)
+    )
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
     for set_name, cases in sets.items():
         out = args.fixtures / manifest.slug / args.kind / f"{set_name}.jsonl"
         previous = read_fixture_file(out) if out.is_file() else {}
         # The file is rebuilt from the cases rendered in this run: a case the corpus no longer has,
-        # or that the template now rejects, leaves the file. Witnesses are carried over by id, but
+        # or that the oracle now rejects, leaves the file. Witnesses are carried over by id, but
         # only while the request they were recorded for is unchanged.
         lines: dict[str, dict] = {}
         witnesses_kept = witnesses_dropped = 0
         for case in cases:
             case_id = f"{manifest.slug}/{args.kind}/{case.name}"
             try:
-                rendered = oracle.render(case.request)
-            except Exception as err:  # the reference cannot render this case: report it, record nothing
+                line = _record(args.kind, oracle, case, provenance)
+            except Exception as err:  # the reference cannot answer this case: report it, record nothing
                 not_recorded.append((case_id, f"{type(err).__name__}: {err}"))
                 continue
-            line = {
-                "id": case_id,
-                "kind": args.kind,
-                "model": manifest.model,
-                "request": case.request,
-                "reference": {
-                    "source": SOURCE,
-                    "input_ids": rendered.input_ids,
-                    "text": rendered.text,
-                    "provenance": provenance,
-                },
-            }
+            line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
             old = previous.get(case_id)
             if old is not None and "witnesses" in old:
                 if old.get("request") == case.request:
@@ -94,3 +92,37 @@ def run(args: argparse.Namespace) -> int:
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
+
+
+def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, provenance: dict) -> dict:
+    """The fields of one fixture line below id, kind and model, for the case's kind."""
+    if kind == "render":
+        assert isinstance(oracle, HfTemplateOracle)
+        rendered = oracle.render(case.request)
+        return {
+            "request": case.request,
+            "reference": {
+                "source": RENDER_SOURCE,
+                "input_ids": rendered.input_ids,
+                "text": rendered.text,
+                "provenance": provenance,
+            },
+        }
+    assert isinstance(oracle, RoundtripOracle)
+    if case.message is None:
+        raise ValueError("a parse case needs `message`, the assistant message the output must parse to")
+    output = oracle.render_output(case.request, case.message)
+    return {
+        "request": case.request,
+        "tools": list(case.request.get("tools") or []),
+        "output_ids": output.output_ids,
+        "malformed": False,
+        "chunk_plans": chunk_plans(len(output.output_ids)),
+        "reference": {
+            "source": PARSE_SOURCE,
+            "message": {"role": "assistant", **case.message},
+            "finish_reason": output.finish_reason,
+            "text": output.text,
+            "provenance": provenance,
+        },
+    }

@@ -7,7 +7,7 @@ fixtures/
   kimi-k3/
     manifest.toml          # model, pinned revision, authority order, SMG and engine parser names
     render/*.jsonl         # request -> prompt token ids
-    parse/*.jsonl          # output token ids -> response, whole and per chunk plan
+    parse/*.jsonl          # output token ids -> response, whole and per chunk plan (see below)
     tokenize/*.jsonl       # text -> ids
     detokenize/*.jsonl     # ids -> incremental text pieces
 ```
@@ -47,3 +47,17 @@ against the schema. A re-run with the reference oracle replaces each line's
 (M2, second half). The directory mirrors the corpus: a case or a set the corpus no longer has is removed
 from it.
 
+## Parse lines
+
+`record --kind parse --oracle reference` records the round trip: the corpus states the assistant
+message, the template renders it as the final assistant turn, and the text between the generation
+prompt and the end-of-turn token is the output. A line carries `request` (what a replay sends to SMG),
+`tools`, `output_ids` (the output's tokens, the end-of-turn token excluded), `malformed: false`,
+`chunk_plans` (`whole` and `per_token` derived at replay time; `size-<n>` fixed lengths; `split-<k>`
+every two-way split for outputs of at most 32 tokens; `random-<seed>` thirty seeded plans with chunks
+of one to eight tokens) and `reference` with `source: roundtrip`, the `message` (with `role`), the
+`finish_reason` (`tool_calls` when the message has calls, else `stop`), the output `text` and the
+provenance. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
+sampled in context; a replay feeds them as the engine's output. A case whose template does not extend
+the generation prompt when the turn is appended is reported and not recorded, and the run exits 1;
+recording it is left to the manifest's next authority, which nothing here invokes.
