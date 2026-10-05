@@ -62,7 +62,7 @@ their milestone lands:
 | M1 | `gaps` against the live registries and SMG (done) |
 | M2 | render fixtures from the checkpoint template, in the order Symphony needs them: Qwen3-8B and DeepSeek-R1 (done), then DeepSeek-V4.1-Flash, GLM-5.3-Flash, MiniMax-M3, Kimi-K3; engine witnesses on Linux; fixture-driven tests in SMG |
 | M3 | `mock-worker --script/--capture` in SMG; `verify` end to end on render cases |
-| M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle, waivers |
+| M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle (Qwen3-8B done; DeepSeek-R1 needs a decision, issue #14), waivers |
 | M5 | CI in both repositories; weekly record against engine nightlies; reports to `smg-project/artifacts` |
 | M6 | coverage work from the gaps list |
 
@@ -100,6 +100,20 @@ reference, keeps the witnesses already recorded for an unchanged request, and re
 the corpus no longer has. A case the template cannot render is reported on
 stderr and left out, and the command exits 1. Engine witnesses (`--oracle vllm|sglang`) run on Linux
 inside the engine's image and are the second half of M2.
+
+## Recording parse fixtures (the round trip)
+
+```bash
+uv run bellwether record --model Qwen/Qwen3-8B --kind parse --oracle reference
+```
+
+Each case under `corpus/parse/` states the assistant message (content, reasoning, tool calls) the
+output must parse to. The checkpoint's template renders it as the final assistant turn after the
+generation prompt; the text in between is the output, its token ids the engine chunks a replay feeds,
+and the fixture carries the chunk plans (fixed sizes, every two-way split for short outputs, thirty
+seeded random plans). A template that does not extend the generation prompt when the turn is appended
+(DeepSeek-R1 never renders `<think>`) cannot be this oracle for that case; the case is reported and
+falls through to the manifest's next authority.
 
 ## Layout
 

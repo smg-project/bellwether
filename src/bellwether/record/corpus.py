@@ -1,9 +1,10 @@
 """Request corpora: JSON Lines files of cases, shared across models or specific to one.
 
 ``corpus/<kind>/<set>.jsonl`` holds cases every model records; ``corpus/<kind>/<slug>/<set>.jsonl``
-adds cases for one model to the set of the same name. A line is ``{"name", "request", "notes"}``;
-``name`` is a lowercase slug that becomes the last part of the fixture id, so it is unique across
-every set of a kind.
+adds cases for one model to the set of the same name. A line is ``{"name", "request", "notes"}``,
+plus ``"message"`` for a parse case: the assistant message the output must parse to. ``name`` is a
+lowercase slug that becomes the last part of the fixture id, so it is unique across every set of a
+kind.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ class Case:
     name: str
     request: dict
     notes: str = ""
+    message: dict | None = None
     source: Path | None = field(default=None, compare=False)
 
 
@@ -41,8 +43,11 @@ def read_cases(path: Path) -> list[Case]:
             raise ValueError(f"{path}:{number}: duplicate case name {name!r}")
         if not isinstance(data.get("request"), dict):
             raise ValueError(f"{path}:{number}: `request` must be an object")
+        message = data.get("message")
+        if message is not None and not isinstance(message, dict):
+            raise ValueError(f"{path}:{number}: `message` must be an object")
         names.add(name)
-        cases.append(Case(name, data["request"], str(data.get("notes", "")), path))
+        cases.append(Case(name, data["request"], str(data.get("notes", "")), message, path))
     return cases
 
 

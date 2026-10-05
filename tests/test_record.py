@@ -7,16 +7,25 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
+from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
+from bellwether.record.roundtrip import RoundtripOracle
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 # A ChatML-shaped template with a thinking switch, enough to see every request field arrive.
 TEMPLATE = (
     "{%- if tools %}{{ '<|im_start|>system\\n' + (tools | tojson) + '<|im_end|>\\n' }}{%- endif %}"
-    "{%- for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}"
+    "{%- for m in messages %}"
+    "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' }}"
+    "{%- if m['reasoning_content'] %}{{ '<think>\\n' + m['reasoning_content'] + '\\n</think>\\n\\n' }}{%- endif %}"
+    "{{ m['content'] or '' }}"
+    "{%- for c in (m['tool_calls'] or []) %}"
+    "{{ '\\n<tool_call>\\n' + (c['function'] | tojson) + '\\n</tool_call>' }}{%- endfor %}"
+    "{{ '<|im_end|>\\n' }}"
+    "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
     "{%- endfor %}"
     "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}"
     "{%- if enable_thinking is defined and not enable_thinking %}{{ '<think>\\n\\n</think>\\n\\n' }}{%- endif %}"
@@ -39,7 +48,12 @@ def tiny_model(tmp_path_factory) -> pathlib.Path:
     sentences = ["system user assistant What is the capital of France? Paris. The quick brown fox"] * 4
     tokenizer.train_from_iterator(sentences, trainer)
     tokenizer.save(str(directory / "tokenizer.json"))
-    config = {"tokenizer_class": "PreTrainedTokenizerFast", "chat_template": TEMPLATE, "unk_token": "<unk>"}
+    config = {
+        "tokenizer_class": "PreTrainedTokenizerFast",
+        "chat_template": TEMPLATE,
+        "unk_token": "<unk>",
+        "eos_token": "<|im_end|>",
+    }
     (directory / "tokenizer_config.json").write_text(json.dumps(config))
     return directory
 
@@ -172,15 +186,17 @@ def test_reference_oracle_passes_template_kwargs_tools_and_continuation_through(
     assert continued.text.endswith("<|im_start|>assistant\nThe quick")
 
 
-def record(tmp_path, tiny_model, *corpus_sets: tuple[str, list[dict]]) -> tuple[int, pathlib.Path]:
+def record(
+    tmp_path, tiny_model, *corpus_sets: tuple[str, list[dict]], kind: str = "render"
+) -> tuple[int, pathlib.Path]:
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     if not (fixtures / "tiny-chat").exists():
         write_manifest(fixtures, "tiny-chat", str(tiny_model))
     for name, lines in corpus_sets:
-        write_jsonl(corpus / "render" / f"{name}.jsonl", lines)
-    argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "reference"]
+        write_jsonl(corpus / kind / f"{name}.jsonl", lines)
+    argv = ["record", "--model", str(tiny_model), "--kind", kind, "--oracle", "reference"]
     argv += ["--fixtures", str(fixtures), "--corpus", str(corpus)]
-    return main(argv), fixtures / "tiny-chat" / "render"
+    return main(argv), fixtures / "tiny-chat" / kind
 
 
 def test_record_writes_sorted_canonical_lines_with_provenance(tmp_path, tiny_model, capsys):
@@ -293,10 +309,111 @@ def test_record_reports_cases_the_template_cannot_render_and_records_the_rest(tm
     assert "not recorded tiny-chat/render/broken: KeyError" in capsys.readouterr().err
 
 
+WEATHER_TOOL = {"type": "function", "function": {"name": "get_weather", "parameters": {"type": "object"}}}
+
+
+def weather_call() -> dict:
+    return {"type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+
+
+def test_chunk_plans_cover_the_output_and_are_deterministic():
+    plans = chunk_plans(10)
+    assert plans["whole"] is None and plans["per_token"] is None
+    assert plans["size-3"] == [3, 3, 3, 1]
+    assert "size-1" not in plans and "size-11" not in plans
+    assert plans["split-4"] == [4, 6] and sum(1 for name in plans if name.startswith("split-")) == 9
+    assert sum(1 for name in plans if name.startswith("random-")) == 30
+    assert all(sum(lengths) == 10 for lengths in plans.values() if lengths is not None)
+    assert all(1 <= length <= 8 for name, lengths in plans.items() if name.startswith("random-") for length in lengths)
+    assert chunk_plans(10) == plans
+    assert "split-1" not in chunk_plans(33)
+    with pytest.raises(ValueError, match="at least one token"):
+        chunk_plans(0)
+
+
+def test_roundtrip_records_the_turn_between_the_prompt_and_the_end_of_turn(tiny_model):
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
+    message = {"reasoning_content": "think", "content": "Sure.", "tool_calls": [weather_call()]}
+    out = oracle.render_output(request, message)
+    call_json = json.dumps(weather_call()["function"])
+    assert out.text == f"<think>\nthink\n</think>\n\nSure.\n<tool_call>\n{call_json}\n</tool_call>"
+    assert out.output_ids == oracle.tokenizer.encode(out.text, add_special_tokens=False)
+    assert out.finish_reason == "tool_calls"
+    plain = oracle.render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert (plain.text, plain.finish_reason) == ("Hello", "stop")
+
+
+def test_roundtrip_reports_a_turn_the_template_cannot_extend(tiny_model):
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    request = {"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}}
+    with pytest.raises(ValueError, match="does not extend the generation prompt"):
+        oracle.render_output(request, {"reasoning_content": "r", "content": "c"})
+
+
+def test_record_parse_writes_the_output_its_chunk_plans_and_the_message(tmp_path, tiny_model, capsys):
+    cases = [
+        {
+            "name": "call",
+            "request": {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]},
+            "message": {"content": "", "tool_calls": [weather_call()]},
+        },
+        {
+            "name": "lossy",
+            "request": {"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}},
+            "message": {"reasoning_content": "r", "content": "c"},
+        },
+    ]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 1
+    lines = read_fixture_file(out_dir / "common.jsonl")
+    assert list(lines) == ["tiny-chat/parse/call"]
+    line = lines["tiny-chat/parse/call"]
+    assert line["kind"] == "parse" and line["tools"] == [WEATHER_TOOL] and line["malformed"] is False
+    assert line["request"] == cases[0]["request"]
+    assert line["output_ids"] and len(line["output_ids"]) == sum(line["chunk_plans"]["size-2"])
+    assert line["chunk_plans"]["whole"] is None
+    reference = line["reference"]
+    assert reference["source"] == "roundtrip"
+    assert reference["message"] == {"role": "assistant", "content": "", "tool_calls": [weather_call()]}
+    assert reference["finish_reason"] == "tool_calls"
+    assert reference["text"].startswith("\n<tool_call>\n")
+    assert reference["provenance"]["revision"] == "local"
+    assert "not recorded tiny-chat/parse/lossy: ValueError: the template does not extend" in capsys.readouterr().err
+
+
+def test_record_parse_needs_the_message(tmp_path, tiny_model, capsys):
+    status, out_dir = record(
+        tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("Hi")]}}]), kind="parse"
+    )
+    assert status == 1
+    assert not (out_dir / "common.jsonl").exists()
+    assert "a parse case needs `message`" in capsys.readouterr().err
+
+
+def test_corpus_rejects_a_message_that_is_not_an_object(tmp_path):
+    path = tmp_path / "set.jsonl"
+    write_jsonl(path, [{"name": "a", "request": {"messages": []}, "message": "text"}])
+    with pytest.raises(ValueError, match="`message` must be an object"):
+        read_cases(path)
+
+
 def test_record_other_kinds_and_oracles_are_not_implemented(tmp_path, tiny_model, capsys):
     argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "sglang", "--fixtures", str(tmp_path)]
     assert main(argv) == 2
     assert "not implemented" in capsys.readouterr().err
+    argv = [
+        "record",
+        "--model",
+        str(tiny_model),
+        "--kind",
+        "tokenize",
+        "--oracle",
+        "reference",
+        "--fixtures",
+        str(tmp_path),
+    ]
+    assert main(argv) == 2
 
 
 def test_the_case_schema_is_packaged_with_the_module():
