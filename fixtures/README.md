@@ -41,6 +41,7 @@ sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
 `record --model <id>` finds the manifest whose `model` is that id, reads the corpus under
 `corpus/<kind>/`, and writes `fixtures/<slug>/<kind>/<set>.jsonl`: one line per case, sorted by id,
 canonical JSON, checked against the schema. A re-run with the reference oracle replaces each line's
-`reference` and keeps its `witnesses`; an engine oracle does the reverse. The directory mirrors the
-corpus: a case or a set the corpus no longer has is removed from it.
+`reference` and keeps its `witnesses`; an engine oracle will do the reverse when engine recording lands
+(M2, second half). The directory mirrors the corpus: a case or a set the corpus no longer has is removed
+from it.
 
