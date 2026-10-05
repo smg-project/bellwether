@@ -1,0 +1,13 @@
+# Accepted engine_defect verdicts. One entry per engine, version range, model and case.
+# An entry is only accepted with evidence and an upstream link. When `record` runs against a
+# newer engine and the engine agrees with the reference again, the entry is stale and the gate
+# fails until it is removed. This file is therefore the live list of upstream bugs SMG has found.
+#
+# [[engine_defect]]
+# engine   = "vllm"
+# versions = ">=0.29.0, <0.30.0"
+# model    = "moonshotai/Kimi-K3"
+# case     = "kimi-k3/parse/tool-call-bad-arguments-001"
+# reason   = "vLLM coerces unterminated arguments to {}; the reference keeps the raw string"
+# evidence = "fixtures/kimi-k3/parse/tool-call-bad-arguments-001.jsonl"
+# upstream = "https://github.com/vllm-project/vllm/issues/NNNNN"

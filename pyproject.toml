@@ -1,0 +1,40 @@
+[project]
+name = "bellwether"
+version = "0.0.1"
+description = "Token-level conformance for SMG: compare the gateway's rendered prompt tokens and parsed responses with the model vendor's reference, vLLM and SGLang, with no GPU."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",
+    "jsonschema>=4.23",
+    "tokenizers>=0.20",
+    "transformers>=4.57",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+# Engine oracles (vLLM, SGLang) are deliberately not extras: they must never share one
+# environment. `bellwether record --oracle vllm|sglang` runs inside the engine's official image.
+
+[project.scripts]
+bellwether = "bellwether.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bellwether"
+module-root = "src"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

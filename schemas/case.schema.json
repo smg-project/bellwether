@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/smg-project/bellwether/schemas/case.schema.json",
+  "title": "bellwether case",
+  "description": "One fixture line: a case plus the reference result and each witness's result.",
+  "type": "object",
+  "required": ["id", "kind", "model", "reference"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9.-]+/(render|parse|tokenize|detokenize)/[a-z0-9-]+$"},
+    "kind": {"enum": ["render", "parse", "tokenize", "detokenize"]},
+    "model": {"type": "string", "description": "Hugging Face model id; the manifest pins the revision"},
+    "request": {"type": "object", "description": "render: an OpenAI chat completion request body"},
+    "tools": {"type": "array", "description": "parse: the tool definitions the output was produced with"},
+    "output_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "parse, detokenize: the engine output token ids"},
+    "text": {"type": "string", "description": "tokenize: the input text"},
+    "malformed": {"type": "boolean", "default": false, "description": "parse: output has no well-formed parse; verdict is policy, not regression"},
+    "chunk_plans": {
+      "type": "object",
+      "description": "name -> chunk lengths; null means the plan is derived (whole, per_token)",
+      "additionalProperties": {"anyOf": [{"type": "null"}, {"type": "array", "items": {"type": "integer", "minimum": 1}}]}
+    },
+    "reference": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": {"type": "string", "pattern": "^(vendor-code|hf-template|hf-tokenizer|roundtrip|vendor-verifier|response-template|engine)(:.+)?$"},
+        "input_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "ids": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "text": {"type": "string"},
+        "pieces": {"type": "array", "items": {"type": "string"}},
+        "message": {"type": "object"},
+        "finish_reason": {"enum": ["stop", "length", "tool_calls", "content_filter"]},
+        "provenance": {"type": "object", "description": "oracle versions, HF revision, vendor file sha, bellwether commit"}
+      }
+    },
+    "witnesses": {
+      "type": "object",
+      "propertyNames": {"enum": ["vllm", "sglang"]},
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version"],
+        "properties": {"version": {"type": "string"}, "image": {"type": "string"}}
+      }
+    }
+  }
+}
