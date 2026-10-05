@@ -1,0 +1,66 @@
+# Name mapping for `bellwether gaps`: which names in vLLM, SGLang and SMG denote one wire format.
+#
+# A name absent here maps to its own normalized form (lowercase letters and digits), so
+# `minimax-m2`, `minimax_m2` and `kimi_k3` / `kimik3` already share a row. Entries are needed
+# only where the systems chose different words for one format, and each carries the evidence it
+# rests on. A row that should stay split is left out on purpose: a false gap costs a look, a
+# false match hides a parser SMG lacks. Changing this file changes the matrix.
+
+schema_version = 1
+
+[tool.vllm]
+qwen3_coder = "qwen3xml"      # the same Qwen3EngineToolParser as qwen3_xml
+openai = "gptoss"             # GptOssToolParser: the Harmony format of gpt-oss; SGLang names it gpt-oss
+muse_glimmer = "museglimmer"  # SGLang registers the same format as `muse`
+llama3_json = "llama3json"    # Llama 3.2 JSON; SGLang `llama3` (Llama32Detector), SMG `llama` (LlamaParser)
+hf = "responsetemplate"       # the transformers response_template interpreter, not a model family
+
+[tool.sglang]
+qwen3_coder = "qwen3xml"      # Qwen3CoderDetector reads the same XML-parameter format
+glm = "glm45"                 # legacy name: the same Glm4MoeDetector as glm45
+muse = "museglimmer"
+qwen25 = "hermes"             # Qwen25Detector reads <tool_call>{json}</tool_call>, the Hermes format
+qwen = "hermes"               # alias of qwen25 in SGLang: the same Qwen25Detector
+llama3 = "llama3json"
+hunyuan = "hyv4"              # HunyuanDetector serves Hy4-preview; vLLM and SMG call the format hy_v4
+
+[tool.smg]
+deepseek32 = "deepseekv32"    # DeepSeekDsmlParser::v32(): the V3.2 DSML format
+qwen = "hermes"               # QwenParser reads <tool_call>{json}</tool_call>
+qwen_xml = "qwen3xml"         # QwenXmlParser: Qwen3-Coder XML parameters; vLLM qwen3_xml, SGLang qwen3_coder
+qwen_coder = "qwen3xml"       # alias of qwen_xml in SMG: the same QwenXmlParser
+nemotron = "qwen3xml"         # alias of qwen_xml in SMG: the same QwenXmlParser
+deepseek = "deepseekv3"       # DeepSeekParser: the V3 format
+deepseek31 = "deepseekv31"
+llama = "llama3json"          # LlamaParser: Llama 3.2 JSON
+glm45_moe = "glm45"
+glm47_moe = "glm47"
+harmony = "gptoss"            # the Harmony pipeline, reported as a name by the SMG reader
+
+[reasoning.vllm]
+glm47 = "glm45"               # the same Glm47MoeParserReasoningAdapter as glm45; SMG maps glm47 to glm45 too
+openai_gptoss = "gptoss"
+muse_glimmer = "museglimmer"
+minimax_m2_append_think = "minimaxappendthink"  # SGLang: minimax-append-think
+nemotron_v3 = "nemotronv3"    # SGLang nemotron_3, SMG nano_v3
+hf = "responsetemplate"
+
+[reasoning.sglang]
+muse = "museglimmer"
+minimax = "minimaxm2"         # the M2 <think> format; vLLM minimax_m2, SMG minimax
+minimax-append-think = "minimaxappendthink"
+hunyuan = "hyv4"
+nemotron_3 = "nemotronv3"
+
+[reasoning.smg]
+minimax = "minimaxm2"
+nano_v3 = "nemotronv3"
+kimi_thinking = "kimik2"      # Kimi-K2-Thinking: the format vLLM and SGLang register as kimi_k2
+harmony = "gptoss"
+
+[renderer.smg]
+jinja = "hf"                  # the Hugging Face chat-template path; vLLM calls it hf
+kimi_k3_xtml = "kimik3"       # the native Kimi-K3 XTML encoder on the tiktoken path; vLLM kimi_k3
+
+[tokenizer.smg]
+huggingface = "hf"

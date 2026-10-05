@@ -54,11 +54,12 @@ upstream link, and expire when the engine catches up.
 
 ## Status
 
-Scaffold, 2026-10-04. The subcommands exist and exit with status 2 until their milestone lands:
+`gaps` is implemented (M1, 2026-10-05). The other subcommands exist and exit with status 2 until
+their milestone lands:
 
 | Milestone | Deliverable |
 |---|---|
-| M1 | `gaps` against the live registries and SMG |
+| M1 | `gaps` against the live registries and SMG (done) |
 | M2 | render fixtures for Kimi-K3, DeepSeek-V4.1-Flash, MiniMax-M3, GLM-5.3-Flash; fixture-driven tests in SMG |
 | M3 | `mock-worker --script/--capture` in SMG; `verify` end to end on render cases |
 | M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle, waivers |
@@ -71,7 +72,19 @@ Scaffold, 2026-10-04. The subcommands exist and exit with status 2 until their m
 uv sync --extra dev
 uv run bellwether --help
 uv run pytest -q
+
+# The coverage matrix: engine registries at a pinned commit or tag, SMG from a checkout.
+uv run bellwether gaps --vllm-ref v0.30.0 --sglang-ref v0.5.20 --smg-src ../smg
+uv run bellwether gaps --vllm-src ../vllm --sglang-src ../sglang --smg-src ../smg --format json --out gaps.json
 ```
+
+`gaps` reads the registries from source with `ast` and regular expressions, never by importing an
+engine: vLLM's four `name -> (module, class)` tables, SGLang's two name lists and class maps plus
+its native renderer and tokenizer modules, and SMG's two factories, renderer enum and tokenizer
+types. Names that differ across systems for one format are merged through
+`src/bellwether/gaps/aliases.toml`, where every entry states its evidence; the matrix also lists
+one implementation behind several rows as alias candidates, so the table is kept honest by what
+the code says rather than by memory.
 
 ## Layout
 

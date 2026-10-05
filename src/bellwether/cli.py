@@ -1,8 +1,8 @@
 """Command line entry point: ``bellwether gaps | record | verify | report``.
 
-Every subcommand is a stub until its milestone lands (see the design in the SMG planning folder
-and the milestone table in README.md). Stubs exit with status 2 so that scripts never mistake a
-missing feature for a passing run.
+``gaps`` is implemented (M1). The other subcommands are stubs until their milestone lands (see the
+milestone table in README.md); stubs exit with status 2 so that scripts never mistake a missing
+feature for a passing run.
 """
 
 from __future__ import annotations
@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from bellwether import __version__
+from bellwether.gaps import run as gaps_run
 
 NOT_IMPLEMENTED = 2
 
@@ -29,9 +31,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="command")
 
     gaps = sub.add_parser("gaps", help="parser, renderer and tokenizer coverage matrix: vLLM, SGLang, SMG")
-    gaps.add_argument("--smg-src", help="path to an smg checkout to read ParserFactory registrations from")
-    gaps.add_argument("--fixtures", default="fixtures", help="fixture root, to mark rows that already have cases")
-    gaps.set_defaults(func=_stub("gaps", "M1"))
+    gaps.add_argument("--vllm-src", type=Path, help="a vLLM checkout, or a copy with the same layout")
+    gaps.add_argument("--vllm-ref", help="fetch vLLM's registry files from GitHub at this commit or tag")
+    gaps.add_argument("--sglang-src", type=Path, help="an SGLang checkout, or a copy with the same layout")
+    gaps.add_argument("--sglang-ref", help="fetch SGLang's registry files from GitHub at this commit or tag")
+    gaps.add_argument("--smg-src", type=Path, required=True, help="an smg checkout; the factories are read from source")
+    gaps.add_argument("--aliases", type=Path, help="name mapping to use instead of the packaged aliases.toml")
+    gaps.add_argument(
+        "--fixtures", type=Path, default=Path("fixtures"), help="fixture root, to mark rows that have cases"
+    )
+    gaps.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "bellwether" / "registries")
+    gaps.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    gaps.add_argument("--out", type=Path, help="write here instead of stdout")
+    gaps.set_defaults(func=gaps_run)
 
     record = sub.add_parser("record", help="run the corpus through one oracle and write fixtures")
     record.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
