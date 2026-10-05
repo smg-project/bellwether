@@ -1,0 +1,17 @@
+model    = "deepseek-ai/DeepSeek-R1"
+revision = "56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad"   # HF commit the fixtures are recorded at
+
+# The R1 template renders tool calls and results from the history but declares no tools and has
+# no thinking switch: it always opens <think> after the assistant header.
+[authority]
+render     = ["hf-template", "engine:vllm", "engine:sglang"]
+parse      = ["roundtrip", "engine:vllm", "engine:sglang"]
+tokenize   = ["hf-tokenizer"]
+detokenize = ["engine:vllm", "engine:sglang"]
+
+[smg]
+reasoning_parser = "deepseek_r1"
+
+[engines]
+vllm   = { reasoning_parser = "deepseek_r1" }
+sglang = { reasoning_parser = "deepseek-r1" }

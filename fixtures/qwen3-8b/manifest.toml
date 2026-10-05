@@ -1,0 +1,16 @@
+model    = "Qwen/Qwen3-8B"
+revision = "b968826d9c46dd6066d109eabc6255188de91218"   # HF commit the fixtures are recorded at
+
+[authority]
+render     = ["hf-template", "engine:vllm", "engine:sglang"]
+parse      = ["roundtrip", "engine:vllm", "engine:sglang"]
+tokenize   = ["hf-tokenizer"]
+detokenize = ["engine:vllm", "engine:sglang"]
+
+[smg]
+tool_parser      = "qwen"
+reasoning_parser = "qwen3"
+
+[engines]
+vllm   = { tool_parser = "hermes", reasoning_parser = "qwen3" }
+sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
