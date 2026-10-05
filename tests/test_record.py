@@ -7,7 +7,7 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import read_fixture_file, validator, write_fixture_file
+from bellwether.record.fixtures import read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -122,7 +122,14 @@ def test_corpus_adds_the_model_specific_file_to_the_shared_set(tmp_path):
 def test_corpus_rejects_a_model_file_that_reuses_a_shared_name(tmp_path):
     write_jsonl(tmp_path / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
     write_jsonl(tmp_path / "render" / "tiny-chat" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
-    with pytest.raises(ValueError, match="already in the shared set: a"):
+    with pytest.raises(ValueError, match="case name 'a' is already used in .*common.jsonl"):
+        load_corpus(tmp_path, "render", "tiny-chat")
+
+
+def test_corpus_rejects_the_same_name_in_two_sets(tmp_path):
+    write_jsonl(tmp_path / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
+    write_jsonl(tmp_path / "render" / "tools.jsonl", [{"name": "a", "request": {"messages": []}}])
+    with pytest.raises(ValueError, match="tools.jsonl: case name 'a' is already used in .*common.jsonl"):
         load_corpus(tmp_path, "render", "tiny-chat")
 
 
@@ -183,7 +190,7 @@ def test_record_writes_sorted_canonical_lines_with_provenance(tmp_path, tiny_mod
     assert text == "".join(
         json.dumps(line, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n" for line in lines
     )
-    assert "2 cases recorded, 2 in file" in capsys.readouterr().out
+    assert "common.jsonl: 2 cases recorded\n" in capsys.readouterr().out
 
 
 def test_record_rerun_replaces_the_reference_and_keeps_witnesses(tmp_path, tiny_model):
@@ -201,6 +208,38 @@ def test_record_rerun_replaces_the_reference_and_keeps_witnesses(tmp_path, tiny_
     assert line["reference"]["text"] != "stale"
 
 
+def test_record_rebuilds_the_file_from_the_cases_rendered_this_run(tmp_path, tiny_model, capsys):
+    first = [{"name": "a", "request": {"messages": [user("A")]}}, {"name": "b", "request": {"messages": [user("B")]}}]
+    status, out_dir = record(tmp_path, tiny_model, ("common", first))
+    assert status == 0
+    assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/render/a", "tiny-chat/render/b"]
+    # "a" leaves the corpus and "b" can no longer be rendered: neither may stay in the file.
+    second = [{"name": "b", "request": {"prompt": "no messages"}}, {"name": "c", "request": {"messages": [user("C")]}}]
+    status, _ = record(tmp_path, tiny_model, ("common", second))
+    assert status == 1
+    assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/render/c"]
+    captured = capsys.readouterr()
+    assert "1 cases recorded, 2 old cases removed" in captured.out
+    assert "not recorded tiny-chat/render/b: KeyError" in captured.err
+    # Nothing renders: the file goes away rather than keeping stale lines.
+    status, _ = record(tmp_path, tiny_model, ("common", [{"name": "c", "request": {"prompt": "x"}}]))
+    assert status == 1
+    assert not (out_dir / "common.jsonl").exists()
+
+
+def test_record_drops_witnesses_when_the_request_changed(tmp_path, tiny_model, capsys):
+    status, out_dir = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    assert status == 0
+    path = out_dir / "common.jsonl"
+    recorded = read_fixture_file(path)
+    recorded["tiny-chat/render/a"]["witnesses"] = {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    write_fixture_file(path, recorded)
+    status, _ = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A!")]}}]))
+    assert status == 0
+    assert "witnesses" not in read_fixture_file(path)["tiny-chat/render/a"]
+    assert "1 witnesses dropped because the request changed" in capsys.readouterr().out
+
+
 def test_record_reports_cases_the_template_cannot_render_and_records_the_rest(tmp_path, tiny_model, capsys):
     cases = [
         {"name": "ok", "request": {"messages": [user("A")]}},
@@ -216,6 +255,15 @@ def test_record_other_kinds_and_oracles_are_not_implemented(tmp_path, tiny_model
     argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "sglang", "--fixtures", str(tmp_path)]
     assert main(argv) == 2
     assert "not implemented" in capsys.readouterr().err
+
+
+def test_the_case_schema_is_packaged_with_the_module():
+    from importlib import resources
+
+    packaged = resources.files("bellwether") / "schemas" / "case.schema.json"
+    assert packaged.is_file()
+    assert schema_path() == pathlib.Path(str(packaged))
+    assert not (ROOT / "schemas").exists()
 
 
 def test_fixture_writer_rejects_a_line_off_the_schema(tmp_path):

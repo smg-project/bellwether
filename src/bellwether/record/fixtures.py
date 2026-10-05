@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import json
 from functools import cache
+from importlib import resources
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
 
 def schema_path() -> Path:
-    """``schemas/case.schema.json`` at the repository root, found by walking up from the package."""
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "schemas" / "case.schema.json"
-        if candidate.is_file():
-            return candidate
-    raise FileNotFoundError("schemas/case.schema.json not found above the bellwether package")
+    """``case.schema.json``, packaged with the module so an installed wheel finds it too."""
+    return Path(str(resources.files("bellwether") / "schemas" / "case.schema.json"))
 
 
 @cache

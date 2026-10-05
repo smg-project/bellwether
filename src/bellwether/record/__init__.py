@@ -35,37 +35,55 @@ def run(args: argparse.Namespace) -> int:
         return NOT_IMPLEMENTED
     oracle = HfTemplateOracle(manifest.model, manifest.revision)
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
-    skipped: list[tuple[str, str]] = []
+    not_recorded: list[tuple[str, str]] = []
     for set_name, cases in sets.items():
         out = args.fixtures / manifest.slug / args.kind / f"{set_name}.jsonl"
-        recorded = read_fixture_file(out) if out.is_file() else {}
-        written = 0
+        previous = read_fixture_file(out) if out.is_file() else {}
+        # The file is rebuilt from the cases rendered in this run: a case the corpus no longer has,
+        # or that the template now rejects, leaves the file. Witnesses are carried over by id, but
+        # only while the request they were recorded for is unchanged.
+        lines: dict[str, dict] = {}
+        witnesses_kept = witnesses_dropped = 0
         for case in cases:
             case_id = f"{manifest.slug}/{args.kind}/{case.name}"
             try:
                 rendered = oracle.render(case.request)
             except Exception as err:  # the reference cannot render this case: report it, record nothing
-                skipped.append((case_id, f"{type(err).__name__}: {err}"))
+                not_recorded.append((case_id, f"{type(err).__name__}: {err}"))
                 continue
-            line = recorded.get(case_id, {})
-            line.update(
-                {
-                    "id": case_id,
-                    "kind": args.kind,
-                    "model": manifest.model,
-                    "request": case.request,
-                    "reference": {
-                        "source": SOURCE,
-                        "input_ids": rendered.input_ids,
-                        "text": rendered.text,
-                        "provenance": provenance,
-                    },
-                }
-            )
-            recorded[case_id] = line
-            written += 1
-        write_fixture_file(out, recorded)
-        print(f"{out}: {written} cases recorded, {len(recorded)} in file")
-    for case_id, reason in skipped:
+            line = {
+                "id": case_id,
+                "kind": args.kind,
+                "model": manifest.model,
+                "request": case.request,
+                "reference": {
+                    "source": SOURCE,
+                    "input_ids": rendered.input_ids,
+                    "text": rendered.text,
+                    "provenance": provenance,
+                },
+            }
+            old = previous.get(case_id)
+            if old is not None and "witnesses" in old:
+                if old.get("request") == case.request:
+                    line["witnesses"] = old["witnesses"]
+                    witnesses_kept += 1
+                else:
+                    witnesses_dropped += 1
+            lines[case_id] = line
+        removed = len(set(previous) - set(lines))
+        if lines:
+            write_fixture_file(out, lines)
+        elif out.is_file():
+            out.unlink()
+        summary = [f"{len(lines)} cases recorded"]
+        if witnesses_kept:
+            summary.append(f"{witnesses_kept} with witnesses kept")
+        if witnesses_dropped:
+            summary.append(f"{witnesses_dropped} witnesses dropped because the request changed")
+        if removed:
+            summary.append(f"{removed} old cases removed")
+        print(f"{out}: {', '.join(summary)}")
+    for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
-    return 1 if skipped else 0
+    return 1 if not_recorded else 0

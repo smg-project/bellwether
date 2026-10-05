@@ -2,7 +2,8 @@
 
 ``corpus/<kind>/<set>.jsonl`` holds cases every model records; ``corpus/<kind>/<slug>/<set>.jsonl``
 adds cases for one model to the set of the same name. A line is ``{"name", "request", "notes"}``;
-``name`` is a lowercase slug that becomes the last part of the fixture id.
+``name`` is a lowercase slug that becomes the last part of the fixture id, so it is unique across
+every set of a kind.
 """
 
 from __future__ import annotations
@@ -46,16 +47,21 @@ def read_cases(path: Path) -> list[Case]:
 
 
 def load_corpus(corpus_dir: Path, kind: str, slug: str) -> dict[str, list[Case]]:
-    """Case sets for ``kind``: the shared files, then the model's own, merged by set name."""
+    """Case sets for ``kind``: the shared files, then the model's own, merged by set name.
+
+    The fixture id carries the case name but not the set name, so a name used in two files of the
+    same kind, whether two sets or a shared set and a model's addition to it, is an error.
+    """
     sets: dict[str, list[Case]] = {}
+    owner: dict[str, Path] = {}
     for directory in (corpus_dir / kind, corpus_dir / kind / slug):
         if not directory.is_dir():
             continue
         for path in sorted(directory.glob("*.jsonl")):
             cases = read_cases(path)
-            existing = {c.name for c in sets.get(path.stem, [])}
-            clash = sorted(existing & {c.name for c in cases})
-            if clash:
-                raise ValueError(f"{path}: case names already in the shared set: {', '.join(clash)}")
+            for case in cases:
+                if case.name in owner:
+                    raise ValueError(f"{path}: case name {case.name!r} is already used in {owner[case.name]}")
+                owner[case.name] = path
             sets.setdefault(path.stem, []).extend(cases)
     return sets

@@ -103,8 +103,7 @@ inside the engine's image and are the second half of M2.
 ## Layout
 
 ```
-src/bellwether/      package: cli.py and one subpackage per command
-schemas/             case.schema.json, the fixture line format
+src/bellwether/      package: cli.py, one subpackage per command, schemas/case.schema.json (the fixture line format)
 corpus/              request corpora, one JSON Lines file per set (see corpus/README.md)
 fixtures/            per-model manifests and recorded cases (see fixtures/README.md)
 waivers/             engine_defects.toml
