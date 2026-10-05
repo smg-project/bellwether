@@ -5,10 +5,15 @@ These apply to people and to coding agents alike.
 ## Branches, commits and pull requests
 
 - Never commit to `main`. Every change, including the smallest, goes through a pull request from
-  a `<type>/<topic>` branch (`feat/gaps-matrix`, `fix/schema-ids`). `main` is protected: one
-  approving review and a green `test` check are required, administrators included, and nothing is
-  force-pushed. The only commit that ever landed without a pull request is the initial scaffold on
-  the empty repository; it is not a precedent.
+  a `<type>/<topic>` branch (`feat/gaps-matrix`, `fix/schema-ids`). `main` carries the same rules
+  as `smg-project/smg`: a pull request with one approving review from a code owner
+  (`.github/CODEOWNERS`), every review thread resolved, green `DCO` and `test` checks, squash as
+  the only merge method, and no force push or deletion. The only commit that ever landed without
+  a pull request is the initial scaffold on the empty repository; it is not a precedent.
+- A squash merge takes its title from the pull request and has an empty body unless the person
+  merging writes one, so the merge always passes the author's `Signed-off-by` line in the body.
+  Pull request titles follow conventional commits (`type(scope): description`); the
+  `PR Validation` workflow checks the title, the branch name and the absence of AI trailers.
 - Sign off every commit with your own identity (`git commit -s`). Do not add `Co-Authored-By`
   trailers naming an AI tool.
 - One concern per pull request. The body names the fixture ids or the verdict report the change
