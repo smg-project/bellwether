@@ -46,7 +46,7 @@ def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.C
     """Download the registry files for ``engine`` at ``ref`` and return the cache root.
 
     A branch or tag is resolved to a commit first so the cache is keyed by what was read; files
-    already present are kept, and a directory already listed is not listed again. The returned
+    already present are kept, and a directory is listed again until every file it matched is on disk. The returned
     directory carries ``COMMIT.txt`` like an offline copy.
     """
     repo, files = FILES[engine]
@@ -60,20 +60,25 @@ def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.C
             sha = resp.json()["sha"]
         target = cache_dir / engine / sha
         wanted = list(files)
+        # A directory counts as listed only once every file it matched has been written: the
+        # marker is created after the downloads, so an interrupted run lists again next time.
+        pending: list[tuple[Path, list[str]]] = []
         for rel_dir, suffixes in DIRS.get(engine, []):
-            listed = target / rel_dir
-            if listed.is_dir():
-                wanted.extend(str(p.relative_to(target)) for p in sorted(listed.glob("*.py")))
+            marker = target / rel_dir / ".listed"
+            if marker.is_file():
+                wanted.extend(f"{rel_dir}/{name}" for name in marker.read_text().split())
                 continue
             resp = client.get(
                 f"https://api.github.com/repos/{repo}/contents/{rel_dir}", params={"ref": sha}, headers=_API
             )
-            listed.mkdir(parents=True, exist_ok=True)  # listed, even when upstream has no such directory
             if resp.status_code == 404:
+                pending.append((marker, []))  # upstream has no such directory; remember that too
                 continue
             resp.raise_for_status()
             names = sorted(item["name"] for item in resp.json() if item.get("type") == "file")
-            wanted.extend(f"{rel_dir}/{name}" for name in names if name.endswith(suffixes))
+            matched = [name for name in names if name.endswith(suffixes)]
+            wanted.extend(f"{rel_dir}/{name}" for name in matched)
+            pending.append((marker, matched))
         for rel in wanted:
             dest = target / rel
             if dest.is_file():
@@ -82,6 +87,9 @@ def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.C
             resp.raise_for_status()
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(resp.content)
+        for marker, names in pending:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("".join(f"{name}\n" for name in names))
         (target / "COMMIT.txt").write_text(f"{sha} {repo} fetched at ref {ref}\n")
     finally:
         if own_client:

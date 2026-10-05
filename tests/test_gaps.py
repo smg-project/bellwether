@@ -414,3 +414,26 @@ def test_fetch_lists_native_modules_for_sglang(tmp_path: Path) -> None:
     assert len(listed) == 2
     fetch_registry_files("sglang", "e" * 40, tmp_path / "cache", client=client)
     assert len(listed) == 2  # a listed directory is not listed again
+
+
+def test_fetch_lists_again_after_an_interrupted_download(tmp_path: Path) -> None:
+    listed: list[str] = []
+    fail_once = {"inkling_renderer.py": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "/contents/" in url:
+            listed.append(url)
+            return httpx.Response(200, json=[{"type": "file", "name": "inkling_renderer.py"}])
+        if url.endswith("inkling_renderer.py") and fail_once.pop("inkling_renderer.py", False):
+            return httpx.Response(502, content=b"bad gateway")
+        return httpx.Response(200, content=b"x = 1\n")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch_registry_files("sglang", "d" * 40, tmp_path / "cache", client=client)
+    root = fetch_registry_files("sglang", "d" * 40, tmp_path / "cache", client=client)
+    assert (root / "python/sglang/srt/parser/inkling_renderer.py").is_file()
+    assert len(listed) == 4  # two directories, listed on both runs: the first run wrote no marker
+    fetch_registry_files("sglang", "d" * 40, tmp_path / "cache", client=client)
+    assert len(listed) == 4
