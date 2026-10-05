@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from pathlib import Path
 
 import httpx
 
-from .registries import _SGL
+from .registries import SGLANG_SRT
 
 FILES: dict[str, tuple[str, list[str]]] = {
     "vllm": (
@@ -22,10 +24,10 @@ FILES: dict[str, tuple[str, list[str]]] = {
     "sglang": (
         "sgl-project/sglang",
         [
-            f"{_SGL}/function_call/parser_names.py",
-            f"{_SGL}/parser/reasoning_parser_names.py",
-            f"{_SGL}/function_call/function_call_parser.py",
-            f"{_SGL}/parser/reasoning_parser.py",
+            f"{SGLANG_SRT}/function_call/parser_names.py",
+            f"{SGLANG_SRT}/parser/reasoning_parser_names.py",
+            f"{SGLANG_SRT}/function_call/function_call_parser.py",
+            f"{SGLANG_SRT}/parser/reasoning_parser.py",
         ],
     ),
 }
@@ -34,12 +36,29 @@ FILES: dict[str, tuple[str, list[str]]] = {
 # for them): the directory is listed through the contents API and the matching files fetched.
 DIRS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
     "sglang": [
-        (f"{_SGL}/parser", ("_renderer.py", "_tokenizer.py")),
-        (f"{_SGL}/tokenizer", ("_tokenizer.py",)),
+        (f"{SGLANG_SRT}/parser", ("_renderer.py", "_tokenizer.py")),
+        (f"{SGLANG_SRT}/tokenizer", ("_tokenizer.py",)),
     ],
 }
 
 _API = {"Accept": "application/vnd.github+json"}
+
+
+def _write_whole(dest: Path, content: bytes) -> None:
+    """Write ``content`` to a temporary file next to ``dest`` and move it into place.
+
+    A run cut off mid-write then leaves no file at ``dest``, so the next run downloads it again
+    instead of reading a partial file as if it were complete.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=dest.parent, prefix=f".{dest.name}.", delete=False) as part:
+        part_path = Path(part.name)
+        try:
+            part.write(content)
+            part.close()
+            os.replace(part_path, dest)
+        finally:
+            part_path.unlink(missing_ok=True)
 
 
 def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.Client | None = None) -> Path:
@@ -85,12 +104,10 @@ def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.C
                 continue
             resp = client.get(f"https://raw.githubusercontent.com/{repo}/{sha}/{rel}")
             resp.raise_for_status()
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(resp.content)
+            _write_whole(dest, resp.content)
         for marker, names in pending:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("".join(f"{name}\n" for name in names))
-        (target / "COMMIT.txt").write_text(f"{sha} {repo} fetched at ref {ref}\n")
+            _write_whole(marker, "".join(f"{name}\n" for name in names).encode())
+        _write_whole(target / "COMMIT.txt", f"{sha} {repo} fetched at ref {ref}\n".encode())
     finally:
         if own_client:
             client.close()

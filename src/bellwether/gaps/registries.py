@@ -17,7 +17,7 @@ from pathlib import Path
 KINDS = ("tool", "reasoning", "renderer", "tokenizer")
 SYSTEMS = ("vllm", "sglang", "smg")
 
-_SGL = "python/sglang/srt"
+SGLANG_SRT = "python/sglang/srt"  # SGLang's Python package root, shared with fetch.py
 
 
 @dataclass(frozen=True, order=True)
@@ -187,38 +187,41 @@ def read_sglang(roots: list[Path]) -> Registry:
     _sglang_parsers(
         reg,
         "tool",
-        f"{_SGL}/function_call/parser_names.py",
+        f"{SGLANG_SRT}/function_call/parser_names.py",
         "TOOL_CALL_PARSER_NAMES",
-        f"{_SGL}/function_call/function_call_parser.py",
+        f"{SGLANG_SRT}/function_call/function_call_parser.py",
         "ToolCallParserEnum",
     )
     _sglang_parsers(
         reg,
         "reasoning",
-        f"{_SGL}/parser/reasoning_parser_names.py",
+        f"{SGLANG_SRT}/parser/reasoning_parser_names.py",
         "REASONING_PARSER_NAMES",
-        f"{_SGL}/parser/reasoning_parser.py",
+        f"{SGLANG_SRT}/parser/reasoning_parser.py",
         "DetectorMap",
     )
-    reg.add(Entry("sglang", "renderer", "hf", "jinja chat template", f"{_SGL}/parser/jinja_template_utils.py"))
-    reg.add(Entry("sglang", "tokenizer", "hf", "transformers tokenizer", f"{_SGL}/utils/hf_transformers_utils.py"))
-    globs = (
-        ("renderer", f"{_SGL}/parser", "*_renderer.py"),
-        ("tokenizer", f"{_SGL}/parser", "*_tokenizer.py"),
-        ("tokenizer", f"{_SGL}/tokenizer", "*_tokenizer.py"),
+    reg.add(Entry("sglang", "renderer", "hf", "jinja chat template", f"{SGLANG_SRT}/parser/jinja_template_utils.py"))
+    reg.add(
+        Entry("sglang", "tokenizer", "hf", "transformers tokenizer", f"{SGLANG_SRT}/utils/hf_transformers_utils.py")
+    )
+    # Native modules are named <name>_renderer.py / <name>_tokenizer.py; the name is the stem without the suffix.
+    module_suffixes = (
+        ("renderer", f"{SGLANG_SRT}/parser", "_renderer"),
+        ("tokenizer", f"{SGLANG_SRT}/parser", "_tokenizer"),
+        ("tokenizer", f"{SGLANG_SRT}/tokenizer", "_tokenizer"),
     )
     seen_dir = False
-    for kind, rel_dir, pattern in globs:
+    for kind, rel_dir, suffix in module_suffixes:
         for root in reg.roots:
             directory = root / rel_dir
             if not directory.is_dir():
                 continue
             seen_dir = True
-            for path in sorted(directory.glob(pattern)):
-                name = path.stem[: -len(pattern) + 4]  # strip "_renderer" / "_tokenizer"
+            for path in sorted(directory.glob(f"*{suffix}.py")):
+                name = path.stem.removesuffix(suffix)
                 reg.add(Entry("sglang", kind, name, _first_class(path), str(path.relative_to(root))))
     if not seen_dir:
-        reg.notes.append(f"{_SGL}/parser not found: native renderers and tokenizers not enumerated")
+        reg.notes.append(f"{SGLANG_SRT}/parser not found: native renderers and tokenizers not enumerated")
     return reg
 
 
