@@ -1,12 +1,10 @@
 import json
-import pathlib
 
 import pytest
 from jsonschema import Draft202012Validator
 
 from bellwether.cli import NOT_IMPLEMENTED, main
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from bellwether.record.fixtures import schema_path
 
 
 def test_help_exits_zero(capsys):
@@ -24,7 +22,8 @@ def test_no_command_prints_help_and_fails(capsys):
 @pytest.mark.parametrize(
     "argv",
     [
-        ["record", "--model", "moonshotai/Kimi-K3", "--kind", "render", "--oracle", "reference"],
+        ["record", "--model", "moonshotai/Kimi-K3", "--kind", "parse", "--oracle", "reference"],
+        ["record", "--model", "moonshotai/Kimi-K3", "--kind", "render", "--oracle", "vllm"],
         ["verify", "--smg", "http://127.0.0.1:30000"],
         ["report", "runs/a.json"],
     ],
@@ -35,7 +34,7 @@ def test_stubs_report_not_implemented(argv, capsys):
 
 
 def test_case_schema_is_valid_and_accepts_examples():
-    schema = json.loads((ROOT / "schemas" / "case.schema.json").read_text())
+    schema = json.loads(schema_path().read_text())
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
     render = {

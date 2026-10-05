@@ -1,8 +1,8 @@
 """Command line entry point: ``bellwether gaps | record | verify | report``.
 
-``gaps`` is implemented (M1). The other subcommands are stubs until their milestone lands (see the
-milestone table in README.md); stubs exit with status 2 so that scripts never mistake a missing
-feature for a passing run.
+``gaps`` (M1) and ``record --kind render --oracle reference`` (M2) are implemented. The other
+subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs exit
+with status 2 so that scripts never mistake a missing feature for a passing run.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from pathlib import Path
 
 from bellwether import __version__
 from bellwether.gaps import run as gaps_run
+from bellwether.record import run as record_run
 
 NOT_IMPLEMENTED = 2
 
@@ -49,8 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
     record.add_argument("--kind", required=True, choices=["render", "parse", "tokenize", "detokenize"])
     record.add_argument("--oracle", required=True, choices=["reference", "vllm", "sglang"])
-    record.add_argument("--fixtures", default="fixtures")
-    record.set_defaults(func=_stub("record", "M2"))
+    record.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    record.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    record.set_defaults(func=record_run)
 
     verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")
     verify.add_argument("--smg", required=True, help="SMG base URL, e.g. http://127.0.0.1:30000")

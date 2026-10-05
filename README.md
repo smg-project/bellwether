@@ -60,7 +60,7 @@ their milestone lands:
 | Milestone | Deliverable |
 |---|---|
 | M1 | `gaps` against the live registries and SMG (done) |
-| M2 | render fixtures for Kimi-K3, DeepSeek-V4.1-Flash, MiniMax-M3, GLM-5.3-Flash; fixture-driven tests in SMG |
+| M2 | render fixtures from the checkpoint template, in the order Symphony needs them: Qwen3-8B and DeepSeek-R1 (done), then DeepSeek-V4.1-Flash, GLM-5.3-Flash, MiniMax-M3, Kimi-K3; engine witnesses on Linux; fixture-driven tests in SMG |
 | M3 | `mock-worker --script/--capture` in SMG; `verify` end to end on render cases |
 | M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle, waivers |
 | M5 | CI in both repositories; weekly record against engine nightlies; reports to `smg-project/artifacts` |
@@ -86,11 +86,26 @@ types. Names that differ across systems for one format are merged through
 one implementation behind several rows as alias candidates, so the table is kept honest by what
 the code says rather than by memory.
 
+## Recording render fixtures
+
+```bash
+uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
+```
+
+Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every case
+under `corpus/render/` through the checkpoint's own chat template at the pinned revision
+(`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`: per case the
+request, the prompt token ids, the rendered text and the oracle versions. A re-run replaces each
+reference, keeps the witnesses already recorded for an unchanged request, and removes cases and sets
+the corpus no longer has. A case the template cannot render is reported on
+stderr and left out, and the command exits 1. Engine witnesses (`--oracle vllm|sglang`) run on Linux
+inside the engine's image and are the second half of M2.
+
 ## Layout
 
 ```
-src/bellwether/      package: cli.py and one subpackage per command
-schemas/             case.schema.json, the fixture line format
+src/bellwether/      package: cli.py, one subpackage per command, schemas/case.schema.json (the fixture line format)
+corpus/              request corpora, one JSON Lines file per set (see corpus/README.md)
 fixtures/            per-model manifests and recorded cases (see fixtures/README.md)
 waivers/             engine_defects.toml
 tests/
