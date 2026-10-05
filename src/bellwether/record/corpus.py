@@ -57,7 +57,9 @@ def load_corpus(corpus_dir: Path, kind: str, slug: str) -> dict[str, list[Case]]
     for directory in (corpus_dir / kind, corpus_dir / kind / slug):
         if not directory.is_dir():
             continue
-        for path in sorted(directory.glob("*.jsonl")):
+        # iterdir raises when a directory that exists cannot be read; glob would return nothing,
+        # and the run would then rebuild the fixtures from an incomplete corpus.
+        for path in sorted(p for p in directory.iterdir() if p.is_file() and p.suffix == ".jsonl"):
             cases = read_cases(path)
             for case in cases:
                 if case.name in owner:

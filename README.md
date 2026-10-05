@@ -96,7 +96,8 @@ Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.to
 under `corpus/render/` through the checkpoint's own chat template at the pinned revision
 (`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`: per case the
 request, the prompt token ids, the rendered text and the oracle versions. A re-run replaces each
-reference and keeps the witnesses already recorded. A case the template cannot render is reported on
+reference, keeps the witnesses already recorded for an unchanged request, and removes cases and sets
+the corpus no longer has. A case the template cannot render is reported on
 stderr and left out, and the command exits 1. Engine witnesses (`--oracle vllm|sglang`) run on Linux
 inside the engine's image and are the second half of M2.
 

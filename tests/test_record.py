@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 
 import pytest
@@ -133,6 +134,19 @@ def test_corpus_rejects_the_same_name_in_two_sets(tmp_path):
         load_corpus(tmp_path, "render", "tiny-chat")
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read any directory")
+def test_corpus_fails_when_a_directory_that_exists_cannot_be_read(tmp_path):
+    write_jsonl(tmp_path / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
+    own = tmp_path / "render" / "tiny-chat"
+    write_jsonl(own / "common.jsonl", [{"name": "b", "request": {"messages": []}}])
+    own.chmod(0o000)
+    try:
+        with pytest.raises(PermissionError):
+            load_corpus(tmp_path, "render", "tiny-chat")
+    finally:
+        own.chmod(0o755)
+
+
 def test_reference_oracle_renders_the_checkpoint_template_and_its_ids(tiny_model):
     oracle = HfTemplateOracle(str(tiny_model), "local")
     rendered = oracle.render({"messages": [user("What is the capital of France?")]})
@@ -225,6 +239,19 @@ def test_record_rebuilds_the_file_from_the_cases_rendered_this_run(tmp_path, tin
     status, _ = record(tmp_path, tiny_model, ("common", [{"name": "c", "request": {"prompt": "x"}}]))
     assert status == 1
     assert not (out_dir / "common.jsonl").exists()
+
+
+def test_record_removes_fixture_files_of_sets_the_corpus_no_longer_has(tmp_path, tiny_model, capsys):
+    common = [{"name": "a", "request": {"messages": [user("A")]}}]
+    tools = [{"name": "t", "request": {"messages": [user("T")]}}]
+    status, out_dir = record(tmp_path, tiny_model, ("common", common), ("tools", tools))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl", "tools.jsonl"]
+    (tmp_path / "corpus" / "render" / "tools.jsonl").unlink()
+    status, _ = record(tmp_path, tiny_model, ("common", common))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
+    assert "tools.jsonl: removed, the corpus has no set of that name" in capsys.readouterr().out
 
 
 def test_record_drops_witnesses_when_the_request_changed(tmp_path, tiny_model, capsys):

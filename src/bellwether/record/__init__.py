@@ -84,6 +84,13 @@ def run(args: argparse.Namespace) -> int:
         if removed:
             summary.append(f"{removed} old cases removed")
         print(f"{out}: {', '.join(summary)}")
+    # The fixture directory mirrors the corpus: a set file the corpus no longer has goes too.
+    kind_dir = args.fixtures / manifest.slug / args.kind
+    if kind_dir.is_dir():
+        for stale in sorted(p for p in kind_dir.iterdir() if p.is_file() and p.suffix == ".jsonl"):
+            if stale.stem not in sets:
+                stale.unlink()
+                print(f"{stale}: removed, the corpus has no set of that name")
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
