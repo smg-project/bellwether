@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from bellwether.cli import main
+from bellwether.gaps import fetch as fetch_module
 from bellwether.gaps.fetch import fetch_registry_files
 from bellwether.gaps.manifests import read_manifests
 from bellwether.gaps.matrix import build_matrix, render_json, render_markdown
@@ -414,6 +415,29 @@ def test_fetch_lists_native_modules_for_sglang(tmp_path: Path) -> None:
     assert len(listed) == 2
     fetch_registry_files("sglang", "e" * 40, tmp_path / "cache", client=client)
     assert len(listed) == 2  # a listed directory is not listed again
+
+
+def test_fetch_leaves_no_file_behind_when_a_write_is_cut_off(tmp_path: Path, monkeypatch) -> None:
+    downloads: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "raw.githubusercontent.com":
+            downloads.append(request.url.path)
+        return httpx.Response(200, content=b"_TOOL_PARSERS_TO_REGISTER = {}\n")
+
+    def cut_off(src, dst):
+        raise OSError("no space left on device")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(fetch_module.os, "replace", cut_off)
+    with pytest.raises(OSError, match="no space left"):
+        fetch_registry_files("vllm", "c" * 40, tmp_path / "cache", client=client)
+    module_dir = tmp_path / "cache" / "vllm" / ("c" * 40) / "vllm" / "tool_parsers"
+    assert sorted(module_dir.iterdir()) == []  # neither the module nor a leftover partial file
+    monkeypatch.undo()
+    fetch_registry_files("vllm", "c" * 40, tmp_path / "cache", client=client)
+    assert (module_dir / "__init__.py").is_file()
+    assert downloads.count("/vllm-project/vllm/" + "c" * 40 + "/vllm/tool_parsers/__init__.py") == 2
 
 
 def test_fetch_lists_again_after_an_interrupted_download(tmp_path: Path) -> None:
