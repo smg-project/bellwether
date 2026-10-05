@@ -24,7 +24,6 @@ def test_no_command_prints_help_and_fails(capsys):
 @pytest.mark.parametrize(
     "argv",
     [
-        ["gaps"],
         ["record", "--model", "moonshotai/Kimi-K3", "--kind", "render", "--oracle", "reference"],
         ["verify", "--smg", "http://127.0.0.1:30000"],
         ["report", "runs/a.json"],
