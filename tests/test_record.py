@@ -351,6 +351,16 @@ def test_roundtrip_reports_a_turn_the_template_cannot_extend(tiny_model):
         oracle.render_output(request, {"reasoning_content": "r", "content": "c"})
 
 
+def test_roundtrip_rejects_a_request_that_does_not_end_at_the_generation_prompt(tiny_model):
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    for request in (
+        {"messages": [user("Hi")], "add_generation_prompt": False},
+        {"messages": [user("Hi"), {"role": "assistant", "content": "The"}], "continue_final_message": True},
+    ):
+        with pytest.raises(ValueError, match="must end at the generation prompt"):
+            oracle.render_output(request, {"content": "Hello"})
+
+
 def test_record_parse_writes_the_output_its_chunk_plans_and_the_message(tmp_path, tiny_model, capsys):
     cases = [
         {

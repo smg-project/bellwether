@@ -57,5 +57,7 @@ prompt and the end-of-turn token is the output. A line carries `request` (what a
 every two-way split for outputs of at most 32 tokens; `random-<seed>` thirty seeded plans with chunks
 of one to eight tokens) and `reference` with `source: roundtrip`, the `message` (with `role`), the
 `finish_reason` (`tool_calls` when the message has calls, else `stop`), the output `text` and the
-provenance. A case whose template does not extend the generation prompt when the turn is appended is
-reported and not recorded; it falls through to the next authority.
+provenance. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
+sampled in context; a replay feeds them as the engine's output. A case whose template does not extend
+the generation prompt when the turn is appended is reported and not recorded, and the run exits 1;
+recording it is left to the manifest's next authority, which nothing here invokes.

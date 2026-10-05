@@ -10,7 +10,11 @@ a replay feeds.
 A template that does not extend the generation prompt when the turn is appended cannot serve as
 this oracle for that case (DeepSeek-R1 never renders ``<think>``, so no rendered turn extends its
 ``<think>`` prompt; Qwen3 with thinking switched off cannot render reasoning). Such a case is
-reported and falls through to the next authority in the manifest.
+reported and not recorded, and the run exits 1; recording it is left to the manifest's next
+authority, which nothing here invokes.
+
+The output follows the generation prompt, so a request that asks for no generation prompt or for
+the final message to be continued cannot be recorded this way and is rejected.
 """
 
 from __future__ import annotations
@@ -40,6 +44,11 @@ class RoundtripOracle:
 
     def render_output(self, request: dict, message: dict) -> OutputText:
         """The output text and ids for ``message`` as the final assistant turn of ``request``."""
+        if request.get("add_generation_prompt") is False or request.get("continue_final_message"):
+            raise ValueError(
+                "a parse case's request must end at the generation prompt; `add_generation_prompt: false` and "
+                "`continue_final_message` cannot be recorded by the round trip"
+            )
         messages = request["messages"]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)

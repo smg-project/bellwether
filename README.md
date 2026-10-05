@@ -113,7 +113,8 @@ generation prompt; the text in between is the output, its token ids the engine c
 and the fixture carries the chunk plans (fixed sizes, every two-way split for short outputs, thirty
 seeded random plans). A template that does not extend the generation prompt when the turn is appended
 (DeepSeek-R1 never renders `<think>`) cannot be this oracle for that case; the case is reported and
-falls through to the manifest's next authority.
+not recorded, and the run exits 1. Recording it is left to the manifest's next authority, the engine
+witnesses, which nothing here invokes.
 
 ## Layout
 
