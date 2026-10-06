@@ -6,7 +6,7 @@ import pytest
 
 from bellwether.cli import main
 from bellwether.count import counts
-from bellwether.importers import bfcl, github, gsm8k, pypi, shapes
+from bellwether.importers import bfcl, corpus_sets, github, gsm8k, pypi, shapes
 from bellwether.record import sets as set_tables
 from bellwether.record.corpus import read_cases
 
@@ -229,15 +229,24 @@ def test_a_gsm8k_row_whose_solution_gives_no_reasoning_is_left_out_with_its_reas
     assert skipped == [("GSM8K test row 1", "the solution has no text before its last line")]
 
 
-def test_distinct_cases_count_a_request_and_message_once_whatever_the_name_notes_or_origin():
-    tea, tee = [{"role": "user", "content": "Tea"}], [{"role": "user", "content": "Tee"}]
-    lines = [
-        {"name": "a", "request": {"messages": tea}, "message": {"content": "Yes."}, "origin": {"row": 0}},
-        {"name": "b", "request": {"messages": tea}, "message": {"content": "Yes."}, "origin": {"row": 1}},
-        {"name": "c", "request": {"messages": tee}, "message": {"content": "Yes."}, "origin": {"row": 2}},
-        {"name": "d", "request": {"messages": tea}, "message": {"content": "No."}, "origin": {"row": 3}},
-    ]
-    assert shapes.distinct_cases(lines) == 3
+def test_build_sets_leaves_repeats_out_through_the_shared_rule_and_names_them(tmp_path, monkeypatch):
+    handed: list[list[tuple[str, str]]] = []
+
+    def leave_out_repeats(sets):
+        """Keep each set's first case and report its second as a repeat of the first."""
+        handed.append(list(sets))
+        kept = {key: lines[:1] for key, lines in sets.items()}
+        return kept, [(lines[1]["name"], lines[0]["name"]) for lines in sets.values()]
+
+    monkeypatch.setattr(corpus_sets, "leave_out_repeats", leave_out_repeats)
+    skipped: list[tuple[str, str]] = []
+    sets = build(tmp_path, monkeypatch, skipped=skipped)
+    names = [shapes.set_name(shape) for shape in shapes.SHAPES]
+    assert handed == [[("parse", name) for name in names]]
+    assert {key: [line["name"] for line in lines] for key, lines in sets.items()} == {
+        ("parse", name): [f"{name}-0"] for name in names
+    }
+    assert skipped == [(f"{name}-1", f"it repeats {name}-0") for name in names]
 
 
 def test_the_size_caps_every_set(tmp_path, monkeypatch):
@@ -401,7 +410,7 @@ def test_the_command_writes_then_checks_from_the_pinned_sources_alone(tmp_path, 
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 lines, 2 distinct cases" in out
+    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 cases" in out
     assert f"{corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}" in out
     assert sorted(path.name for path in (corpus / "parse").iterdir()) == sorted(committed + SET_FILES)
     assert all((corpus / "parse" / name).read_text() == UNREADABLE for name in committed)
@@ -441,7 +450,7 @@ def test_the_command_stops_on_a_category_without_parse_cases_and_writes_nothing(
     assert not (tmp_path / "corpus").exists()
 
 
-def test_the_command_prints_lines_and_distinct_cases_per_set(tmp_path, monkeypatch, capsys):
+def test_the_command_leaves_out_and_names_each_case_that_repeats_an_earlier_one(tmp_path, monkeypatch, capsys):
     # One parse case per category, cycled against four rows whose solutions come twice each: every case comes twice.
     members = {**MEMBERS, f"{DATA}/BFCL_v4_simple_python.json": MEMBERS[f"{DATA}/BFCL_v4_simple_python.json"][:1]}
     members[f"{DATA}/possible_answer/BFCL_v4_simple_python.json"] = [bfcl_answer("simple_python_0", "Café ☕")]
@@ -449,5 +458,13 @@ def test_the_command_prints_lines_and_distinct_cases_per_set(tmp_path, monkeypat
     corpus = tmp_path / "corpus"
     assert main(["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
     out = capsys.readouterr().out.splitlines()
-    names = sorted(shapes.set_name(shape) for shape in shapes.SHAPES)
-    assert out[:6] == [f"{corpus / 'parse' / f'{name}.jsonl'}: 4 lines, 2 distinct cases" for name in names]
+    names = [shapes.set_name(shape) for shape in shapes.SHAPES]
+    assert out == [
+        *[f"{corpus / 'parse' / f'{name}.jsonl'}: 2 cases, 2 left out as repeats" for name in sorted(names)],
+        f"{corpus}: 12 cases in the 6 shapes sets, 12 left out as repeats",
+        *[f"no case for {name}-{i}: it repeats {name}-{i - 2}" for name in names for i in (2, 3)],
+    ]
+    assert [case.name for case in read_cases(corpus / "parse" / "shapes-content.jsonl")] == [
+        "shapes-content-0",
+        "shapes-content-1",
+    ]

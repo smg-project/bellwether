@@ -116,9 +116,8 @@ to 999, so neither list cycles. A category with no parse case stops the import. 
 and does not use, with its reason: the five BFCL rows of these categories that have no parse case, by name (two of
 them, `live_simple_106-63-0` and `live_simple_112-68-0`, fall inside the range the pairs use), then the parse cases of
 each category and the GSM8K rows that come after the 1000 pairs, one run each (1346 parse cases, and test rows 1000 to
-1318). It also prints each set's lines and distinct cases, a request and message counted once whatever the line's name,
-notes or origin: 1000 of each in every set, so no case repeats another. Pair i is case i of every set
-(`shapes-content-calls-7`):
+1318). A case that repeats an earlier one is left out and named, as in every import; across the six sets none does, so
+each keeps its 1000 cases. Pair i is case i of every set (`shapes-content-calls-7`):
 
 - the request and the calls are the BFCL case's; the shapes without calls keep the request and its tools, since a
   model may answer without calling;

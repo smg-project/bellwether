@@ -26,15 +26,16 @@ GSM8K did not write, and none twice. The final answer after ``#### `` is not use
 same in many rows, and GSM8K's own reasoning sets hold it already as their content. A row whose solution would leave
 either part empty is left out with its reason.
 
-The text does not answer the request: what a case probes is its shape. ``origin`` keeps both sources' origins whole, as
-their importers write them, under ``parts``: the BFCL case's, then the GSM8K row's. Each source's license is checked by
-its importer on every import. This module, like the importers it builds on, imports nothing beyond the standard library.
+The text does not answer the request: what a case probes is its shape. A case whose request and message repeat an
+earlier case's is left out, as every import leaves one out (``corpus_sets.leave_out_repeats``), and named with the case
+it repeats; its set then lacks that pair. ``origin`` keeps both sources' origins whole, as their importers write them,
+under ``parts``: the BFCL case's, then the GSM8K row's. Each source's license is checked by its importer on every
+import. This module, like the importers it builds on, imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import zipfile
 from pathlib import Path
@@ -122,9 +123,12 @@ def build_sets(
     are the solutions of GSM8K's reasoning-content parse cases of ``SPLIT``, each split by ``split_solution``. Each pair
     gives the i-th case of every set: the request and calls of the call, the reasoning and content of the text.
 
+    The sets then go through ``corpus_sets.leave_out_repeats``, which leaves out each case that repeats an earlier one.
+
     Every row the import reads and does not use is appended to ``skipped`` as ``(what, why)``: by name, each BFCL row
     without a parse case and each GSM8K row without a case, with their importers' reasons; then the parse cases of each
-    BFCL category and the GSM8K rows that come after the pairs, each as one run in file order (``after_pairs``).
+    BFCL category and the GSM8K rows that come after the pairs, each as one run in file order (``after_pairs``); last,
+    each case left out as a repeat, by its name, with the case it repeats.
     """
     bfcl_skipped: list[tuple[str, str]] = []
     found = bfcl.build_sets(wheel, categories=CATEGORIES, skipped=bfcl_skipped)
@@ -154,11 +158,13 @@ def build_sets(
             notes = f"shape {shape}: {bfcl_line['notes']}, {gsm8k_line['notes']}"
             line = {"name": f"{name}-{index}", "request": bfcl_line["request"], "message": message, "notes": notes}
             sets[("parse", name)].append({**line, "origin": origin})
+    sets, repeats = corpus_sets.leave_out_repeats(sets)
     if skipped is not None:
         skipped.extend((f"BFCL {row}", why) for row, why in bfcl_skipped)
         skipped.extend((f"GSM8K {row}", why) for row, why in gsm8k_skipped)
         count = len(pairs)
         skipped.extend(after_pairs(calls[count:], owners[count:], [text[0] for text in texts[count:]], count))
+        skipped.extend((name, f"it repeats {first}") for name, first in repeats)
     return sets
 
 
@@ -185,11 +191,12 @@ def run_of(rows: list, one: str, many: str) -> str:
     return f"{one} {rows[0]}" if len(rows) == 1 else f"{len(rows)} {many}, {rows[0]} to {rows[-1]}"
 
 
-def distinct_cases(lines: list[dict]) -> int:
-    """How many distinct cases the lines hold: a parse case is its request and its message, compared as the JSON the set
-    file holds, keys in their order. Lines that differ only in name, notes or origin are one case.
+def left_out_of(name: str, skipped: list[tuple[str, str]]) -> int:
+    """How many cases of set ``name`` were left out as repeats: the entries of ``skipped`` that name one of its cases.
+
+    A case is named ``<set>-<index>``, and no other entry names a case: the rest name a source's rows.
     """
-    return len({json.dumps([line["request"], line["message"]], ensure_ascii=False) for line in lines})
+    return sum(1 for what, _ in skipped if what.startswith(f"{name}-") and what[len(name) + 1 :].isdigit())
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
@@ -203,7 +210,7 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
 
 
 def report_skipped(skipped: list[tuple[str, str]]) -> None:
-    """Print every row and run of rows the import left out with its reason, each on its own line, none summed away."""
+    """Print every row, run of rows and case the import left out, with its reason, each on a line of its own."""
     for what, why in skipped:
         print(f"no case for {what}: {why}")
 
@@ -225,7 +232,12 @@ def run(args: argparse.Namespace) -> int:
             print(f"{args.corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}")
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} lines, {distinct_cases(lines)} distinct cases")
+        left_out = left_out_of(name, skipped)
+        repeated = f", {left_out} left out as repeats" if left_out else ""
+        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
+    total = sum(len(lines) for lines in sets.values())
+    repeats = sum(left_out_of(name, skipped) for _, name in sets)
+    print(f"{args.corpus}: {total} cases in the {len(sets)} shapes sets, {repeats} left out as repeats")
     report_skipped(skipped)
     write_sets(sets, args.corpus)
     return 0
