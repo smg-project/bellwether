@@ -1,0 +1,41 @@
+---
+title: Large Language Models
+---
+{/* Excerpt of docs/docs/supported-models/generative_models.mdx in SGLang at 7d22b7a8 (Apache-2.0), for bellwether's tests of the docs reader: some rows of each table, copied verbatim. */}
+
+<table style={{width: "100%", borderCollapse: "collapse", tableLayout: "fixed"}}>
+  <colgroup>
+    <col style={{width: "34%"}} />
+    <col style={{width: "33%"}} />
+    <col style={{width: "33%"}} />
+  </colgroup>
+  <thead>
+    <tr style={{borderBottom: "2px solid #d55816"}}>
+      <th style={{textAlign: "left", padding: "10px 12px", fontWeight: 700, whiteSpace: "nowrap", backgroundColor: "rgba(255,255,255,0.02)"}}>Model Family (Variants)</th>
+      <th style={{textAlign: "left", padding: "10px 12px", fontWeight: 700, whiteSpace: "nowrap", backgroundColor: "rgba(255,255,255,0.05)"}}>Example HuggingFace Identifier</th>
+      <th style={{textAlign: "left", padding: "10px 12px", fontWeight: 700, whiteSpace: "nowrap", backgroundColor: "rgba(255,255,255,0.02)"}}>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}>**DeepSeek** (v1, v2, v3/R1)</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}>`deepseek-ai/DeepSeek-R1`</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>Series of advanced reasoning-optimized models (including a 671B MoE) trained with reinforcement learning; top performance on complex reasoning, math, and code tasks. <a href="/cookbook/autoregressive/DeepSeek/DeepSeek-V3">SGLang provides Deepseek v3/R1 model-specific optimizations</a> and <a href="../advanced_features/separate_reasoning">Reasoning Parser</a></td>
+    </tr>
+    <tr>
+      <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}>**GPT-OSS**</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}><code>openai/gpt-oss-20b</code>, <code>openai/gpt-oss-120b</code></td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>OpenAI’s latest GPT-OSS series for complex reasoning, agentic tasks, and versatile developer use cases.</td>
+    </tr>
+    <tr>
+      <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}><strong>Qwen</strong> (3.5, 3, 3MoE, 3Next, 2.5, 2 series)</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}><code>Qwen/Qwen3.5-397B-A17B</code>, <code>Qwen/Qwen3-0.6B</code>, <code>Qwen/Qwen3-30B-A3B</code>, <code>Qwen/Qwen3-Next-80B-A3B-Instruct</code></td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>Alibaba’s latest Qwen3 series for complex reasoning, language understanding, and generation tasks; Support for MoE variants along with previous generation 2.5, 2, etc. <a href="../advanced_features/separate_reasoning">SGLang provides Qwen3 specific reasoning parser</a></td>
+    </tr>
+    <tr>
+      <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}>**Granite 3.0, 3.1 MoE** (IBM)</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}>`ibm-granite/granite-3.0-3b-a800m-instruct`, `ibm-granite/granite-3.1-3b-a800m-instruct`</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>IBM’s Mixture-of-Experts models offering strong performance with cost-efficiency. MoE expert routing designed for enterprise deployment at scale. 3.1 adds shared experts.</td>
+    </tr>
+</tbody>
+</table>

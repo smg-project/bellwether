@@ -138,6 +138,46 @@ seeded random plans). A template that does not extend the generation prompt when
 not recorded, and the run exits 1. Recording it is left to the manifest's next authority, the engine
 witnesses, which nothing here invokes.
 
+## The list of models
+
+```bash
+uv run bellwether models                   # registries and the Hugging Face Hub; writes models.jsonl
+uv run bellwether models --registry-only   # the registries alone, offline once their files are cached
+```
+
+`models` builds the list of checkpoints to record: every generative model vLLM or SGLang supports,
+except gpt-oss (the rule is in `docs/benchmark-sets.md`, "Which models"). It reads two sources:
+
+- **The engines' registries at pinned commits.** vLLM's `tests/models/registry.py` at v0.31.0, read
+  with `ast`: every checkpoint its text-generation and multimodal tables name, except under a
+  ranking or classification head. SGLang's three "Text Generation" docs pages at 7d22b7a8: every id
+  in a table's example column. The files come from a checkout given with `--vllm-src` and
+  `--sglang-src` (read with `git show`, whatever the checkout has checked out) or from GitHub, and
+  are cached by commit under `~/.cache/bellwether/registries`.
+- **The Hugging Face Hub as it is today.** Every model of the organizations whose checkpoints the
+  engines give as an architecture's example (vLLM's default checkpoint, the ids in SGLang's docs)
+  whose `config.json` names a registered architecture and that ships a chat template, leaving out
+  quantized and converted copies (GGUF, AWQ, GPTQ, MLX, ONNX, FP8, NVFP4, MXFP4, MXFP8, Int4,
+  Int8 or bitsandbytes in the name, or the Hub's `base_model:quantized` tag), embedding, reranking
+  and classification models, and checkpoints created before 2025 that no registry names. A token
+  (`HF_TOKEN`) raises the Hub's rate limits; none is needed, and a rate-limited call waits and is
+  made again.
+
+It writes one JSON line per checkpoint, ordered by tier and then within the tier:
+
+| field | meaning |
+|---|---|
+| `model` | the Hugging Face id, as the Hub spells it |
+| `revision` | the Hub's sha when the list was built |
+| `tier` | 1: Simo's models, in his order; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads |
+| `status` | `pending`, or why nothing can be recorded yet: `gated`, `no-chat-template`, `not-on-hub`; `unchecked` without the Hub |
+| `created`, `downloads` | the Hub's creation date and downloads over the last 30 days |
+| `modality` | `multimodal` when a registry or the architecture says so, else `text` |
+| `sources` | the engines whose registries name the checkpoint, or `hub` |
+
+The registries are pinned and the Hub is not, so a rebuild can change rows: what is reproducible is
+the committed `models.jsonl` with each row's revision, and a rebuild's diff shows what changed.
+
 ## Layout
 
 ```

@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+#
+# Excerpt of tests/models/registry.py at vLLM v0.31.0 (db9527a4), for bellwether's tests of the
+# registry reader: some entries of four of its tables, each copied verbatim.
+
+_TEXT_GENERATION_EXAMPLE_MODELS = {
+    # [Decoder-only]
+    "AfmoeForCausalLM": _HfExamplesInfo("arcee-ai/Trinity-Nano-Preview"),
+    "BloomForCausalLM": _HfExamplesInfo(
+        "bigscience/bloom-560m", {"1b": "bigscience/bloomz-1b1"}
+    ),
+    "Glm5NextForCausalLM": _HfExamplesInfo("zai-org/GLM-5.3-Flash"),
+    "GPTBigCodeForCausalLM": _HfExamplesInfo(
+        "bigcode/starcoder",
+        extras={
+            "tiny": "bigcode/tiny_starcoder_py",
+            "santacoder": "bigcode/gpt_bigcode-santacoder",
+        },
+    ),
+    "GptOssForCausalLM": _HfExamplesInfo("lmsys/gpt-oss-20b-bf16"),
+    "Qwen3ForCausalLM": _HfExamplesInfo("Qwen/Qwen3-8B"),
+    "Qwen4ExpForCausalLM": _HfExamplesInfo("", is_available_online=False),
+}
+
+_EMBEDDING_EXAMPLE_MODELS = {
+    # [Text-only]
+    "BgeM3EmbeddingModel": _HfExamplesInfo("BAAI/bge-m3"),
+    # [Multimodal]
+    "Qwen2VLForConditionalGeneration": _HfExamplesInfo("MrLight/dse-qwen2-2b-mrl-v1"),
+}
+
+_MULTIMODAL_EXAMPLE_MODELS = {
+    # [Decoder-only]
+    "DeepseekV41ForCausalLM": _HfExamplesInfo(
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+    ),
+    "FunAudioChatForConditionalGeneration": _HfExamplesInfo(
+        "funaudiochat", is_available_online=False
+    ),
+    "Glm5NextForConditionalGeneration": _HfExamplesInfo("zai-org/GLM-5.3-Flash"),
+    "Qwen2VLForConditionalGeneration": _HfExamplesInfo("Qwen/Qwen2-VL-2B-Instruct"),
+    "Qwen2_5OmniForConditionalGeneration": _HfExamplesInfo("Qwen/Qwen2.5-Omni-7B-AWQ"),
+    "Qwen3_5ForConditionalGeneration": _HfExamplesInfo(
+        "Qwen/Qwen3.5-0.8B",
+        extras={"4b": "Qwen/Qwen3.5-4B"},
+        max_model_len=4096,
+    ),
+    "Qwen3ASRForcedAlignerForTokenClassification": _HfExamplesInfo(
+        "Qwen/Qwen3-ForcedAligner-0.6B",
+        max_model_len=4096,
+        min_transformers_version="4.57",
+        hf_overrides={"architectures": ["Qwen3ASRForcedAlignerForTokenClassification"]},
+    ),
+    "JinaVLForRanking": _HfExamplesInfo("jinaai/jina-reranker-m0"),
+}
+
+_SPECULATIVE_DECODING_EXAMPLE_MODELS = {
+    # [DFlash]
+    "DFlashDraftModel": _HfExamplesInfo(
+        "Qwen/Qwen3-4B",
+        speculative_model="z-lab/Qwen3-4B-DFlash-b16",
+        use_original_num_layers=True,  # Need all layers since DFlash has >1 layer,
+        max_model_len=8192,  # Reduce max len to ensure test runs in low-VRAM CI env
+        max_num_seqs=32,
+    ),
+}
+
+_EXAMPLE_MODELS = {
+    **_TEXT_GENERATION_EXAMPLE_MODELS,
+    **_EMBEDDING_EXAMPLE_MODELS,
+    **_MULTIMODAL_EXAMPLE_MODELS,
+    **_SPECULATIVE_DECODING_EXAMPLE_MODELS,
+}
