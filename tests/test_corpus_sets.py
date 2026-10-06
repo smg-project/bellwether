@@ -1,5 +1,6 @@
 import pytest
 
+from bellwether import storage
 from bellwether.importers import corpus_sets
 
 
@@ -148,23 +149,99 @@ def test_each_reason_is_printed_once_naming_every_row_it_left_out_and_what_the_r
     ]
 
 
-def test_write_refuses_a_source_past_the_limit_and_writes_nothing(tmp_path, monkeypatch):
-    sets = {("render", "x-a"): [{"name": "x-a-0"}], ("parse", "x-a"): [{"name": "x-a-0"}]}
-    size = len(corpus_sets.text(sets["render", "x-a"]).encode()) * 2
-    monkeypatch.setattr(corpus_sets, "LIMIT", size - 1)
-    with pytest.raises(ValueError, match=f"the x-\\* sets take {size} bytes, past the {size - 1}"):
-        corpus_sets.write(sets, tmp_path, "x-")
-    assert not any(tmp_path.rglob("*.jsonl"))
-    monkeypatch.setattr(corpus_sets, "LIMIT", size)
-    assert len(corpus_sets.write(sets, tmp_path, "x-")) == 2
+ZSTD_MAGIC = bytes.fromhex("28b52ffd")
+
+
+def an_import() -> dict:
+    """The sets of one import, ``x-``: a render set and a parse set, as an importer builds them."""
+    return {
+        ("render", "x-a"): [render("x-a-0", ask("Hi")), render("x-a-1", ask("Bye"))],
+        ("parse", "x-a"): [parse("x-a-2", ask("Hi"), {"content": "Hello"})],
+    }
+
+
+def plain_size(sets: dict) -> int:
+    return sum(len(corpus_sets.text(lines).encode("utf-8")) for lines in sets.values())
+
+
+def files(root) -> list[str]:
+    return sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file())
 
 
 def test_the_limit_is_fifty_megabytes():
     assert corpus_sets.LIMIT == 50_000_000
 
 
+def test_an_import_within_the_limit_is_written_as_plain_json_lines(tmp_path, monkeypatch):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets))
+    written = corpus_sets.write(sets, tmp_path, "x-")
+    assert written == [tmp_path / "parse" / "x-a.jsonl", tmp_path / "render" / "x-a.jsonl"]
+    assert (tmp_path / "render" / "x-a.jsonl").read_bytes() == corpus_sets.text(sets["render", "x-a"]).encode()
+
+
+def test_an_import_past_the_limit_writes_every_set_compressed_holding_the_same_lines(tmp_path, monkeypatch):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    written = corpus_sets.write(sets, tmp_path, "x-")
+    assert written == [tmp_path / "parse" / "x-a.jsonl.zst", tmp_path / "render" / "x-a.jsonl.zst"]
+    for (kind, name), lines in sets.items():
+        path = tmp_path / kind / f"{name}.jsonl.zst"
+        assert path.read_bytes()[:4] == ZSTD_MAGIC
+        assert storage.plain_bytes(path) == corpus_sets.text(lines).encode("utf-8")
+
+
+def test_the_limit_counts_bytes_not_characters(tmp_path, monkeypatch):
+    sets = {("render", "x-a"): [render("x-a-0", ask("\xe9" * 100))]}
+    monkeypatch.setattr(corpus_sets, "LIMIT", len(corpus_sets.text(sets["render", "x-a"])))
+    assert corpus_sets.write(sets, tmp_path, "x-") == [tmp_path / "render" / "x-a.jsonl.zst"]
+
+
 def test_an_imports_other_files_do_not_count_toward_the_limit(tmp_path, monkeypatch):
     sets = {("render", "x-a"): [render("x-a-0", ask("Hi"))]}
-    monkeypatch.setattr(corpus_sets, "LIMIT", len(corpus_sets.text(sets["render", "x-a"]).encode()))
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets))
     written = corpus_sets.write(sets, tmp_path, "x-", files={"licenses/x-LICENSE": b"MIT License\n"})
     assert written == [tmp_path / "render" / "x-a.jsonl", tmp_path / "licenses" / "x-LICENSE"]
+
+
+def test_an_import_that_changes_form_keeps_one_file_per_set_and_leaves_other_sets_alone(tmp_path, monkeypatch):
+    sets = an_import()
+    for other in ("render/common.jsonl", "render/y-a.jsonl.zst"):  # a hand-written set, and another import's
+        (tmp_path / other).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / other).write_bytes(b"not this import's\n")
+    others = ["render/common.jsonl", "render/y-a.jsonl.zst"]
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    corpus_sets.write(sets, tmp_path, "x-")
+    assert files(tmp_path) == sorted(["parse/x-a.jsonl.zst", "render/x-a.jsonl.zst", *others])
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets))
+    corpus_sets.write(sets, tmp_path, "x-")
+    assert files(tmp_path) == sorted(["parse/x-a.jsonl", "render/x-a.jsonl", *others])
+
+
+def test_a_write_that_fails_part_way_removes_none_of_the_old_files(tmp_path, monkeypatch):
+    sets = an_import()
+    corpus_sets.write(sets, tmp_path, "x-")
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    write = storage.write
+    written: list = []
+
+    def fail_on_the_second(path, data):
+        if written:
+            raise OSError("no space left on device")
+        written.append(path)
+        write(path, data)
+
+    monkeypatch.setattr(storage, "write", fail_on_the_second)
+    with pytest.raises(OSError, match="no space left"):
+        corpus_sets.write(sets, tmp_path, "x-")
+    assert files(tmp_path) == ["parse/x-a.jsonl", "parse/x-a.jsonl.zst", "render/x-a.jsonl"]
+
+
+def test_the_report_names_each_set_file_in_the_form_the_import_writes(tmp_path, monkeypatch, capsys):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    corpus_sets.report("X", sets, sets, [], tmp_path)
+    assert capsys.readouterr().out.splitlines()[:2] == [
+        f"{tmp_path / 'parse' / 'x-a.jsonl.zst'}: 1 cases, 1 distinct messages",
+        f"{tmp_path / 'render' / 'x-a.jsonl.zst'}: 2 cases",
+    ]

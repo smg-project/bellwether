@@ -2,10 +2,12 @@
 
 A set file holds one JSON line per case, in the order the importer built them, each ending in "\\n". ``json.dumps``
 keeps each line's keys in the order the importer built them and writes non-ASCII text raw (``ensure_ascii=False``),
-so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes. One
-importer's sets stay plain JSON Lines up to ``LIMIT`` bytes in all, and ``write`` refuses more. ``report`` and
-``report_skipped`` print what an import keeps and leaves out, in the same words for every importer. This module imports
-nothing beyond the standard library.
+so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes.
+
+An import's sets are stored in one form: plain JSON Lines while they take at most ``LIMIT`` bytes in all, and past it
+every one of them compressed with zstd and kept in Git LFS (``<name>.jsonl.zst``), the fixtures' form
+(``bellwether.storage``). ``report`` and ``report_skipped`` print what an import keeps and leaves out, in the same words
+for every importer. This module imports nothing beyond the standard library until a compressed set is read or written.
 """
 
 from __future__ import annotations
@@ -13,8 +15,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from bellwether import storage
+
 KINDS = ("render", "parse")
-# A source whose corpus passes 50 MB moves to the fixtures' storage form (docs/benchmark-sets.md, Storage); in bytes.
+# Bytes of plain JSON Lines an import's sets may take in all and stay plain, so that a change to an importer reads as a
+# diff of cases; past it they are stored compressed, as docs/benchmark-sets.md (Storage) decided.
 LIMIT = 50_000_000
 
 
@@ -25,6 +30,23 @@ def _json(value) -> str:
 
 def text(lines: list[dict]) -> str:
     return "".join(_json(line) + "\n" for line in lines)
+
+
+def set_files(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> dict[tuple[str, str], tuple[Path, bytes]]:
+    """Each set's file under ``corpus_dir`` and its plain content, by kind and name, in the form the import's sets take.
+
+    The form is the import's, not each set's: ``<kind>/<name>.jsonl`` while the sets take at most ``LIMIT`` bytes in all
+    as plain JSON Lines, and ``<kind>/<name>.jsonl.zst`` for every one of them past it.
+    """
+    contents = {key: text(lines).encode("utf-8") for key, lines in sets.items()}
+    suffix = storage.COMPRESSED_SUFFIX if sum(len(content) for content in contents.values()) > LIMIT else ".jsonl"
+    return {(kind, name): (corpus_dir / kind / f"{name}{suffix}", data) for (kind, name), data in contents.items()}
+
+
+def prefixed(corpus_dir: Path, prefix: str) -> list[Path]:
+    """The ``<prefix>*`` set files in the kinds' directories, in either form: the files an importer's prefix claims."""
+    patterns = (f"{prefix}*.jsonl", f"{prefix}*{storage.COMPRESSED_SUFFIX}")
+    return sorted(path for kind in KINDS for pattern in patterns for path in (corpus_dir / kind).glob(pattern))
 
 
 def leave_out_repeats(
@@ -75,6 +97,7 @@ def report(
     """
     for name, first in repeats:
         print(f"no case {name}: it repeats {first}")
+    paths = {key: path for key, (path, _) in set_files(kept, corpus_dir).items()}
     all_messages: set[str] = set()
     for (kind, name), lines in sorted(kept.items()):
         counts = [f"{len(lines)} cases"]
@@ -85,7 +108,7 @@ def report(
             messages = {_json(line["message"]) for line in lines}
             all_messages |= messages
             counts.append(f"{len(messages)} distinct messages")
-        print(f"{corpus_dir / kind / f'{name}.jsonl'}: {', '.join(counts)}")
+        print(f"{paths[(kind, name)]}: {', '.join(counts)}")
     total = sum(len(lines) for lines in kept.values())
     print(
         f"{corpus_dir}: {total} cases in the {len(kept)} {dataset} sets, {len(repeats)} left out as repeats, "
@@ -109,33 +132,25 @@ def report_skipped(skipped: list[tuple[str, str]], lost: str = "case") -> None:
 def write(
     sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, prefix: str, files: dict[str, bytes] | None = None
 ) -> list[Path]:
-    """Write every set and ``files``, and remove the ``<prefix>*`` set files the import no longer writes.
+    """Write every set and ``files``, then remove the ``<prefix>*`` set files the import no longer writes.
 
-    ``files`` are the import's other files, such as a dataset's license, as bytes by path under ``corpus_dir``. The
-    prefix is the importer's. Sets that take more than ``LIMIT`` bytes in all are refused before anything is written.
+    The sets are written in the import's form (``set_files``), so a set stored in the other form is removed too: an
+    import keeps one form. Nothing is removed until everything is written, so a write cut short leaves the old files.
+    ``files`` are the import's other files, such as a dataset's license, as bytes by path under ``corpus_dir``; they are
+    written as they are and do not count toward ``LIMIT``. The prefix is the importer's.
     """
-    contents = {key: text(lines).encode("utf-8") for key, lines in sets.items()}
-    size = sum(len(content) for content in contents.values())
-    if size > LIMIT:
-        raise ValueError(
-            f"the {prefix}* sets take {size} bytes, past the {LIMIT} one source may take as plain JSON Lines; such a "
-            "source moves to the fixtures' storage form (docs/benchmark-sets.md, Storage)"
-        )
     written = []
-    for (kind, name), content in sorted(contents.items()):
-        path = corpus_dir / kind / f"{name}.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
+    for _, (path, content) in sorted(set_files(sets, corpus_dir).items()):
+        storage.write(path, content)
         written.append(path)
     for relative, content in sorted((files or {}).items()):
         path = corpus_dir / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         written.append(path)
-    for kind in KINDS:
-        for stale in sorted((corpus_dir / kind).glob(f"{prefix}*.jsonl")):
-            if stale not in written:
-                stale.unlink()
+    for stale in prefixed(corpus_dir, prefix):
+        if stale not in written:
+            stale.unlink()
     return written
 
 
