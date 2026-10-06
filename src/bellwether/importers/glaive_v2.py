@@ -135,7 +135,7 @@ def parse_call(text: str) -> tuple[str, str]:
             call = json.loads(text, parse_constant=_not_json)
         except ValueError:
             raise Unmappable(CALL_FORM) from None
-        if not isinstance(call, dict) or set(call) != {"name", "arguments"}:
+        if not isinstance(call, dict) or set(call) != {"name", "arguments"} or not isinstance(call["name"], str):
             raise Unmappable(CALL_FORM)
         name, arguments = call["name"], call["arguments"]
     if not isinstance(arguments, dict):

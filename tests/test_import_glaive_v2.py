@@ -95,6 +95,8 @@ def test_arguments_written_as_an_object_are_taken_as_they_are():
         (""" {"name": "get_song_lyrics", "arguments": '{"artist": "Ed Sheeran", "title": " """, "CALL_FORM"),
         # row 57572, shortened: one brace too many
         (""" {"name": "send_email", "arguments": '{"subject": "Agenda"}'}} """, "CALL_FORM"),
+        # an object whose name is not a string
+        (' {"name": ["get_current_time"], "arguments": {}} ', "CALL_FORM"),
     ],
 )
 def test_a_call_that_cannot_be_read_is_refused_with_its_reason(text, reason):
