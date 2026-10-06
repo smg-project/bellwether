@@ -791,7 +791,10 @@ def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
     table = set_tables.read(path.parent.parent / set_tables.FILE).get((path.parent.name, name))
     assert table is not None, f"{path}: sets.toml has no table for this set"
     form = "zstd" if path.name.endswith(".zst") else "plain"
-    expected = set_tables.entry(form, plain, table["cases"], table["rejected"])
+    generate = {field: table[field] for field in set_tables.GENERATE_FIELDS if field in table}
+    if path.parent.name == "parse":  # recorded from a hub checkpoint, which ships config.json at least
+        assert list(generate) == list(set_tables.GENERATE_FIELDS), f"{path}: sets.toml names no stop ids of generate's"
+    expected = set_tables.entry(form, plain, table["cases"], table["rejected"], **generate)
     assert table == expected, f"{path}: its sets.toml table does not match the file"
     # Only "\n" ends a line: U+2028 and the like stay raw inside a case's strings.
     lines = plain.split("\n")
@@ -1052,31 +1055,56 @@ def test_a_hub_checkpoint_needs_its_generation_config_cached_or_known_absent(tmp
     assert generation_eos_ids("acme/Tiny-Chat", revision) == ([7, 8], "generation_config.json")
 
 
-def test_where_hf_generate_would_not_stop_the_output_ends_at_vllm_s_stop_id_and_says_so(
+def test_where_hf_generate_would_not_stop_the_run_says_so_once_and_sets_toml_names_its_stop_ids(
     tmp_path, tiny_model, tmp_path_factory, capsys
 ):
     # Qwen3.5-9B ships no generation_config.json, its config.json lists only <|endoftext|>, and its turns end with
-    # <|im_end|>, the tokenizer's eos: vLLM stops there, transformers' generate does not. The output ends where vLLM,
-    # the serving engine, stops; the line and the run say that generate would not.
+    # <|im_end|>, the tokenizer's eos: vLLM stops there, transformers' generate does not. The outputs end where vLLM,
+    # the serving engine, stops, and each line carries only its stop id. What generate stops on is a fact of the
+    # checkpoint: the set's table in sets.toml holds the ids and the file they come from, and the run says once for
+    # the model how many outputs generate would not end.
     model = tiny_variant(tiny_model, tmp_path_factory, "eos-unlisted-chat", TEMPLATE, tokens=("<|endoftext|>",))
-    (model / "config.json").write_text(json.dumps({"text_config": {"eos_token_id": token_id(model, "<|endoftext|>")}}))
-    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    endoftext, im_end = token_id(model, "<|endoftext|>"), token_id(model, "<|im_end|>")
+    (model / "config.json").write_text(json.dumps({"text_config": {"eos_token_id": endoftext}}))
+    cases = [
+        {"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}},
+        {"name": "other", "request": {"messages": [user("Hi")]}, "message": {"content": "Paris."}},
+    ]
     status, out_dir = record(tmp_path, model, ("common", cases), kind="parse")
     assert status == 0
-    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/parse/plain"]
-    assert line["reference"]["text"] == "Hello"
-    end_of_turn = line["reference"]["provenance"]["end_of_turn"]
-    assert (end_of_turn["stop_id"], end_of_turn["found_by"]) == (token_id(model, "<|im_end|>"), "turn")
-    endoftext = token_id(model, "<|endoftext|>")
-    assert end_of_turn["hf_generate"].startswith(f"stops on [{endoftext}] (config.json) and would not end the output")
-    assert "the next message opens with '<|im_start|>'" in end_of_turn["hf_generate"]
-    assert f"stop sets differ tiny-chat/parse/plain: {end_of_turn['hf_generate']}" in capsys.readouterr().err
-    # Where vLLM stops on an id generate also stops on, the two agree, whatever else the turn holds after it.
-    end = turn_end_template("<|end|>\\n<|im_end|>\\n")
-    model = tiny_variant(tiny_model, tmp_path_factory, "both-stop-chat", end, tokens=("<|end|>",))
-    write_generation_config(model, "<|end|>")
-    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
-    assert out.end_of_turn == {"stop_id": token_id(model, "<|end|>"), "found_by": "turn"}
+    for line in read_fixture_file(out_dir / "common.jsonl").values():
+        assert line["reference"]["provenance"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+    table = sets_tables(tmp_path)["parse"]["common"]
+    assert (table["generate_stop_ids"], table["generate_stop_ids_from"]) == ([endoftext], "config.json")
+    err = capsys.readouterr().err
+    assert err.count("stop sets differ") == 1
+    assert (
+        f"stop sets differ for {model}: transformers' generate stops on [{endoftext}] (config.json), so 2 of the 2 "
+        f"outputs recorded here end on a stop id it does not stop on: {im_end} ('<|im_end|>')\n"
+    ) in err
+
+
+def test_where_hf_generate_stops_where_vllm_does_the_run_says_nothing(tmp_path, tiny_model, tmp_path_factory, capsys):
+    # The generation config lists the id the turns end on, as most checkpoints' do: generate and vLLM agree.
+    model = tiny_variant(tiny_model, tmp_path_factory, "eos-listed-chat", TEMPLATE, tokens=("<|endoftext|>",))
+    write_generation_config(model, "<|im_end|>", "<|endoftext|>")
+    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, _ = record(tmp_path, model, ("common", cases), kind="parse")
+    assert status == 0
+    table = sets_tables(tmp_path)["parse"]["common"]
+    expected = ([token_id(model, "<|im_end|>"), token_id(model, "<|endoftext|>")], "generation_config.json")
+    assert (table["generate_stop_ids"], table["generate_stop_ids_from"]) == expected
+    assert "stop sets differ" not in capsys.readouterr().err
+
+
+def test_a_checkpoint_without_a_generation_or_model_config_has_no_generate_to_name(tmp_path, tiny_model, capsys):
+    # The tiny model ships neither file, so transformers could not load a model to call generate on: its parse table
+    # names no stop ids of generate's, and the run compares nothing.
+    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, _ = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 0
+    assert set(sets_tables(tmp_path)["parse"]["common"]) == set(set_tables.FIELDS)
+    assert "stop sets differ" not in capsys.readouterr().err
 
 
 def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_model):

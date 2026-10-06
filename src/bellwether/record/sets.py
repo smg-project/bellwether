@@ -3,7 +3,9 @@
 Each ``[<kind>.<set>]`` table says how the set is stored (``form``: ``plain`` or ``zstd``), how many cases were
 recorded and rejected, and the size and sha256 of its plain content. ``count`` and reviewers read it without fetching
 a compressed set, and a re-record is checked against the plain content's hash, never the compressor's bytes.
-Written by ``bellwether record``, never by hand.
+A parse set's table also holds the ids transformers' ``generate`` stops on and the file they come from
+(``generate_stop_ids``, ``generate_stop_ids_from``): a fact of the checkpoint at its revision, kept with each set
+because ``record --set`` records one set at a time. Written by ``bellwether record``, never by hand.
 """
 
 from __future__ import annotations
@@ -17,10 +19,12 @@ from pathlib import Path
 
 FILE = "sets.toml"
 FIELDS = ("form", "cases", "rejected", "plain_bytes", "plain_sha256")
+GENERATE_FIELDS = ("generate_stop_ids", "generate_stop_ids_from")
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def entry(form: str, plain: str, cases: int, rejected: int) -> dict:
+def entry(form: str, plain: str, cases: int, rejected: int, **generate) -> dict:
+    """A set's table; ``generate`` holds a parse set's ``GENERATE_FIELDS``."""
     data = plain.encode("utf-8")
     return {
         "form": form,
@@ -28,6 +32,7 @@ def entry(form: str, plain: str, cases: int, rejected: int) -> dict:
         "rejected": rejected,
         "plain_bytes": len(data),
         "plain_sha256": hashlib.sha256(data).hexdigest(),
+        **generate,
     }
 
 
@@ -69,7 +74,7 @@ def write(path: Path, tables: dict[tuple[str, str], dict]) -> None:
                 raise ValueError(f"{path}: {key!r} cannot be a table name in sets.toml")
         lines.append(f"[{kind}.{name}]")
         table = tables[(kind, name)]
-        for field in FIELDS:
+        for field in (*FIELDS, *(field for field in GENERATE_FIELDS if field in table)):
             value = table[field]
             lines.append(f'{field} = "{value}"' if isinstance(value, str) else f"{field} = {value}")
         lines.append("")

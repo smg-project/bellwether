@@ -17,9 +17,10 @@ LFS; hand-written sets stay plain `<set>.jsonl`. `.lfsconfig` keeps a clone from
 one with `git lfs pull --include 'fixtures/<slug>/<kind>/<set>.jsonl.zst' --exclude ''`, or write every set as plain
 JSON Lines into one tree with `bellwether unpack` (`--out fixtures-plain` by default, `--model` to pick one), which
 is the root consumers point at. Each model's `sets.toml`, written by `record`, lists every set with its form, cases,
-rejected cases, plain size and plain-content sha256, so it can be counted and checked without fetching the set. A run
-reads it again at its end and replaces only its own kind's tables, under a lock on `sets.toml.lock` beside it (ignored
-by git), so a render run and a parse run of one model can overlap.
+rejected cases, plain size and plain-content sha256, so it can be counted and checked without fetching the set; a parse
+set's table also names the ids transformers' `generate` stops on and the file they come from (Parse lines). A run reads
+it again at its end and replaces only its own kind's tables, under a lock on `sets.toml.lock` beside it (ignored by
+git), so a render run and a parse run of one model can overlap.
 
 Every line validates against `src/bellwether/schemas/case.schema.json`. Fixtures are recorded by
 `bellwether record`, never edited by hand; a re-record is a pull request whose diff is the review.
@@ -79,8 +80,12 @@ end with that id, while its text is dropped.
 transformers' `generate` stops on the generation config's ids alone. Where it would not stop where
 vLLM does (Qwen3.5-9B ships no `generation_config.json`, its `config.json` lists only
 `<|endoftext|>`, and its turns end with the tokenizer's `<|im_end|>`), the output still ends where
-vLLM stops, as serving engines do; `end_of_turn.hf_generate` says what `generate` would do instead,
-and the run prints `stop sets differ <id>: ...`. `generation_config.json` must be cached at the
+vLLM stops, as serving engines do. What `generate` stops on is a fact of the checkpoint, not of a
+case: each parse set's table in `sets.toml` holds the ids (`generate_stop_ids`) and the file they
+come from (`generate_stop_ids_from`), so a line whose `stop_id` is not among them is one `generate`
+would not end, and the run prints one line for the model, `stop sets differ for <model>: ...`, when
+it recorded such outputs. The table is per set because `record --set` records one set at a time, so
+each table states what its own set was recorded against. `generation_config.json` must be cached at the
 revision or known absent, through the hub cache's `.no_exist` marker, which
 `hf download <model> generation_config.json --revision <sha>` leaves when the repository has no such
 file. Offline, transformers would take a file that is merely not cached for one the repository does

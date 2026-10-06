@@ -15,12 +15,14 @@ provided the next message, a user message after content or a tool message after 
 with a stop id. Any other turn is reported and not recorded, and so is a message whose own text
 (content, reasoning, a call's name or arguments) holds a stop id, since generation would stop inside
 it. The line records the stop id and where it was found, in the turn or in the next message.
-transformers' ``generate`` stops on the generation config's ids alone; where that would end the
-output elsewhere (Qwen3.5-9B's config lists only
-``<|endoftext|>``, and its turns end with the tokenizer's ``<|im_end|>``), the output still ends
-where vLLM stops, as serving engines do, and the line and the run say so. The generation config must
-be cached at the revision or known absent: offline, transformers takes a file that is merely not
-cached for one the repository does not ship.
+transformers' ``generate`` stops on the generation config's ids alone. Where that would end an output
+elsewhere (Qwen3.5-9B's config lists only ``<|endoftext|>``, and its turns end with the tokenizer's
+``<|im_end|>``), the output still ends where vLLM stops, as serving engines do. The ids ``generate``
+stops on and the file they come from are a fact of the checkpoint, not of a case: ``record`` keeps
+them in each parse set's table in ``sets.toml`` and prints one line for the model when some outputs
+end on an id ``generate`` does not stop on. The generation config must be cached at the revision or
+known absent: offline, transformers takes a file that is merely not cached for one the repository
+does not ship.
 
 A template that does not extend the generation prompt when the turn is appended cannot serve as
 this oracle for that case (DeepSeek-R1 never renders ``<think>``, so no rendered turn extends its
@@ -52,9 +54,9 @@ the pieces must give back the output text; a case where they do not is reported 
 from __future__ import annotations
 
 import copy
-import functools
 import json
-from collections.abc import Callable, Iterator
+from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -112,23 +114,10 @@ class RoundtripOracle:
                 "the round trip is lossy for this case"
             )
         turn = rendered[len(prompt) :]
-
-        @functools.cache
-        def with_next_message() -> str | None:
-            """The text after the generation prompt once the next message follows the turn, if it extends the turn."""
-            conversation = [*messages, assistant, *next_messages(message)]
-            try:
-                continued = self.tokenizer.apply_chat_template(
-                    conversation, tokenize=False, add_generation_prompt=False, **kwargs
-                )
-            except Exception as err:
-                raise ValueError(
-                    "no stop id in the turn, and the template cannot render the next message: "
-                    f"{type(err).__name__}: {err}"
-                ) from err
-            return continued[len(prompt) :] if continued.startswith(rendered) else None
-
-        cut = end_of_output(self.tokenizer, turn, self.stop_ids, with_next_message)
+        cut = stop_in_turn(self.tokenizer, turn, self.stop_ids)
+        if cut is None:
+            continued = self.render_next_message(messages, assistant, message, kwargs)
+            cut = stop_at_next_message(self.tokenizer, prompt, rendered, continued, self.stop_ids)
         if cut.after.strip():
             name = self.tokenizer.convert_ids_to_tokens(cut.stop_id)
             raise ValueError(
@@ -145,9 +134,6 @@ class RoundtripOracle:
             raise ValueError("the output's tokens do not give back its text under the tokenizer's incremental decode")
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
         end_of_turn = {"stop_id": cut.stop_id, "found_by": cut.found_by}
-        elsewhere = self.where_generate_stops_instead(turn, cut, with_next_message)
-        if elsewhere is not None:
-            end_of_turn["hf_generate"] = elsewhere
         return OutputText(text, output_ids, output_pieces, finish_reason, end_of_turn)
 
     def check_no_stop_id_in_the_message(self, assistant: dict) -> None:
@@ -168,32 +154,16 @@ class RoundtripOracle:
                         "so no output carries the message whole"
                     )
 
-    def where_generate_stops_instead(
-        self, turn: str, cut: Cut, with_next_message: Callable[[], str | None]
-    ) -> str | None:
-        """How transformers' ``generate`` would end the turn, when that is not where vLLM's stop set ends it.
-
-        ``generate`` stops on the generation config's ids alone, vLLM on those and the tokenizer's eos, so the two
-        differ exactly when vLLM stops on the tokenizer's eos and the generation config does not list it. The output
-        is still cut where vLLM stops, as serving engines do, and the difference is reported. A checkpoint with
-        neither a generation config nor a model config has no ``generate`` to compare with.
-        """
-        generate_ids = set(self.generate_eos_ids)
-        if self.generation_config_source is None or cut.stop_id in generate_ids:
-            return None
-        differs = (
-            f"stops on {sorted(generate_ids)} ({self.generation_config_source}) and would not end the output where "
-            f"vLLM does, at {cut.stop_id} ({self.tokenizer.convert_ids_to_tokens(cut.stop_id)!r})"
-        )
+    def render_next_message(self, messages: list, assistant: dict, message: dict, kwargs: dict) -> str:
+        """The conversation rendered with the next message after the turn, for a turn that holds no stop id."""
         try:
-            generate = end_of_output(self.tokenizer, turn, generate_ids, with_next_message)
-        except ValueError as err:
-            return f"{differs}: {err}"
-        return (
-            f"{differs}: it ends it at stop id {generate.stop_id} "
-            f"({self.tokenizer.convert_ids_to_tokens(generate.stop_id)!r}), found by {generate.found_by}, "
-            f"{len(generate.text) - len(cut.text)} characters later"
-        )
+            return self.tokenizer.apply_chat_template(
+                [*messages, assistant, *next_messages(message)], tokenize=False, add_generation_prompt=False, **kwargs
+            )
+        except Exception as err:
+            raise ValueError(
+                f"no stop id in the turn, and the template cannot render the next message: {type(err).__name__}: {err}"
+            ) from err
 
     def check_every_call_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
         """Every call of the message must reach the rendered turn.
@@ -221,6 +191,32 @@ class RoundtripOracle:
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
+
+    def generate_stop(self) -> dict:
+        """The ids transformers' ``generate`` stops on and the file they come from, as a parse set's table in sets.toml
+        holds them; nothing for a checkpoint that ships neither file, which transformers could not load a model from."""
+        if self.generation_config_source is None:
+            return {}
+        return {"generate_stop_ids": self.generate_eos_ids, "generate_stop_ids_from": self.generation_config_source}
+
+    def stop_sets_differ(self, model: str, recorded: list[int]) -> str | None:
+        """One line for the run when some of the ``recorded`` outputs end on a stop id ``generate`` does not stop on.
+
+        vLLM stops on the generation config's ids and the tokenizer's eos, ``generate`` on the generation config's ids
+        alone, so the two differ when an output ends on the tokenizer's eos and the generation config does not list it.
+        The outputs still end where vLLM stops, as serving engines do.
+        """
+        if self.generation_config_source is None:
+            return None
+        outside = Counter(stop_id for stop_id in recorded if stop_id not in self.generate_eos_ids)
+        if not outside:
+            return None
+        named = ", ".join(f"{i} ({self.tokenizer.convert_ids_to_tokens(i)!r})" for i in sorted(outside))
+        return (
+            f"stop sets differ for {model}: transformers' generate stops on {self.generate_eos_ids} "
+            f"({self.generation_config_source}), so {outside.total()} of the {len(recorded)} outputs recorded here "
+            f"end on a stop id it does not stop on: {named}"
+        )
 
 
 def generation_eos_ids(model: str, revision: str) -> tuple[list[int], str | None]:
@@ -277,15 +273,12 @@ class Cut:
     after: str = ""
 
 
-def end_of_output(tokenizer, turn: str, stop_ids: set[int], with_next_message: Callable[[], str | None]) -> Cut:
-    """Where generation that stops on ``stop_ids`` ends the rendered ``turn``; a ValueError says why it ends nowhere.
+def stop_in_turn(tokenizer, turn: str, stop_ids: set[int]) -> Cut | None:
+    """Where the first stop id in the rendered ``turn`` ends the output; None when the turn holds none.
 
-    1. The first stop id in the turn ends the output. What the turn holds after it, further stop ids left out, is
-       kept in ``after``: the round trip records a turn only when that is whitespace (Phi-4-mini writes
-       ``<|end|><|endoftext|>``), since anything else is part of the message rendered after generation stops.
-    2. A turn with no stop id is the output whole when the next message opens with one, on a token boundary (GLM's
-       role tags). ``with_next_message`` gives the text after the generation prompt once the next message follows
-       the turn, or None when that render does not extend the turn.
+    What the turn holds after it, further stop ids left out, is kept in ``after``: the round trip records a turn only
+    when that is whitespace (Phi-4-mini writes ``<|end|><|endoftext|>``), since anything else is part of the turn the
+    template renders after generation stops.
     """
     encoded = tokenizer(turn, add_special_tokens=False, return_offsets_mapping=True)
     tokens = list(zip(encoded["input_ids"], encoded["offset_mapping"], strict=True))
@@ -299,12 +292,23 @@ def end_of_output(tokenizer, turn: str, stop_ids: set[int], with_next_message: C
                 position = later_end
         after.append(turn[position:])
         return Cut(turn[:start], token, "turn", "".join(after))
-    tail = with_next_message()
-    if tail is None:
+    return None
+
+
+def stop_at_next_message(tokenizer, prompt: str, rendered: str, continued: str, stop_ids: set[int]) -> Cut:
+    """Where a turn with no stop id ends: the whole turn is the output when the next message opens with a stop id,
+    right where the turn ends and on a token boundary (GLM's role tags); a ValueError says why it ends nowhere.
+
+    ``rendered`` is the conversation that ends with the turn, after the generation ``prompt``; ``continued`` is the same
+    conversation with the next message after the turn, and it must extend ``rendered``, or what follows the turn is
+    unknown.
+    """
+    if not continued.startswith(rendered):
         raise ValueError(
             "no stop id in the turn, and the template renders the turn differently once the next message follows it, "
             "so what follows the turn is unknown"
         )
+    turn, tail = rendered[len(prompt) :], continued[len(prompt) :]
     encoded = tokenizer(tail, add_special_tokens=False, return_offsets_mapping=True)
     for token, (start, end) in zip(encoded["input_ids"], encoded["offset_mapping"], strict=True):
         if end <= len(turn) or start == end:
