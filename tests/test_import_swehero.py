@@ -307,6 +307,23 @@ def test_a_turn_without_calls_is_a_parse_case_with_content_only():
     assert last["notes"] == "SWE-Hero owner__repo-0: the assistant turn at message 7 of 8 (no call)"
 
 
+# Every assistant content in the shard ends in whitespace, and tool results keep the output's own.
+EDGES = [
+    item("system", "You are an agent.\n"),
+    item("user", "\n  Fix the bug.\n\n"),
+    item("assistant", "Let me look.\n\n", call("call-a", "execute_bash", '{"command": "ls"}')),
+    item("tool", "\n  café.py  \n\n"),
+    item("assistant", "Done. \n\n", call("call-b", "finish", '{"message": "Fixed."}')),
+]
+
+
+def test_whitespace_at_the_edges_of_every_message_is_kept():
+    sets = swehero.build_sets([row(trajectory=EDGES)], TOOLS)
+    [*_, last] = sets[RENDER]
+    assert [message["content"] for message in last["request"]["messages"]] == [item["content"] for item in EDGES[:4]]
+    assert [line["message"]["content"] for line in sets[PARSE]] == ["Let me look.\n\n", "Done. \n\n"]
+
+
 def test_one_row_in_stride_is_sampled_and_every_refused_row_is_named_with_its_reason(monkeypatch):
     monkeypatch.setattr(swehero, "STRIDE", 2)
     rows = [row(number) for number in range(5)]
@@ -316,6 +333,9 @@ def test_one_row_in_stride_is_sampled_and_every_refused_row_is_named_with_its_re
     refused: list = []
     sets = swehero.build_sets(rows, TOOLS, refused)
     assert sorted({line["origin"]["row"] for line in sets[RENDER]}) == [0, 4]
+    names = [f"swehero-13-{number}-{turn}" for number in (0, 4) for turn in (2, 4, 7)]
+    assert [line["name"] for line in sets[RENDER]] == names
+    assert [line["name"] for line in sets[PARSE]] == names
     assert refused == [
         (1, swehero.UNPAIRED, "message 4 makes 2 call(s) and 1 result(s) follow"),
         (2, swehero.LICENSE_NOT_ALLOWED, "GPL-3.0"),
@@ -369,7 +389,7 @@ def write_shard(path, rows: list[dict]):
 
 
 def test_rows_are_read_from_the_shard_in_order_with_the_fields_the_import_uses(tmp_path):
-    rows = [row(number) for number in range(3)]
+    rows = [row(number) for number in range(2 * 64 + 1)]  # the shard is read 64 rows at a time
     assert list(swehero.read_rows(write_shard(tmp_path / "shard.parquet", rows))) == rows
 
 
@@ -409,7 +429,7 @@ CARD = (
 )
 
 
-def serve(tmp_path, monkeypatch, rows: list[dict], card: str = CARD) -> list[tuple]:
+def serve(tmp_path, monkeypatch, rows: list[dict], card: str = CARD, tools: list = TOOLS) -> list[tuple]:
     """Stand in for the Hub: the three files, written to ``tmp_path`` and pinned by their sha256 in place of the real
     pins; returns the downloads asked for."""
     files = {
@@ -418,7 +438,7 @@ def serve(tmp_path, monkeypatch, rows: list[dict], card: str = CARD) -> list[tup
         swehero.SHARD_FILE: write_shard(tmp_path / "shard.parquet", rows),
     }
     files[hf.CARD].write_text(card)
-    files[swehero.TOOLS_FILE].write_text(json.dumps(TOOLS))
+    files[swehero.TOOLS_FILE].write_text(json.dumps(tools))
     pins = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()}
     monkeypatch.setattr(swehero, "FILES", pins)
     downloads: list[tuple] = []
@@ -436,6 +456,9 @@ def test_the_command_reads_the_pinned_files_under_its_cache_then_writes_and_chec
     corpus = tmp_path / "corpus"
     argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
     assert main([*argv, "--check"]) == 1
+    err = capsys.readouterr().err
+    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: missing" in err
+    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: missing" in err
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
@@ -458,6 +481,14 @@ def test_a_card_under_another_license_stops_the_import_before_the_shard_is_fetch
     with pytest.raises(ValueError, match="the card's license is 'cc-by-nc-4.0', not the reviewed 'cc-by-4.0'"):
         main(["import", "swehero", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")])
     assert [filename for _, filename, _ in downloads] == [hf.CARD]
+
+
+def test_a_tools_file_not_in_openai_shape_stops_the_import_before_the_shard_is_fetched(tmp_path, monkeypatch):
+    downloads = serve(tmp_path, monkeypatch, [row()], tools=[{"name": "execute_bash"}])
+    problem = 'tools.json: tool 0 is not {"type": "function", "function": {...}}'
+    with pytest.raises(ValueError, match=re.escape(problem)):
+        main(["import", "swehero", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")])
+    assert [filename for _, filename, _ in downloads] == [hf.CARD, swehero.TOOLS_FILE]
 
 
 def test_the_command_names_every_refused_row(tmp_path, monkeypatch, capsys):
