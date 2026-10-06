@@ -34,14 +34,17 @@ def test_fetch_asks_for_the_file_at_the_commit_in_its_cache_and_sends_no_token(t
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", serve_file(tmp_path / "rows.jsonl", calls))
     assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == tmp_path / "rows.jsonl"
     asked = {"repo_type": "dataset", "revision": REVISION, "cache_dir": tmp_path / "cache" / "huggingface"}
-    assert calls == [(REPO, FILE, {**asked, "token": False})]
+    assert calls == [(REPO, FILE, {**asked, "force_download": False, "token": False})]
 
 
-def test_fetch_refuses_a_file_that_is_not_the_pinned_one(tmp_path, monkeypatch):
+def test_a_file_that_is_not_the_pinned_one_is_downloaded_again_once_then_refused_by_its_path(tmp_path, monkeypatch):
     (tmp_path / "rows.jsonl").write_bytes(b"tampered")
-    monkeypatch.setattr(huggingface_hub, "hf_hub_download", serve_file(tmp_path / "rows.jsonl", []))
-    with pytest.raises(ValueError, match=f"{REPO}@{REVISION} {FILE}: sha256 .* is not the pinned"):
+    calls: list = []
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", serve_file(tmp_path / "rows.jsonl", calls))
+    pinned = f"{tmp_path / 'rows.jsonl'}: sha256 {sha(b'tampered')} is not the pinned {sha(b'rows')}"
+    with pytest.raises(ValueError, match=re.escape(pinned)):
         hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache")
+    assert [kwargs["force_download"] for _, _, kwargs in calls] == [False, True]
 
 
 class Hub:
@@ -109,6 +112,29 @@ def test_fetch_keeps_the_file_under_its_cache_and_reads_it_back_without_a_reques
     hub.requests.clear()
     assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == path
     assert [request for request in hub.requests if request.url.path.endswith(FILE)] == []
+
+
+def test_a_cached_file_whose_bytes_are_not_the_pinned_ones_is_downloaded_again(tmp_path, hub):
+    hub.files[FILE] = b"rows"
+    path = hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache")
+    path.write_bytes(b"damaged")
+    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == path
+    assert path.read_bytes() == b"rows" and hub.downloads(FILE) == 2
+
+
+def test_a_file_the_hub_serves_with_other_bytes_is_downloaded_once_more_and_refused_by_its_path(tmp_path, hub):
+    hub.files[FILE] = b"tampered"
+    snapshot = (tmp_path / "cache").resolve() / "huggingface" / "datasets--org--data" / "snapshots" / REVISION
+    pinned = f"{snapshot / FILE}: sha256 {sha(b'tampered')} is not the pinned {sha(b'rows')}"
+    with pytest.raises(ValueError, match=re.escape(pinned)):
+        hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache")
+    assert hub.downloads(FILE) == 2
+
+
+def test_fetch_hashes_the_whole_file_not_its_first_mebibyte(tmp_path, hub):
+    hub.files[FILE] = b"a" * 2**20 + b"tampered"
+    with pytest.raises(ValueError, match="is not the pinned"):
+        hf.fetch(REPO, REVISION, FILE, sha(b"a" * 2**20 + b"rows"), cache=tmp_path / "cache")
 
 
 @pytest.mark.parametrize("revision", ["main", "v1.0", "a" * 39, "a" * 41, "A" * 40, "g" * 40])

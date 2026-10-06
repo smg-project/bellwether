@@ -29,19 +29,32 @@ def fetch(repo: str, revision: str, filename: str, sha256: str, cache: Path = pi
 
     ``revision`` must be a full commit id, 40 lowercase hex digits, as ``github.fetch`` asks: a branch or a tag can
     move, and would send a request on every run to learn where it points. Any other is refused before the cache or the
-    network is read.
+    network is read. A cached file whose bytes are not the pinned ones is downloaded again, once, as ``pypi.fetch`` and
+    ``github.fetch`` do; a file that is still not is refused, by its path in the cache.
     """
     if not pinned.COMMIT_ID.fullmatch(revision):
         raise ValueError(f"{repo}: {revision!r} is not a commit id (40 lowercase hex digits); pin a commit")
     import huggingface_hub
 
-    # token=False: the files are public, and an importer that needs no token reads none; with the default, the call
-    # would look one up (HF_TOKEN, then the token file, refreshing a browser login) and send it on every request.
-    path = huggingface_hub.hf_hub_download(
-        repo, filename, repo_type="dataset", revision=revision, cache_dir=cache / "huggingface", token=False
-    )
-    path = Path(path)
-    pinned.check(f"{repo}@{revision} {filename}", pinned.sha256_of_file(path), sha256)
+    def download(again: bool) -> Path:
+        # token=False: the files are public, and an importer that needs no token reads none; with the default, the
+        # call would look one up (HF_TOKEN, then the token file, refreshing a browser login) and send it on every
+        # request.
+        path = huggingface_hub.hf_hub_download(
+            repo,
+            filename,
+            repo_type="dataset",
+            revision=revision,
+            cache_dir=cache / "huggingface",
+            force_download=again,
+            token=False,
+        )
+        return Path(path)
+
+    path = download(again=False)
+    if pinned.sha256_of_file(path) != sha256:
+        path = download(again=True)
+    pinned.check(path, pinned.sha256_of_file(path), sha256)
     return path
 
 
