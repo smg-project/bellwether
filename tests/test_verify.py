@@ -24,6 +24,7 @@ class FakeGateway:
 
     def __init__(self, capture):
         self.capture = capture
+        capture.touch()  # the mock creates its capture file when it starts
         self.prompts: dict[str, tuple[list[int] | None, str | None]] = {}  # rid -> what the engine receives
         self.request_ids: dict[str, str] = {}  # rid -> the engine's request_id, where it is not the rid as sent
         # rid -> the status and the message SMG answers with; bytes are a plain body from something in front of it
@@ -118,6 +119,14 @@ def write_model(fixtures, slug: str, model: str, cases: dict[str, tuple[dict, li
 
 
 HELLO = {"messages": [{"role": "user", "content": "Hello."}]}
+# A whole fixture line, for tests that write a set of their own.
+CASE_LINE = {
+    "id": "m1/render/hello",
+    "kind": "render",
+    "model": "org/M1",
+    "request": HELLO,
+    "reference": {"source": "hf-template", "input_ids": [10, 11], "text": "<u>Hello.</u><a>"},
+}
 BYE = {"messages": [{"role": "user", "content": "Bye."}]}
 CASES = {
     "hello": (HELLO, list(range(10, 30)), "<u>Hello.</u><a>"),
@@ -258,6 +267,7 @@ def test_a_capture_file_nobody_writes_leaves_every_answered_case_missing(tmp_pat
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
     cases = write_model(fixtures, "m1", "org/M1", CASES)
     gateway.serve(cases)
+    (tmp_path / "elsewhere.jsonl").touch()
     argv = ["--smg", gateway.url, "--capture", str(tmp_path / "elsewhere.jsonl"), "--fixtures", str(fixtures)]
 
     assert main(["verify", *argv, "--report", str(report)]) == 1
@@ -435,6 +445,18 @@ def test_model_selects_the_manifests_to_verify(tmp_path, gateway):
     assert [manifest["model"] for manifest in json.loads(report.read_text())["provenance"]["manifests"]] == ["org/M2"]
 
 
+def test_a_model_without_render_cases_is_named_in_the_report(tmp_path, gateway, capsys):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    (fixtures / "m3").mkdir()
+    (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3"\nrevision = "r"\n')
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 0
+
+    assert json.loads(report.read_text())["models_without_cases"] == ["org/M3"]
+    assert "org/M3: no render cases" in capsys.readouterr().out
+
+
 def test_a_benchmark_set_stored_compressed_is_verified_like_a_plain_one(tmp_path, gateway, capsys):
     fixtures = tmp_path / "fixtures"
     plain = write_model(fixtures, "m1", "org/M1", {"hello": CASES["hello"]})
@@ -465,11 +487,19 @@ def closed_port() -> int:
         "manifest without a revision",
         "manifest not TOML",
         "manifest not readable",
+        "a named model without render cases",
         "bad known file",
         "no gateway",
+        "capture not found",
+        "capture is a directory",
         "not a capture file",
         "capture line without ids",
         "set not fetched",
+        "set not zstd",
+        "set cut short",
+        "set listed but not there",
+        "reference without ids",
+        "id in two sets",
     ],
 )
 def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, gateway, capsys, problem):
@@ -477,7 +507,7 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
     gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
     (fixtures / "m3").mkdir()
     (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3"\nrevision = "r"\n')
-    url, extra = gateway.url, []
+    url, capture, extra = gateway.url, gateway.capture, []
     if problem == "chunk plans":
         extra, message = ["--chunk-plan", "whole"], "--chunk-plan"
     elif problem == "unknown model":
@@ -494,6 +524,15 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
     elif problem == "manifest not readable":
         (fixtures / "m4" / "manifest.toml").mkdir(parents=True)
         message = str(fixtures / "m4" / "manifest.toml")
+    elif problem == "a named model without render cases":
+        extra, message = ["--model", "org/M1", "--model", "org/M3"], "no render fixtures under"
+    elif problem == "capture not found":
+        capture = tmp_path / "nowhere.jsonl"
+        message = str(capture)
+    elif problem == "capture is a directory":
+        capture = tmp_path / "captures"
+        capture.mkdir()
+        message = str(capture)
     elif problem == "bad known file":
         (tmp_path / "known.toml").write_text('"m1/render/hello" = ""\n')
         extra, message = ["--known", str(tmp_path / "known.toml")], "known.toml"
@@ -504,15 +543,34 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 10\n"
         (fixtures / "m1" / "render" / "bench.jsonl.zst").write_text(pointer)
         message = "git lfs pull --include"
+    elif problem in ("set not zstd", "set cut short"):
+        bench = fixtures / "m1" / "render" / "bench.jsonl.zst"
+        write_fixture_file(bench, {"m1/render/bench-a": {**CASE_LINE, "id": "m1/render/bench-a"}})
+        bench.write_bytes(b"(\xb5/\xfd" + bytes(16) if problem == "set not zstd" else bench.read_bytes()[:-4])
+        message = str(bench)
+    elif problem == "set listed but not there":
+        (fixtures / "m1" / "sets.toml").write_text('[render.bench]\nform = "zstd"\ncases = 1\n')
+        message = str(fixtures / "m1" / "render" / "bench.jsonl.zst")
+    elif problem == "reference without ids":
+        reference = {"source": "hf-template", "text": "<u>Bye.</u><a>"}
+        write_fixture_file(
+            fixtures / "m1" / "render" / "bye.jsonl", {"m1/render/bye": {**CASE_LINE, "reference": reference}}
+        )
+        message = "m1/render/bye"
+    elif problem == "id in two sets":
+        write_fixture_file(fixtures / "m1" / "render" / "again.jsonl", {"m1/render/hello": CASE_LINE})
+        message = "m1/render/hello"
     elif problem == "not a capture file":
         gateway.appended_after["m1/render/hello"] = "INFO smg: request done\n"
         message = "not JSON"
     else:
         gateway.prompts["m1/render/hello"] = (None, "<u>Hello.</u><a>")
         message = "input_ids"
-    argv = ["--smg", url, "--capture", str(gateway.capture), "--fixtures", str(fixtures), "--report", str(report)]
+    argv = ["--smg", url, "--capture", str(capture), "--fixtures", str(fixtures), "--report", str(report)]
 
     assert main(["verify", *argv, *extra]) == 2
 
     assert message in capsys.readouterr().err
     assert not report.exists()
+    if problem not in ("not a capture file", "capture line without ids"):
+        assert gateway.received == [], "found before the first request"

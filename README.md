@@ -210,15 +210,19 @@ uv run bellwether verify --smg http://127.0.0.1:30000 --capture capture.jsonl --
   --report runs/verify.json --junit runs/verify.xml
 ```
 
-SMG runs in front of its `mock-worker`, started with `--capture capture.jsonl`, which appends each
-request SMG sends it as one JSON line. `verify` posts every render fixture's request to
-`/v1/chat/completions` with the manifest's `model`, the fixture id as `rid`, `stream: false` and, unless
-the request sets a limit, `max_tokens: 1`; none of these reach the chat template. SMG passes the `rid`
-to the engine as `request_id`, verbatim, or in prefill-decode mode as `<rid>-<uuid>`, with a fresh UUID
-for each attempt; `verify` takes that suffix off, so the capture lines written during the run are joined
-to the cases on it, and each case gets a verdict. Every render set of the selected models is read, plain
-or compressed; a set Git LFS has not fetched stops the run with the command that fetches it, rather than
-being passed over.
+SMG runs in front of its `mock-worker`, started with `--capture capture.jsonl`, which creates the file
+and appends each request SMG sends it as one JSON line; `verify` opens the file before its first
+request. `verify` posts every render fixture's request to `/v1/chat/completions` with the manifest's
+`model`, the fixture id as `rid`, `stream: false` and, unless the request sets a limit, `max_tokens: 1`;
+none of these reach the chat template. SMG passes the `rid` to the engine as `request_id`, verbatim, or
+in prefill-decode mode as `<rid>-<uuid>`, with a fresh UUID for each attempt; `verify` takes that suffix
+off, so the capture lines written during the run are joined to the cases on it, and each case gets a
+verdict. Every render set of the selected models is read whole, plain or compressed, before the first
+request, and nothing in them is passed over: a set Git LFS has not fetched stops the run with the
+command that fetches it, and so does a set `sets.toml` lists that the checkout lacks, a set that is not
+zstd or is cut short, a line that is not a case with a request and reference ids, and a case id in two
+of a model's sets. A model named with `--model` must have render cases; any other model without them is
+named in the report.
 
 | Verdict | Meaning |
 |---|---|
@@ -228,11 +232,11 @@ being passed over.
 | `missing` | SMG answered, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
 
 `--known PATH` lists SMG's known differences as a TOML table of `"<fixture id>" = "<reason>"`. A listed
-case passes while it is a regression or rejected and fails once it matches, and a listed id that names no
-case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
+case passes while it is a regression or rejected and fails once it matches, and a listed id that names
+no case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
 status is 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such
-model, a manifest verify cannot read, no answer from SMG, a capture file verify cannot read). A case is
-judged against its reference alone for now: telling an `engine_defect` or `engines_split` from a
+model, a manifest or a set verify cannot read, no answer from SMG, a capture file verify cannot read). A
+case is judged against its reference alone for now: telling an `engine_defect` or `engines_split` from a
 `regression` needs the engine witnesses, which come once they are recorded.
 
 ## Layout

@@ -10,9 +10,11 @@ receives to its capture file as one JSON line, so a case's capture line is found
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
+from typing import BinaryIO
 
 import httpx
 
@@ -27,21 +29,23 @@ PREFILL_DECODE_ID = re.compile(r"(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 
 
 class CannotVerify(Exception):
-    """The run cannot give verdicts: no such model or cases, no answer from SMG, or a capture verify cannot read."""
+    """The run cannot give verdicts: no such model or cases, a manifest, set or capture file verify cannot read, or no
+    answer from SMG."""
 
 
 def verify(url: str, capture: Path, cases: list[tuple[Manifest, str, dict]]) -> list[dict]:
     """Send every case, then join the capture file to the answers on ``request_id``."""
-    start = capture_size(capture)
-    answers = []
-    # The environment's proxy settings are ignored: verify talks to the SMG it was given, with nothing in between.
-    with httpx.Client(timeout=TIMEOUT, trust_env=False) as client:
-        for manifest, _, case in cases:
-            try:
-                answers.append(send(client, url, request_body(case, manifest.model)))
-            except (httpx.HTTPError, httpx.InvalidURL) as err:
-                raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
-    captured = read_capture(capture, start, {case["id"] for _, _, case in cases})
+    with open_capture(capture) as file:
+        start = file.seek(0, os.SEEK_END)
+        answers = []
+        # The environment's proxy settings are ignored: verify talks to the SMG it was given, with nothing in between.
+        with httpx.Client(timeout=TIMEOUT, trust_env=False) as client:
+            for manifest, _, case in cases:
+                try:
+                    answers.append(send(client, url, request_body(case, manifest.model)))
+                except (httpx.HTTPError, httpx.InvalidURL) as err:
+                    raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
+        captured = read_capture(file, capture, start, {case["id"] for _, _, case in cases})
     results = []
     for (manifest, set_name, case), (status, body) in zip(cases, answers, strict=True):
         if status != 200:
@@ -83,15 +87,18 @@ def send(client: httpx.Client, url: str, body: dict) -> tuple[int, object]:
         return response.status_code, response.text
 
 
-def capture_size(path: Path) -> int:
-    """Where this run's capture lines will start. The mock appends, so what is there already is an earlier run's."""
+def open_capture(path: Path) -> BinaryIO:
+    """The capture file, opened before the first request so that one verify cannot read stops the run at once.
+
+    The mock creates it when it starts and appends to it, so what is there already is an earlier run's.
+    """
     try:
-        return path.stat().st_size
-    except FileNotFoundError:
-        return 0
+        return path.open("rb")
+    except OSError as err:
+        raise CannotVerify(f"cannot read the capture file {path}: {err.strerror or err}") from None
 
 
-def read_capture(path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
+def read_capture(file: BinaryIO, path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
     """The first capture line for each wanted fixture id among the complete lines written since ``start``.
 
     Lines for other request ids are other clients'. The text after the last newline is a line the mock is still
@@ -99,12 +106,8 @@ def read_capture(path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
     before the engine answers. A later line for a case is a retry or, under prefill-decode, the other leg's copy
     of the request.
     """
-    try:
-        with path.open("rb") as f:
-            f.seek(start)
-            data = f.read()
-    except FileNotFoundError:
-        return {}
+    file.seek(start)
+    data = file.read()
     found: dict[str, dict] = {}
     end = start
     for raw in data.split(b"\n")[:-1]:

@@ -14,10 +14,9 @@ import sys
 from pathlib import Path
 
 from bellwether.manifest import Manifest, find_manifest, load_manifest
-from bellwether.record.fixtures import read_fixture_file
-from bellwether.unpack import set_files
 
 from . import render, report
+from .cases import read_cases, render_sets
 from .render import CannotVerify
 
 NOT_IMPLEMENTED = 2
@@ -36,7 +35,7 @@ def run(args: argparse.Namespace) -> int:
         return CANNOT_RUN
     try:
         manifests = select_manifests(args.fixtures, args.models)
-        cases = render_cases(manifests)
+        cases, without_cases = render_cases(manifests, named=bool(args.models))
         if not cases:
             models = ", ".join(manifest.model for manifest in manifests)
             raise CannotVerify(f"no render fixtures under {args.fixtures} for {models}")
@@ -48,7 +47,13 @@ def run(args: argparse.Namespace) -> int:
     report.judge(results, known)
     without_case = report.known_without_case(known, manifests, results)
     written = report.build(
-        results, without_case, url=args.smg, capture=args.capture, known=args.known, manifests=manifests
+        results,
+        without_case,
+        url=args.smg,
+        capture=args.capture,
+        known=args.known,
+        manifests=manifests,
+        without_cases=without_cases,
     )
     for line in report.lines(written):
         print(line)
@@ -75,21 +80,24 @@ def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]
     return manifests
 
 
-def render_cases(manifests: list[Manifest]) -> list[tuple[Manifest, str, dict]]:
-    """Every render case of the given models, with its manifest and set name, in file order.
+def render_cases(manifests: list[Manifest], *, named: bool) -> tuple[list[tuple[Manifest, str, dict]], list[str]]:
+    """Every render case of the given models, with its manifest and set name, in file order; and the models with none.
 
-    A set is read in either form, plain or compressed. One that cannot be read, such as a set Git LFS has not
-    fetched (its error names the command that fetches it), stops the run: passing over it would verify fewer
-    cases than the fixtures hold and still pass.
+    A set is read in either form, plain or compressed (see ``cases``). A case id is a model's once: the join and the
+    known differences go by it. A model named with ``--model`` must have a case; any other model without one is
+    named in the report.
     """
-    cases = []
+    cases, without = [], []
     for manifest in manifests:
-        for kind, name, path in set_files(manifest):
-            if kind != "render":
-                continue
-            try:
-                found = read_fixture_file(path)
-            except ValueError as err:
-                raise CannotVerify(str(err)) from None
-            cases += [(manifest, name, case) for case in found.values()]
-    return cases
+        seen: dict[str, str] = {}  # case id -> its set
+        for name, path in render_sets(manifest):
+            for number, case in read_cases(path):
+                if case["id"] in seen:
+                    raise CannotVerify(f"{path}:{number}: {case['id']} is already a case of the {seen[case['id']]} set")
+                seen[case["id"]] = name
+                cases.append((manifest, name, case))
+        if not seen:
+            if named:
+                raise CannotVerify(f"no render fixtures under {manifest.path.parent} for {manifest.model}")
+            without.append(manifest.model)
+    return cases, without

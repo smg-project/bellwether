@@ -66,6 +66,7 @@ def build(
     capture: Path,
     known: Path | None,
     manifests: list[Manifest],
+    without_cases: list[str],
 ) -> dict:
     passed = sum(result["passed"] for result in results)
     summary = {"cases": len(results), **{verdict: 0 for verdict in VERDICTS}}
@@ -84,6 +85,7 @@ def build(
         "summary": {**summary, "passed": passed, "failed": len(results) - passed},
         "passed": passed == len(results) and not without_case,
         "known_without_case": without_case,
+        "models_without_cases": without_cases,
         # The verdict and whether it passes first; the response body, which can be long, last.
         "cases": [
             {**{k: r[k] for k in LEADING_KEYS}, **{k: r[k] for k in r if k not in LEADING_KEYS}} for r in results
@@ -168,6 +170,7 @@ def lines(report: dict) -> list[str]:
         if not (case["verdict"] == "match" and case["passed"])
     ]
     out += [f"known {case_id}: {WITHOUT_CASE}" for case_id in report["known_without_case"]]
+    out += [f"{model}: no render cases" for model in report["models_without_cases"]]
     summary = report["summary"]
     counts = ", ".join(f"{summary[verdict]} {verdict}" for verdict in VERDICTS)
     tally = f"{summary['passed']} pass, {summary['failed']} fail"
