@@ -14,4 +14,8 @@ def run(args: argparse.Namespace) -> int:
         from .gsm8k import run as run_gsm8k
 
         return run_gsm8k(args)
+    if args.dataset == "shapes":
+        from .shapes import run as run_shapes
+
+        return run_shapes(args)
     raise ValueError(f"no importer for {args.dataset!r}")
