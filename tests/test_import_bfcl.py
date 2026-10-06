@@ -344,6 +344,14 @@ LICENSE_PIN = (
 )
 
 
+def test_a_single_turn_row_with_more_than_one_turn_stops_the_import(tmp_path):
+    row = dict(SIMPLE, question=[[{"role": "user", "content": "Order"}], [{"role": "user", "content": "Again"}]])
+    path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [row]})
+    with zipfile.ZipFile(path) as wheel:
+        with pytest.raises(ValueError, match="simple_python_0: a single-turn row with 2 turns"):
+            bfcl.build_sets(wheel, categories=("simple_python",))
+
+
 def test_written_sets_check_clean_and_a_changed_or_stale_file_is_reported(tmp_path):
     sets, corpus = build(tmp_path), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
@@ -615,6 +623,15 @@ def test_the_class_to_module_map_is_read_from_the_backend_source_without_running
         assert bfcl.class_files(wheel) == {"Mail": f"{SOURCES}/mail.py", "Cafe": f"{SOURCES}/cafe.py"}
 
 
+def test_a_backend_config_without_the_maps_stops_the_import(tmp_path):
+    config = 'BACKEND_PATH_PREFIX = "bfcl_eval.eval_checker.multi_turn_eval.func_source_code"\n'
+    with zipfile.ZipFile(fake_wheel(tmp_path, {BACKEND_CONFIG: config})) as wheel:
+        with pytest.raises(ValueError, match="assigns no MULTI_TURN_FUNC_DOC_FILE_MAPPING"):
+            bfcl.func_doc_files(wheel)
+        with pytest.raises(ValueError, match="assigns no CLASS_FILE_PATH_MAPPING"):
+            bfcl.class_files(wheel)
+
+
 def test_a_multi_turn_row_offers_its_classes_functions_less_those_held_back():
     docs = {"Cafe": [fn("order", {}), fn("pay", {})], "Mail": [fn("send", {}), fn("sort", {})]}
     row = {"id": "multi_turn_miss_func_0", "involved_classes": ["Mail", "Cafe"], "missed_function": {"2": ["sort"]}}
@@ -623,6 +640,20 @@ def test_a_multi_turn_row_offers_its_classes_functions_less_those_held_back():
     assert [f["name"] for f in bfcl.first_turn_functions(row, docs)] == ["send", "order"]
     with pytest.raises(ValueError, match="holds back pay at the first turn"):
         bfcl.first_turn_functions(dict(row, missed_function={"0": ["pay"]}), docs)
+
+
+def test_a_held_back_name_takes_out_only_the_first_function_of_that_name():
+    # BFCL takes out the first doc of each held-back name and stops looking (bfcl_eval/utils.py:793-799).
+    first, second = fn("pay", {}), fn("pay", {"to": {"type": "string"}})
+    docs = {"Cafe": [fn("order", {}), first], "Mail": [fn("send", {}), second]}
+    row = {"id": "multi_turn_miss_func_0", "involved_classes": ["Cafe", "Mail"], "missed_function": {"1": ["pay"]}}
+    assert bfcl.first_turn_functions(row, docs) == [fn("order", {}), fn("send", {}), second]
+
+
+def test_a_held_back_name_the_row_does_not_offer_takes_nothing_out():
+    docs = {"Cafe": [fn("order", {}), fn("pay", {})]}
+    row = {"id": "multi_turn_miss_func_0", "involved_classes": ["Cafe"], "missed_function": {"1": ["refund"]}}
+    assert bfcl.first_turn_functions(row, docs) == [fn("order", {}), fn("pay", {})]
 
 
 SENT = {"type": "dict", "properties": {"sent": {"type": "boolean", "description": "Sent."}}}
@@ -785,6 +816,12 @@ def test_a_value_passed_by_position_to_a_function_without_a_def_stops_the_import
     no_send = NEVER_RUN + "class Mail:\n    def sort(self): ...\n"
     with pytest.raises(ValueError, match="no def of send"):
         first_turn_calls(tmp_path, "send('Bo')", {f"{SOURCES}/mail.py": no_send})
+
+
+def test_a_ground_truth_entry_that_is_not_a_call_to_a_named_function_stops_the_import(tmp_path):
+    for entry in ["Mail.send(to='Bo')", "send"]:
+        with pytest.raises(ValueError, match="is not a call to a named function"):
+            first_turn_calls(tmp_path, entry, {})
 
 
 def test_the_command_writes_first_turn_parse_cases_and_names_the_rows_without_a_first_call(
