@@ -368,3 +368,7 @@ Each step is its own pull request.
    reranking and classification models are out.
 4. Witness results and `disputed` in the case schema: vLLM's prompt ids for render; its text, whole
    and per chunk, and its message for parse; and a disagreement's fingerprint.
+5. The rendered prompt on parse lines (`prompt_ids` and `prompt_text`), a case-schema addition. A
+   parser needs to know the state the output starts in: Qwen 3.8's generation prompt leaves the
+   think block open, so its output begins `\n</think>`. Symphony may not depend on a tokenizer, so
+   it cannot render the prompt itself; the round trip already renders it.
