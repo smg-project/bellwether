@@ -21,7 +21,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
-from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids
+from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids, next_messages
 from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -1074,6 +1074,93 @@ def test_a_turn_without_a_stop_id_ends_where_the_next_message_opens_with_one(tin
     write_generation_config(model, "<|observation|>")
     with pytest.raises(ValueError, match=r"no stop id in the turn, and the next message opens with '<\|user\|>'"):
         RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+
+
+def test_a_turn_the_template_renders_differently_once_the_next_message_follows_fails_the_case(
+    tiny_model, tmp_path_factory
+):
+    # GLM-4.6, GLM-4.7-Flash and ERNIE-4.5 write no stop id in the turn and drop an earlier turn's reasoning once a
+    # message follows it: the turn as the conversation's end is not a prefix of the conversation that goes on, so what
+    # follows the turn is unknown.
+    template = (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|assistant|>' }}"
+        "{%- if loop.last and m['reasoning_content'] %}"
+        "{{ '<think>' + m['reasoning_content'] + '</think>' }}"
+        "{%- endif %}"
+        "{{ m['content'] or '' }}"
+        "{%- else %}{{ '<|user|>' + m['content'] }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|assistant|>' }}{%- endif %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "drops-reasoning-chat", template, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="the template renders the turn differently once the next message follows it"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Hi")]}, {"reasoning_content": "Think.", "content": "Hello"}
+        )
+
+
+def test_a_template_that_cannot_render_the_next_message_fails_the_case_with_its_error(tiny_model, tmp_path_factory):
+    # The role-tag template needs each tool message's call id, and these calls have none: its error is the reason.
+    model = tiny_variant(tiny_model, tmp_path_factory, "role-tag-no-id-chat", ROLE_TAG_TEMPLATE, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="the template cannot render the next message: UndefinedError"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+# llava-1.5's shape: every message is `<role>: <text> `, so a turn ends in a space and the next message's role word
+# starts with it: `Ġuser` covers the turn's last character and the next message's first ones.
+TRAILING_SPACE_TEMPLATE = (
+    "{%- for m in messages %}{{ m['role'] + ': ' + (m['content'] or '') + ' ' }}{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ 'assistant:' }}{%- endif %}"
+)
+
+
+@pytest.mark.parametrize("listed", [False, True], ids=["not-a-stop-id", "a-stop-id"])
+def test_a_token_that_straddles_the_end_of_the_turn_fails_the_case(tiny_model, tmp_path_factory, listed):
+    # No token starts where the turn ends, so no generation stops there, whether or not the straddling token is a
+    # stop id: llava-1.5-7b-hf's 16 common cases.
+    model = tiny_variant(tiny_model, tmp_path_factory, "trailing-space-chat", TRAILING_SPACE_TEMPLATE)
+    if listed:
+        write_generation_config(model, "Ġuser")
+    first = f"(the first one after it is 'Ġuser' ({token_id(model, 'Ġuser')}))"
+    reason = f"no token starts where the turn ends once the next message follows it {first}"
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+
+
+def test_a_turn_with_no_stop_id_that_nothing_follows_fails_the_case(tiny_model, tmp_path_factory):
+    # This template writes nothing for a tool message, so the conversation that goes on ends where the turn ends.
+    template = ROLE_TAG_TEMPLATE.replace(
+        "{%- elif m['role'] == 'tool' %}{{ '<|observation|>' + m['tool_call_id'] + ' ' + m['content'] }}",
+        "{%- elif m['role'] == 'tool' %}",
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "silent-tool-chat", template, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="no stop id in the turn, and nothing follows it"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_generation_config_without_an_eos_token_id_stops_on_the_tokenizer_s_eos(tiny_model, tmp_path_factory):
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-eos-generation-chat", TEMPLATE)
+    (model / "generation_config.json").write_text(json.dumps({"bos_token_id": 1}))
+    assert generation_eos_ids(str(model), "local") == ([], "generation_config.json")
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert out.end_of_turn == {"stop_id": token_id(model, "<|im_end|>"), "found_by": "turn"}
+
+
+def test_the_next_message_is_a_user_message_after_content_and_one_tool_message_per_call_after_calls():
+    assert next_messages({"content": "Hello"}) == [{"role": "user", "content": "Thanks."}]
+    calls = [{**weather_call(), "id": "call_1"}, {"type": "function", "function": {"name": "f", "arguments": "{}"}}]
+    assert next_messages({"content": "", "tool_calls": calls}) == [
+        {"role": "tool", "tool_call_id": "call_1", "name": "get_weather", "content": "{}"},
+        {"role": "tool", "name": "f", "content": "{}"},
+    ]
 
 
 def test_a_tokenizer_without_an_eos_token_stops_on_the_model_config_eos(tiny_model, tmp_path_factory):
