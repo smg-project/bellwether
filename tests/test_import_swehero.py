@@ -167,12 +167,36 @@ def test_a_row_whose_results_do_not_pair_with_its_calls_is_refused(trajectory, d
     assert (refused.value.reason, refused.value.detail) == (swehero.UNPAIRED, detail)
 
 
-@pytest.mark.parametrize("arguments", ['["ls"]', '"ls"', "ls -la", '{"command": "ls"', None])
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '["ls"]',
+        '"ls"',
+        "ls -la",
+        '{"command": "ls"',
+        None,
+        # Python's json reads these, and JSON has no such values.
+        '{"timeout": NaN}',
+        '{"timeout": Infinity}',
+        '{"timeout": -Infinity}',
+    ],
+)
 def test_a_call_whose_arguments_are_not_a_json_object_string_refuses_the_row(arguments):
     bad = item("assistant", "", call("call-x", "execute_bash", arguments))
     with pytest.raises(swehero.Refused) as refused:
         swehero.messages_for([*TRAJECTORY[:2], bad, item("tool", "x"), *TRAJECTORY[4:]])
     assert (refused.value.reason, refused.value.detail) == (swehero.NOT_AN_OBJECT, "message 2 calls execute_bash")
+
+
+@pytest.mark.parametrize("index, role", [(0, "system"), (1, "user"), (3, "tool")])
+def test_a_row_with_calls_on_a_message_that_is_not_an_assistant_turn_is_refused(index, role):
+    # OpenAI's request has no place for them, and dropping them would change the conversation.
+    trajectory = list(TRAJECTORY)
+    trajectory[index] = {**TRAJECTORY[index], "tool_calls": [call("call-x", "execute_bash", '{"command": "ls"}')]}
+    with pytest.raises(swehero.Refused) as refused:
+        swehero.messages_for(trajectory)
+    detail = f"message {index} is a {role} message with calls"
+    assert (refused.value.reason, refused.value.detail) == (swehero.CALLS_OUTSIDE_A_TURN, detail)
 
 
 LONG = [

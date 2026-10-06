@@ -51,6 +51,7 @@ FUNCTION_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 LICENSE_NOT_ALLOWED = "the repository's license is not MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause"
 UNPAIRED = "its tool results do not pair with the calls before them"
 NOT_AN_OBJECT = "a call's arguments are not a JSON object string"
+CALLS_OUTSIDE_A_TURN = "a message other than an assistant turn carries calls"
 NO_TURN = "no assistant turn's request fits under the cap"
 
 
@@ -101,16 +102,21 @@ def read_rows(path: Path) -> Iterator[dict]:
             yield from batch.to_pylist()
 
 
+def _not_json(constant: str):
+    raise ValueError(f"{constant} is not JSON")
+
+
 def openai_call(call: dict, index: int) -> dict:
     """One call of the assistant turn at ``index`` in OpenAI's key order, its arguments the JSON string the data holds.
 
-    A call whose arguments are not a JSON object string refuses the row: it would go into every later request.
+    A call whose arguments are not a JSON object string refuses the row: it would go into every later request. The
+    string must be JSON as RFC 8259 has it, so ``NaN`` and the infinities, which Python's json reads, refuse it too.
     """
     function = call["function"]
     arguments = function["arguments"]
     try:
-        value = json.loads(arguments) if isinstance(arguments, str) else None
-    except json.JSONDecodeError:
+        value = json.loads(arguments, parse_constant=_not_json) if isinstance(arguments, str) else None
+    except ValueError:
         value = None
     if not isinstance(value, dict):
         raise Refused(NOT_AN_OBJECT, f"message {index} calls {function['name']}")
@@ -124,13 +130,17 @@ def messages_for(trajectory: list[dict]) -> list[dict]:
     A turn the conversation goes on past must be followed by exactly one result per call, or the row is refused; the
     last turn may have none, since the episode ends with its call (every trajectory in the shard ends with ``finish``).
     Keys come in OpenAI's order rather than the shard's alphabetical struct order, and ``tool_calls`` is kept on
-    assistant turns that make calls only, since parquet gives every message the field and fills it with null.
+    assistant turns that make calls only, since parquet gives every message the field and fills it with null. Calls on
+    any other message refuse the row: the request has no place for them, and dropping them would change the
+    conversation.
     """
     messages: list[dict] = []
     calls: list[str] = []
     answered = opened = 0
     for index, item in enumerate(trajectory):
         role = item["role"]
+        if role != "assistant" and item["tool_calls"]:
+            raise Refused(CALLS_OUTSIDE_A_TURN, f"message {index} is a {role} message with calls")
         if role == "tool":
             if answered == len(calls):
                 raise Refused(UNPAIRED, f"message {index} is a tool result with no call to answer")
