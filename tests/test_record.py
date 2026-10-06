@@ -9,7 +9,14 @@ from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
+from bellwether.record.fixtures import (
+    canonical_line,
+    plain_text,
+    read_fixture_file,
+    schema_path,
+    validator,
+    write_fixture_file,
+)
 from bellwether.record.reference import HfTemplateOracle
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
 
@@ -719,3 +726,28 @@ def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_mode
     )
     assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
     assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'
+
+
+def render_cases(*names: str) -> dict[str, dict]:
+    cases = {}
+    for name in names:
+        case_id = f"m/render/{name}"
+        cases[case_id] = {
+            "id": case_id,
+            "kind": "render",
+            "model": "m",
+            "reference": {"source": "hf-template", "text": "Café ☕"},
+        }
+    return cases
+
+
+def test_a_compressed_fixture_file_holds_the_same_lines_as_the_plain_one(tmp_path):
+    cases = render_cases("b", "a")
+    write_fixture_file(tmp_path / "set.jsonl", cases)
+    write_fixture_file(tmp_path / "set.jsonl.zst", cases)
+    plain = (tmp_path / "set.jsonl").read_bytes()
+    assert (tmp_path / "set.jsonl.zst").read_bytes()[:4] == bytes.fromhex("28b52ffd")  # the zstd frame magic
+    assert plain_text(tmp_path / "set.jsonl.zst").encode("utf-8") == plain
+    assert plain_text(tmp_path / "set.jsonl") == plain.decode("utf-8")
+    assert read_fixture_file(tmp_path / "set.jsonl.zst") == read_fixture_file(tmp_path / "set.jsonl")
+    assert list(read_fixture_file(tmp_path / "set.jsonl.zst")) == ["m/render/a", "m/render/b"]
