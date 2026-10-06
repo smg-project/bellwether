@@ -52,10 +52,11 @@ LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0a
 # Where the import writes the pinned LICENSE, under the corpus root.
 LICENSE_COPY = "licenses/bfcl-LICENSE"
 DATA = "bfcl_eval/data"
-# The multi_turn classes' function docs, and the module that maps each class to its file.
+# The multi_turn classes' function docs, and the module that maps each class to its doc file and to its source.
 FUNC_DOC = f"{DATA}/multi_turn_func_doc"
 BACKEND_CONFIG = "bfcl_eval/constants/executable_backend_config.py"
 FILE_MAPPING = "MULTI_TURN_FUNC_DOC_FILE_MAPPING"
+CLASS_MAPPING = "CLASS_FILE_PATH_MAPPING"
 TEMPERATURE = 0.001
 # The categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order: 13 single-turn, then
 # multi_turn ones, of which the first turn is imported. multi_turn_long_context is left out: it differs from
@@ -281,43 +282,49 @@ def message_for(answer: dict, functions: list[dict]) -> dict:
     return {"content": "", "tool_calls": calls}
 
 
-def first_turn_message(answer: dict, functions: list[dict]) -> dict:
+def first_turn_message(answer: dict, functions: list[dict], defs: dict[str, list[str]]) -> dict:
     """The assistant message a parser must return for a multi_turn row's first turn: its gold calls, in order.
 
-    BFCL writes each gold call as Python source, ``cd(folder='document')``. Positional values take the function doc's
-    parameters in order, keyword values keep their names, and each value is read with ``ast.literal_eval``. Each call
-    is held to the rules ``message_for`` applies: a function the first turn offers, parameters it declares, each given
-    once, and every required one given; a call that breaks one raises ``Unanswerable``.
+    BFCL writes each gold call as Python source, ``cd(folder='document')``, and its executor runs it on the class.
+    Positional values take the parameters of the method's ``def`` in order (``defs``: each method's, from
+    ``read_func_defs``), which the function doc may list otherwise; a positional value of a function with no ``def``
+    there stops the import. Keyword values keep their names, and each value is read with ``ast.literal_eval``. Each
+    call is held to the rules ``message_for`` applies: a function the first turn offers, parameters it declares, each
+    given once, and every required one given; a call that breaks one raises ``Unanswerable``.
     """
     declared = {function["name"]: function["parameters"] for function in functions}
     calls = []
     for text in answer["ground_truth"][0]:
-        name, arguments = _gold_call(text, declared)
+        name, arguments = _gold_call(text, declared, defs)
         call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
         calls.append({"type": "function", "function": call})
     return {"content": "", "tool_calls": calls}
 
 
-def _gold_call(text: str, declared: dict[str, dict]) -> tuple[str, dict]:
+def _gold_call(text: str, declared: dict[str, dict], defs: dict[str, list[str]]) -> tuple[str, dict]:
     node = ast.parse(text, mode="eval").body
     if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
         raise ValueError(f"{text!r} is not a call to a named function")
     name = node.func.id
     if name not in declared:
         raise Unanswerable(f"the ground truth calls {name}, which the first turn does not offer")
-    properties = declared[name].get("properties", {})
-    if len(node.args) > len(properties):
+    if node.args and name not in defs:
+        raise ValueError(f"{text!r} passes values by position, and BFCL's source has no def of {name} to bind them to")
+    positional = defs.get(name, [])
+    if len(node.args) > len(positional):
         passed = len(node.args)
         raise Unanswerable(
-            f"{name} declares {len(properties)} parameters, and the ground truth passes {passed} by position"
+            f"the def of {name} takes {len(positional)} parameters, and the ground truth passes {passed} by position"
         )
-    arguments = {param: ast.literal_eval(value) for param, value in zip(properties, node.args, strict=False)}
-    for keyword in node.keywords:
-        if keyword.arg not in properties:
-            raise Unanswerable(f"{name} has no parameter {keyword.arg!r}, which the ground truth requires")
-        if keyword.arg in arguments:
-            raise Unanswerable(f"{name} gets {keyword.arg} both by position and by name")
-        arguments[keyword.arg] = ast.literal_eval(keyword.value)
+    properties = declared[name].get("properties", {})
+    arguments = {}
+    given = [*zip(positional, node.args, strict=False), *((keyword.arg, keyword.value) for keyword in node.keywords)]
+    for param, value in given:
+        if param not in properties:
+            raise Unanswerable(f"{name} has no parameter {param!r}, which the ground truth requires")
+        if param in arguments:
+            raise Unanswerable(f"{name} gets {param} both by position and by name")
+        arguments[param] = ast.literal_eval(value)
     missing = [param for param in declared[name].get("required", []) if param not in arguments]
     if missing:
         raise Unanswerable(f"{name} requires {', '.join(missing)}, which the ground truth gives no value")
@@ -338,6 +345,62 @@ def func_doc_files(wheel: zipfile.ZipFile) -> dict[str, str]:
 def read_func_docs(wheel: zipfile.ZipFile) -> dict[str, list[dict]]:
     """Each multi_turn class's function docs, in file order."""
     return {name: _jsonl(wheel, f"{FUNC_DOC}/{file}") for name, file in func_doc_files(wheel).items()}
+
+
+def class_files(wheel: zipfile.ZipFile) -> dict[str, str]:
+    """``CLASS_FILE_PATH_MAPPING``, the module BFCL's executor loads each multi_turn class from, as its source file.
+
+    The map's values are f-strings of ``BACKEND_PATH_PREFIX``, a string the module assigns before them. Each is joined
+    from the parsed source, so the module is never imported or run.
+    """
+    strings: dict[str, str] = {}
+    for node in ast.parse(wheel.read(BACKEND_CONFIG).decode("utf-8")).body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        if node.targets[0].id == CLASS_MAPPING and isinstance(node.value, ast.Dict):
+            pairs = zip(node.value.keys, node.value.values, strict=True)
+            return {ast.literal_eval(key): _source_file(value, strings) for key, value in pairs}
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            strings[node.targets[0].id] = node.value.value
+    raise ValueError(f"{BACKEND_CONFIG} assigns no {CLASS_MAPPING}")
+
+
+def _source_file(node: ast.expr, strings: dict[str, str]) -> str:
+    """The source file of a module named by a string, or by an f-string whose fields each name one of ``strings``."""
+    module = ""
+    for part in node.values if isinstance(node, ast.JoinedStr) else [node]:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            module += part.value
+        elif (
+            isinstance(part, ast.FormattedValue)
+            and isinstance(part.value, ast.Name)
+            and part.value.id in strings
+            and part.conversion == -1
+            and part.format_spec is None
+        ):
+            module += strings[part.value.id]
+        else:
+            raise ValueError(f"{BACKEND_CONFIG}: {ast.unparse(node)} is not a module name made of its strings")
+    return module.replace(".", "/") + ".py"
+
+
+def read_func_defs(wheel: zipfile.ZipFile) -> dict[str, dict[str, list[str]]]:
+    """Each multi_turn class's methods, with the parameters each takes by position: its ``def``'s, after ``self``.
+
+    BFCL's executor runs a gold call on an instance of the class (``execute_multi_turn_func_call``,
+    ``bfcl_eval/eval_checker/multi_turn_eval/multi_turn_utils.py:13``), so a value passed by position takes the
+    ``def``'s parameter, and a function doc may list them in another order (``TravelAPI.purchase_insurance`` swaps
+    ``booking_id`` and ``insurance_cost``). Each class's source is parsed with ``ast``, never imported or run. Only the
+    class's own ``def``s whose first parameter is ``self`` are listed: for any other, where a value goes is not known.
+    """
+    defs = {}
+    for name, member in class_files(wheel).items():
+        tree = ast.parse(wheel.read(member).decode("utf-8"))
+        classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name]
+        methods = [node for node in classes[-1].body if isinstance(node, ast.FunctionDef)] if classes else []
+        params = {method.name: [arg.arg for arg in method.args.args] for method in methods}
+        defs[name] = {method: names[1:] for method, names in params.items() if names[:1] == ["self"]}
+    return defs
 
 
 def first_turn_functions(row: dict, docs: dict[str, list[dict]]) -> list[dict]:
@@ -437,6 +500,7 @@ def build_sets(
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}
     docs: dict[str, list[dict]] | None = None
+    defs: dict[str, dict[str, list[str]]] = {}
     for category in categories or CATEGORIES:
         answers = read_answers(wheel, category)
         render, parse = [], []
@@ -447,8 +511,11 @@ def build_sets(
             seen[name] = row["id"]
             notes = f"BFCL {category} {row['id']}"
             if multi_turn(category):
-                docs = read_func_docs(wheel) if docs is None else docs
+                if docs is None:
+                    docs, defs = read_func_docs(wheel), read_func_defs(wheel)
                 functions = first_turn_functions(row, docs)
+                # BFCL's executor gives a method name two of the row's classes have to the later class.
+                methods = {method: params for cls in row["involved_classes"] for method, params in defs[cls].items()}
                 request = first_request(row, functions, category)
                 notes += ", first turn"
             else:
@@ -465,7 +532,7 @@ def build_sets(
             else:
                 try:
                     if multi_turn(category):
-                        message = first_turn_message(answer, functions)
+                        message = first_turn_message(answer, functions, methods)
                     else:
                         message = message_for(answer, functions)
                     why = None

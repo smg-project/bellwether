@@ -595,17 +595,24 @@ def test_rows_without_a_parse_case_are_reported_with_their_reason(tmp_path):
 
 
 BACKEND_CONFIG = "bfcl_eval/constants/executable_backend_config.py"
-# Running this module would exit: the importer must read the map from its source, never import it.
+# Running this module would exit: the importer must read the maps from its source, never import it.
 BACKEND = (
     'raise SystemExit("the backend config was run")\n'
     'MULTI_TURN_FUNC_DOC_FILE_MAPPING = {"Mail": "mail.json", "Cafe": "cafe.json"}\n'
     'BACKEND_PATH_PREFIX = "bfcl_eval.eval_checker.multi_turn_eval.func_source_code"\n'
+    'CLASS_FILE_PATH_MAPPING = {"Mail": f"{BACKEND_PATH_PREFIX}.mail", "Cafe": f"{BACKEND_PATH_PREFIX}.cafe"}\n'
 )
+SOURCES = "bfcl_eval/eval_checker/multi_turn_eval/func_source_code"
 
 
 def test_the_class_to_file_map_is_read_from_the_backend_source_without_running_it(tmp_path):
     with zipfile.ZipFile(fake_wheel(tmp_path, {BACKEND_CONFIG: BACKEND})) as wheel:
         assert bfcl.func_doc_files(wheel) == {"Mail": "mail.json", "Cafe": "cafe.json"}
+
+
+def test_the_class_to_module_map_is_read_from_the_backend_source_without_running_it(tmp_path):
+    with zipfile.ZipFile(fake_wheel(tmp_path, {BACKEND_CONFIG: BACKEND})) as wheel:
+        assert bfcl.class_files(wheel) == {"Mail": f"{SOURCES}/mail.py", "Cafe": f"{SOURCES}/cafe.py"}
 
 
 def test_a_multi_turn_row_offers_its_classes_functions_less_those_held_back():
@@ -652,13 +659,22 @@ MT_ROW = {
     "involved_classes": ["Cafe", "Mail"],
     "missed_function": {"1": ["sort"]},
 }
+# The classes' sources, which exit when run: the importer must read their defs with ast, never import them.
+NEVER_RUN = 'raise SystemExit("the class source was run")\n'
+MAIL_SOURCE = NEVER_RUN + "class Mail:\n    def send(self, to): ...\n    def sort(self): ...\n"
+CAFE_SOURCE = NEVER_RUN + "class Cafe:\n    def order(self, drink, size=None): ...\n"
 
 
-def multi_turn_wheel(tmp_path, category: str, rows: list[dict], answers: list[dict] | None = None):
+def multi_turn_wheel(
+    tmp_path, category: str, rows: list[dict], answers: list[dict] | None = None, sources: dict[str, str] | None = None
+):
     members = {
         BACKEND_CONFIG: BACKEND,
         "bfcl_eval/data/multi_turn_func_doc/mail.json": MAIL_DOCS,
         "bfcl_eval/data/multi_turn_func_doc/cafe.json": CAFE_DOCS,
+        f"{SOURCES}/mail.py": MAIL_SOURCE,
+        f"{SOURCES}/cafe.py": CAFE_SOURCE,
+        **(sources or {}),
         f"bfcl_eval/data/BFCL_v4_{category}.json": rows,
     }
     if answers is not None:
@@ -707,6 +723,8 @@ def test_a_multi_turn_row_renders_its_first_turn_with_the_functions_it_offers(tm
 
 
 NOTE = fn("note", {"tags": {"type": "array"}, "due": {"type": "dict"}, "pin": {"type": "boolean"}})
+# The parameters each method's def takes by position, as read_func_defs gives them.
+DEFS = {"order": ["drink", "size"], "send": ["to"], "sort": [], "note": ["tags", "due", "pin"]}
 
 
 def test_the_first_turn_gold_calls_become_one_message_in_their_order():
@@ -717,7 +735,7 @@ def test_the_first_turn_gold_calls_become_one_message_in_their_order():
             ["sort()"],
         ],
     }
-    assert bfcl.first_turn_message(answer, CAFE_DOCS + MAIL_DOCS + [NOTE]) == {
+    assert bfcl.first_turn_message(answer, CAFE_DOCS + MAIL_DOCS + [NOTE], DEFS) == {
         "content": "",
         "tool_calls": [
             {"type": "function", "function": {"name": "order", "arguments": '{"drink": "Café ☕", "size": -1.5}'}},
@@ -738,11 +756,35 @@ def test_a_first_turn_call_that_breaks_the_checker_rules_is_unanswerable():
         ("sort()", "the ground truth calls sort, which the first turn does not offer"),
         ("order(drink='tea', milk=True)", "order has no parameter 'milk', which the ground truth requires"),
         ("order(size=2.0)", "order requires drink, which the ground truth gives no value"),
-        ("order('tea', 2.0, 3)", "order declares 2 parameters, and the ground truth passes 3 by position"),
+        ("order('tea', 2.0, 3)", "the def of order takes 2 parameters, and the ground truth passes 3 by position"),
         ("order('tea', drink='tea')", "order gets drink both by position and by name"),
     ]:
         with pytest.raises(bfcl.Unanswerable, match=reason):
-            bfcl.first_turn_message({"id": "x", "ground_truth": [[call]]}, CAFE_DOCS)
+            bfcl.first_turn_message({"id": "x", "ground_truth": [[call]]}, CAFE_DOCS, DEFS)
+
+
+BASE_ROW = {key: value for key, value in MT_ROW.items() if key != "missed_function"} | {"id": "multi_turn_base_0"}
+
+
+def first_turn_calls(tmp_path, call: str, sources: dict[str, str]) -> list[dict]:
+    answer = {"id": "multi_turn_base_0", "ground_truth": [[call]]}
+    with zipfile.ZipFile(multi_turn_wheel(tmp_path, "multi_turn_base", [BASE_ROW], [answer], sources)) as wheel:
+        [parse] = bfcl.build_sets(wheel, categories=("multi_turn_base",))[("parse", "bfcl-multi-turn-base")]
+    return parse["message"]["tool_calls"]
+
+
+def test_values_passed_by_position_take_the_parameters_of_the_def_not_of_the_doc(tmp_path):
+    # BFCL's executor runs the call on the class, so its def binds the values. The doc lists drink first and the def
+    # size first, as TravelAPI.purchase_insurance's doc and def order booking_id and insurance_cost differently.
+    swapped = NEVER_RUN + "class Cafe:\n    def order(self, size, drink): ...\n"
+    calls = first_turn_calls(tmp_path, "order(1.5, 'tea')", {f"{SOURCES}/cafe.py": swapped})
+    assert calls == [{"type": "function", "function": {"name": "order", "arguments": '{"size": 1.5, "drink": "tea"}'}}]
+
+
+def test_a_value_passed_by_position_to_a_function_without_a_def_stops_the_import(tmp_path):
+    no_send = NEVER_RUN + "class Mail:\n    def sort(self): ...\n"
+    with pytest.raises(ValueError, match="no def of send"):
+        first_turn_calls(tmp_path, "send('Bo')", {f"{SOURCES}/mail.py": no_send})
 
 
 def test_the_command_writes_first_turn_parse_cases_and_names_the_rows_without_a_first_call(
