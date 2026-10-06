@@ -14,4 +14,8 @@ def run(args: argparse.Namespace) -> int:
         from .gsm8k import run as run_gsm8k
 
         return run_gsm8k(args)
+    if args.dataset == "outlines":
+        from .outlines import run as run_outlines
+
+        return run_outlines(args)
     raise ValueError(f"no importer for {args.dataset!r}")

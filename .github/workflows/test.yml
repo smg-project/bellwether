@@ -24,6 +24,7 @@ jobs:
           key: bellwether-datasets-${{ hashFiles('src/bellwether/importers/**') }}
       - run: uv run bellwether import bfcl --check
       - run: uv run bellwether import gsm8k --check
+      - run: uv run bellwether import outlines --check
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/registries
