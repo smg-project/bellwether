@@ -15,7 +15,7 @@ once, under the slug of its primary:
   first model id, and the group takes its slug.
 
 Each checkpoint's manifest stays where it is, or is written under its own slug. The command sets ``revision``, ``tier``,
-``group`` (on members only) and ``[inputs]``, and keeps every other line of an existing manifest: comments,
+``group`` (on the other members only) and ``[inputs]``, and keeps every other line of an existing manifest: comments,
 ``[authority]``, ``[smg]`` and ``[engines]``. A new manifest has none of these tables. The order the manifests written
 before groups share predates the design's two sources of truth (docs/benchmark-sets.md, "Recording"), and a manifest's
 authority order waits for the sponsor's approval (AGENTS.md); parser names stay unknown until someone maps them. A
@@ -62,7 +62,7 @@ class Checkpoint:
 class Group:
     slug: str
     primary: Checkpoint
-    others: list[Checkpoint]
+    others: list[Checkpoint]  # the other members, in the order they would become the primary
 
 
 def read_list(path: Path) -> list[Checkpoint]:
@@ -240,8 +240,8 @@ def manifest_texts(
     groups: list[Group], inputs: dict[str, dict[str, str]], directory: dict[str, Path]
 ) -> dict[Path, str]:
     """Each checkpoint's manifest as it will be written, in slug order, every one read back and checked before any is
-    written: a group whose slug a member cannot name (a primary in a directory whose name is not a slug) stops the run
-    with nothing written."""
+    written: a group whose slug its other members cannot name (a primary in a directory whose name is not a slug)
+    stops the run with nothing written."""
     texts: dict[Path, str] = {}
     for group in groups:
         for checkpoint in (group.primary, *group.others):

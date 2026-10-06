@@ -72,6 +72,8 @@ catches up.
 | manifest | per-checkpoint file: revision, tier, oracle inputs, group, authority order, SMG and engine parser names |
 | oracle inputs | every file the oracle reads for a checkpoint, each with its sha256 |
 | checkpoint group | checkpoints with equal oracle inputs, recorded once under the slug of its primary |
+| member | any checkpoint of a checkpoint group, its primary included; the other members' manifests name the group |
+| primary | the member a checkpoint group is recorded by, under its own slug, once for all its members |
 | chunk plan | how an output token stream is cut into engine chunks for a streaming replay |
 | capture | the mock worker's record of each request SMG sends it, one JSON line per request |
 | known difference | a case where SMG is known to differ from the reference, listed for `verify --known` with the outcome SMG gives on it, the reason and the issue |
@@ -135,9 +137,9 @@ another list: what the engines' registries name, with no revision or downloads u
 uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
 
-`record` checks the manifest before it reads the corpus: it refuses a group member, naming the group to record instead,
-and a checkpoint whose oracle inputs at the pinned revision cannot be read or are not the ones its manifest lists,
-naming the files that differ.
+`record` checks the manifest before it reads the corpus: it refuses any member of a group but its primary, naming the
+primary to record instead, and a checkpoint whose oracle inputs at the pinned revision cannot be read or are not the
+ones its manifest lists, naming the files that differ.
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
 case under `corpus/render/` through the checkpoint's own chat template at the pinned revision

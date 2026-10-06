@@ -72,11 +72,11 @@ its `chat_template`, the template vLLM reads through the processor; `generation_
 `eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group; and `config.json` over `model_type`
 and `tokenizer_class`. A checkpoint that ships no `generation_config.json` has the end of a turn read its token ids from
 `config.json`, as `GenerationConfig.from_model_config` reads them (`text_config` included, with the defaults of the
-class transformers has for its `model_type`), so there `config.json` is hashed over those three ids as well. A member's
-manifest adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its group's. The
-parser tables of a new group are left out until someone maps them. A manifest that `bellwether manifests` creates has no
-`[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"), and restating
-it for each checkpoint is the sponsor's call.
+class transformers has for its `model_type`), so there `config.json` is hashed over those three ids as well. Every other
+member's manifest adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its
+group's. The parser tables of a new group are left out until someone maps them. A manifest that `bellwether manifests`
+creates has no `[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"),
+and restating it for each checkpoint is the sponsor's call.
 
 `bellwether manifests` writes them all from the list beside them, `fixtures/models.tsv` (`--models` reads another file).
 The list has one row per checkpoint, `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier`: `downloads` is the Hub's count
@@ -91,7 +91,7 @@ command keeps every line a person wrote in an existing manifest, never moves a r
 same files when run again, so new downloads or another checkpoint are a change to the list, reviewed as a diff of the
 list and the manifests.
 
-`record --model <id>` refuses a member, naming the group to record instead, and refuses a checkpoint whose inputs at
+`record --model <id>` refuses any member of a group but its primary, naming the primary to record instead, and refuses a checkpoint whose inputs at
 the pinned revision cannot be read or differ from its manifest's list, naming the files; it exits 1 before it reads the
 corpus, recording nothing.
 

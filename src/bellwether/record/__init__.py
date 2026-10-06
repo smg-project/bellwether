@@ -4,10 +4,11 @@ The reference oracles for ``render`` (the checkpoint's template) and ``parse`` (
 that template) are implemented. Engine oracles and the other kinds exit with status 2 until their
 milestone lands, so a script never mistakes a missing oracle for a recorded one.
 
-``record`` checks the manifest before it reads the corpus. A checkpoint group is recorded once, by its primary: a
-member's manifest makes ``record`` name the group to record instead and exit 1. The checkpoint's oracle inputs at the
-pinned revision are compared with the ones its manifest lists, since the group's members were matched on that list;
-when they differ, or cannot be read, ``record`` says so, naming the files that differ, and exits 1, recording nothing.
+``record`` checks the manifest before it reads the corpus. A checkpoint group is recorded once, by its primary: the
+manifest of any other member makes ``record`` name the primary to record instead and exit 1. The checkpoint's oracle
+inputs at the pinned revision are compared with the ones its manifest lists, since the group's members were matched on
+that list; when they differ, or cannot be read, ``record`` says so, naming the files that differ, and exits 1, recording
+nothing.
 """
 
 from __future__ import annotations
@@ -156,8 +157,8 @@ def _refusal(manifest: Manifest, fixtures: Path) -> str | None:
         # find_manifest has checked that the group names its primary
         primary = load_manifest(fixtures / manifest.group / "manifest.toml")
         return (
-            f"{manifest.model} is a member of checkpoint group {manifest.group}, which is recorded once for all its "
-            f"members; record the group instead: bellwether record --model {primary.model}"
+            f"{manifest.model} is a member of checkpoint group {manifest.group} but not its primary, which records the "
+            f"group once for all its members; record the group instead: bellwether record --model {primary.model}"
         )
     if not manifest.inputs:
         return f"{manifest.path} lists no oracle inputs; `bellwether manifests` writes them"

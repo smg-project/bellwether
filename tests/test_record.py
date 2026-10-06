@@ -1707,7 +1707,7 @@ def test_record_refuses_a_checkpoint_whose_oracle_input_changed_and_names_the_fi
     assert not (tmp_path / "fixtures" / "tiny-chat" / "render").exists()
 
 
-def test_record_refuses_a_group_member_and_names_its_group(tmp_path, tiny_model, capsys):
+def test_record_refuses_another_member_of_a_group_and_names_its_primary(tmp_path, tiny_model, capsys):
     fixtures = tmp_path / "fixtures"
     inputs = oracle_inputs(str(tiny_model), "local")
     write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=inputs)
@@ -1717,7 +1717,7 @@ def test_record_refuses_a_group_member_and_names_its_group(tmp_path, tiny_model,
     assert main(record_argv(tmp_path, "acme/Tiny-Chat-Mini")) == 1
 
     err = capsys.readouterr().err
-    assert "acme/Tiny-Chat-Mini is a member of checkpoint group tiny-chat" in err
+    assert "acme/Tiny-Chat-Mini is a member of checkpoint group tiny-chat but not its primary" in err
     assert f"record the group instead: bellwether record --model {tiny_model}" in err
     assert not (fixtures / "tiny-chat-mini" / "render").exists() and not (fixtures / "tiny-chat" / "render").exists()
 
@@ -1785,7 +1785,7 @@ def test_record_refuses_a_group_that_names_no_manifest(tmp_path, tiny_model, cap
 
 
 def test_record_names_a_malformed_manifest_of_the_group_instead_of_a_traceback(tmp_path, tiny_model, capsys):
-    # The group's primary sorts before the member here, and its `authority` is a number where a table belongs.
+    # The group's primary sorts before its other member here, and its `authority` is a number where a table belongs.
     fixtures = tmp_path / "fixtures"
     primary = write_manifest(fixtures, "tiny-chat", "acme/Tiny-Chat")
     primary.write_text(f'model = "acme/Tiny-Chat"\nrevision = "{HUB_REVISION}"\nauthority = 1\n')
@@ -2040,15 +2040,17 @@ def test_every_sets_toml_table_has_its_set(path):
 
 
 @pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/manifest.toml")), ids=lambda p: str(p.relative_to(ROOT)))
-def test_committed_manifests_list_inputs_and_tier_and_a_member_names_a_primary_with_equal_inputs(path):
+def test_committed_manifests_list_inputs_and_tier_and_another_member_names_a_primary_with_equal_inputs(path):
     manifest = load_manifest(path)
     assert manifest.inputs, f"{path}: no [inputs]; `bellwether manifests` writes them"
     assert manifest.tier is not None, f"{path}: no tier; `bellwether manifests` writes it"
     if manifest.group is not None:
         primary = load_manifest(ROOT / "fixtures" / manifest.group / "manifest.toml")
-        assert primary.group is None, f"{path}: its group's manifest is itself a member"
+        assert primary.group is None, f"{path}: its group's manifest names a group of its own"
         assert primary.inputs == manifest.inputs, f"{path}: its oracle inputs differ from its group's"
-        assert [p.name for p in path.parent.iterdir()] == ["manifest.toml"], f"{path}: a member holds no fixtures"
+        assert [p.name for p in path.parent.iterdir()] == ["manifest.toml"], (
+            f"{path}: a member other than the primary holds no fixtures"
+        )
 
 
 def git(cwd: pathlib.Path, *args: str) -> None:

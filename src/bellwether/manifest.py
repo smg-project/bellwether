@@ -12,8 +12,8 @@ all three. A manifest from before groups has none of them and still loads, so th
 ``record`` refuses it until it lists its inputs.
 
 ``[smg]`` and ``[engines]`` name the parsers a group's fixtures exercise, which ``gaps`` reads. They are optional: a
-new group's parsers are not known until someone maps them, and a member names none, since its fixtures are its
-group's.
+new group's parsers are not known until someone maps them, and a group's other members name none, since their fixtures
+are the primary's.
 """
 
 from __future__ import annotations

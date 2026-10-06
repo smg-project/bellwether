@@ -75,14 +75,21 @@ def test_manifests_groups_checkpoints_by_their_oracle_inputs(tmp_path, hub):
         manifests(tmp_path, (alpha, "local", 10, DAY, 1), (beta, "local", 50, DAY, 1), (gamma, "local", 5, DAY, 3)) == 0
     )
     fixtures = tmp_path / "fixtures"
-    primary, member, other = (load_manifest(fixtures / slug / "manifest.toml") for slug in ("beta", "alpha", "gamma"))
+    primary, other_member, gamma_ = (
+        load_manifest(fixtures / slug / "manifest.toml") for slug in ("beta", "alpha", "gamma")
+    )
     # beta has more downloads than alpha, so the group takes its slug; alpha's manifest names it.
     assert (primary.model, primary.revision, primary.group, primary.tier) == (beta, "local", None, 1)
-    assert (member.model, member.revision, member.group, member.tier) == (alpha, "local", "beta", 1)
-    assert (other.model, other.group, other.tier) == (gamma, None, 3)
-    assert member.inputs == primary.inputs == oracle_inputs(beta, "local") != other.inputs
-    assert primary.authority == member.authority == other.authority == {}
-    assert (primary.smg, primary.engines, member.smg, member.engines) == ({}, {}, {}, {})
+    assert (other_member.model, other_member.revision, other_member.group, other_member.tier) == (
+        alpha,
+        "local",
+        "beta",
+        1,
+    )
+    assert (gamma_.model, gamma_.group, gamma_.tier) == (gamma, None, 3)
+    assert other_member.inputs == primary.inputs == oracle_inputs(beta, "local") != gamma_.inputs
+    assert primary.authority == other_member.authority == gamma_.authority == {}
+    assert (primary.smg, primary.engines, other_member.smg, other_member.engines) == ({}, {}, {}, {})
     assert list(tree(fixtures)) == ["alpha/manifest.toml", "beta/manifest.toml", "gamma/manifest.toml"]
 
 
@@ -139,9 +146,9 @@ def test_a_group_recorded_nowhere_takes_its_most_downloaded_member_as_primary(tm
     fixtures = tmp_path / "fixtures"
     write_by_hand(fixtures, "alpha", alpha, recorded=False, revision=PINNED)
     assert manifests(tmp_path, (alpha, "local", 10, DAY, 1), (beta, "local", 50, DAY, 1)) == 0
-    member = load_manifest(fixtures / "alpha" / "manifest.toml")
+    other_member = load_manifest(fixtures / "alpha" / "manifest.toml")
     # Nothing was recorded at the old revision, so it moves to the listed one.
-    assert (member.group, member.revision) == ("beta", "local")
+    assert (other_member.group, other_member.revision) == ("beta", "local")
     assert load_manifest(fixtures / "beta" / "manifest.toml").group is None
 
 
@@ -198,8 +205,8 @@ def test_manifests_checks_every_manifest_before_writing_any(tmp_path, hub, capsy
     before = tree(fixtures)
     assert manifests(tmp_path, (alpha, "local", 10, DAY, 1), (beta, "local", 50, DAY, 1)) == 1
     err = capsys.readouterr().err
-    member = fixtures / "beta" / "manifest.toml"
-    assert f"{member}: `group` must be the slug of its group's primary, got 'alpha_chat'" in err
+    other_member = fixtures / "beta" / "manifest.toml"
+    assert f"{other_member}: `group` must be the slug of its group's primary, got 'alpha_chat'" in err
     assert "bellwether manifests: nothing was written" in err
     assert tree(fixtures) == before
 

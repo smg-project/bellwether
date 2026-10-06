@@ -59,7 +59,7 @@ def test_count_groups_fixture_cases_by_model_kind_and_source(tmp_path, capsys):
     ]
 
 
-def test_every_checkpoint_is_a_row_and_a_member_shows_its_group_s_cases(tmp_path, capsys):
+def test_every_checkpoint_is_a_row_and_another_member_shows_its_group_s_cases(tmp_path, capsys):
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     write_manifest(fixtures, "m1", "org/M1", 1)
     write_manifest(fixtures, "m1-small", "org/M1-Small", 2, group="m1")
@@ -76,7 +76,7 @@ def test_every_checkpoint_is_a_row_and_a_member_shows_its_group_s_cases(tmp_path
         {"model": "org/M2", "group": "m2", "tier": 3, "kind": None, "source": None, "cases": 0},
     ]
     assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus)]) == 0
-    # A member repeats its group's cases; `all` counts each group's once.
+    # Another member repeats its group's cases; `all` counts each group's once.
     assert capsys.readouterr().out.splitlines()[2:] == [
         "| org/M1 | m1 | 1 | render | hand-written | 2 |",
         "| org/M1-Small | m1 | 2 | render | hand-written | 2 |",
@@ -141,7 +141,7 @@ def test_count_names_a_set_git_lfs_has_not_fetched_with_the_command_that_fetches
         set_sources(tmp_path / "corpus")
 
 
-def test_count_refuses_a_member_whose_group_names_no_manifest(tmp_path, capsys):
+def test_count_refuses_a_manifest_whose_group_names_no_manifest(tmp_path, capsys):
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     write_manifest(fixtures, "m1-small", "org/M1-Small", 2, group="m1")
     assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus)]) == 1
@@ -158,3 +158,11 @@ def test_a_member_of_a_group_that_recorded_nothing_has_a_row_with_no_cases(tmp_p
         {"model": "org/M1", "group": "m1", "tier": 1, "kind": None, "source": None, "cases": 0},
         {"model": "org/M1-Small", "group": "m1", "tier": 2, "kind": None, "source": None, "cases": 0},
     ]
+
+
+def test_count_s_help_says_it_counts_per_checkpoint_with_its_group_and_tier(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "cases per checkpoint, kind and source, with each checkpoint's group and tier" in " ".join(
+        capsys.readouterr().out.split()
+    )

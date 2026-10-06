@@ -124,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     importer.set_defaults(func=import_run)
 
-    count = sub.add_parser("count", help="cases per model, kind and source")
+    count = sub.add_parser("count", help="cases per checkpoint, kind and source, with each checkpoint's group and tier")
     count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     count.add_argument("--format", choices=["markdown", "json"], default="markdown")
