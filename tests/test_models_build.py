@@ -334,6 +334,19 @@ def test_a_hub_model_whose_template_only_the_processor_reads_is_kept_with_a_stat
     }
 
 
+def test_the_organization_of_an_extra_that_is_a_real_checkpoint_is_listed_and_test_copies_are_not() -> None:
+    extras = (
+        "NousResearch/Hermes-3-Llama-3.1-8B",  # a real checkpoint: NousResearch's later ones are found
+        "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8",  # a quantized copy
+        "yujiepan/llama-3-tiny-random",  # a test model
+        "tiny-random/llama-3",  # a test namespace
+    )
+    entries = [Entry("vllm", "LlamaForCausalLM", TEXT, True, False, ("meta-llama/Llama-3.2-1B-Instruct", *extras))]
+    hub = FakeHub({}, {})
+    hub_rows(entries, hub, BUILT)
+    assert hub.listed == ["NousResearch", "meta-llama"]
+
+
 def test_a_registry_entry_that_names_no_checkpoint_is_a_row_under_its_name() -> None:
     entries = [
         Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",)),

@@ -162,8 +162,10 @@ two sources:
   checked against their pinned sha256 on every use, and are cached by commit under
   `~/.cache/bellwether/registries`.
 - **The Hugging Face Hub as it is today.** Every model of the organizations whose checkpoints the
-  engines give as an architecture's example (vLLM's default checkpoint, the ids in SGLang's docs)
-  whose `config.json` names a registered architecture and that ships a chat template, leaving out
+  engines give as an architecture's example (vLLM's default checkpoint, the ids in SGLang's docs),
+  or as one of vLLM's extras that is a real checkpoint rather than a tiny or random test model or a
+  quantized copy (NousResearch's Hermes 3, mistral-community's Pixtral), whose `config.json` names a
+  registered architecture and that ships a chat template, leaving out
   quantized and converted copies (GGUF, AWQ, GPTQ, MLX, ONNX, FP8, NVFP4, MXFP4, MXFP8, Int4,
   Int8 or bitsandbytes in the name, or the Hub's `base_model:quantized` tag), embedding, reranking
   and classification models, and checkpoints created before 2025 that no registry names. A token

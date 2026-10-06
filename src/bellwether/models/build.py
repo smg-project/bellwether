@@ -22,6 +22,8 @@ from .rules import (
     is_generative_in_code,
     is_gpt_oss,
     is_hub_id,
+    is_quantized_copy,
+    is_test_model,
     order_key,
     status_of,
     tier_of,
@@ -176,9 +178,16 @@ def hub_rows(
     rows = {
         model: _row(model, f.details, f.named, built, True, multimodal, f.unavailable) for model, f in found.items()
     }
-    # The organizations that publish a registered architecture: those of the engines' examples. vLLM's
-    # extras add tiny, random and quantized test models from namespaces that publish none.
-    for org in sorted({model.split("/")[0] for model, f in found.items() if f.named.example}):
+    # The organizations that publish a registered architecture: those of the engines' examples, and those
+    # of vLLM's extras that are real checkpoints (NousResearch's Hermes 3, mistral-community's Pixtral).
+    # The other extras are tiny or random test models and quantized copies, whose namespaces would add
+    # nothing to record.
+    publishers = {
+        model.split("/")[0]
+        for model, f in found.items()
+        if f.named.example or not (is_test_model(model) or is_quantized_copy(model))
+    }
+    for org in sorted(publishers):
         try:
             listing = hub.list_models(org)
         except HubUnavailable as err:

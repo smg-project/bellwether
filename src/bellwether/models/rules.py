@@ -82,6 +82,12 @@ def is_quantized_copy(model_id: str, tags: Iterable[str] = ()) -> bool:
     return any(word in QUANTIZED_MARKERS for word in words) or any(tag.startswith(QUANTIZED_TAG) for tag in tags)
 
 
+def is_test_model(model_id: str) -> bool:
+    """A tiny or random model made for an engine's tests, by a word of its organization or of its name."""
+    words = re.split(r"[^a-z0-9]+", model_id.lower())
+    return "tiny" in words or "random" in words
+
+
 def is_gpt_oss(model_id: str, architectures: Iterable[str] = ()) -> bool:
     """gpt-oss is set aside (Simo); a checkpoint built on it says so in its name or its architecture."""
     return "gpt-oss" in model_id.lower() or "GptOssForCausalLM" in architectures
