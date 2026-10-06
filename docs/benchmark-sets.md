@@ -171,7 +171,7 @@ needs a model (Simo, 2026-10-06, #23):
     parse cases.
 
   What exactly these return, including whether render reports the stop ids the end of a turn needs
-  and how per-chunk text is obtained, is established first (delivery step 4).
+  and how per-chunk text is obtained, is established first (delivery step 5).
 
 **Names.** Hugging Face's result stays the line's `reference` and vLLM's is a `witness`, the case
 schema's existing words; "source of truth" is the role both play, not a field. The two are equal in
@@ -338,17 +338,19 @@ Each step is its own pull request.
 2. Tool-call arguments given to the template exactly as vLLM gives them, with the existing fixtures
    re-recorded byte-identical (#29).
 3. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
-4. vLLM as the second source, in four pull requests:
+4. Tier 1's Hugging Face references, as soon as the storage form is in: groups and manifests, its
+   recorded sets, and the per-model table. They are what every consumer reads. vLLM's witnesses
+   join the same lines when step 5 lands; until then a line without its witness says so, and counts
+   as neither settled nor disputed. GLM-5.3-Flash's parse cases join with step 6.
+5. vLLM as the second source, in four pull requests:
    1. What render and derender return: their requests and responses, whether render reports stop
       ids, how per-chunk text is obtained, and derender's reading of the 16 hand-written parse
       cases, the evidence #16 and #17 wait for.
    2. `record --oracle vllm` against the pinned image: render, and derender whole and per chunk.
    3. Witness results and `disputed` in the case schema (question 4).
    4. The comparison: fingerprints and the printed issues.
-5. The end of a turn from both sources: GLM-5.3-Flash first, then the other templates the probe
+6. The end of a turn from both sources: GLM-5.3-Flash first, then the other templates the probe
    found.
-6. Tier 1 recorded from both sources: groups and manifests, its recorded sets, and the per-model
-   table.
 7. The vendor-code oracle: Kimi-K3, then DeepSeek V3.2 and V4 and Mistral's `mistral-common`
    checkpoints.
 8. `bellwether models` and the committed list.
