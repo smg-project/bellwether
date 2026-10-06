@@ -4,6 +4,9 @@ Python registries are read with ``ast`` and never imported, so no engine has to 
 the Rust factories are read with regular expressions over the source text. A reader accepts
 several roots and takes each file from the first root that has it, so a partial copy and a set
 of files fetched at a pinned ref can be combined.
+
+The engines' model registries, which ``bellwether models`` reads, are other files with other
+shapes; their readers are in ``models/registry.py``, and the two share only the cache directory.
 """
 
 from __future__ import annotations

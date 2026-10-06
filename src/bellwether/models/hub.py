@@ -14,20 +14,21 @@ from typing import Any, Protocol, TypeVar
 T = TypeVar("T")
 
 LISTING_FIELDS = ["createdAt", "downloads", "tags", "pipeline_tag"]
-# Where transformers 5.18 takes a chat template from, under the names the Hub's listing gives the files.
-# AutoTokenizer, which the hf-template oracle loads: chat_template.jinja, the *.jinja files directly
-# under additional_chat_templates/, and tokenizer_config.json's "chat_template", which those files
-# override (tokenization_utils_base.py L1634, L1662-1678, L1768-1771, L1784-1801). AutoProcessor reads
-# those two template sources as well (processing_utils.py L1286-1303, L1340-1342) and alone reads
-# chat_template.json and processor_config.json's "chat_template" (L1306-1312, L1326-1328, L1399-1402,
-# L1445-1451). Mistral's tekken conversion reads chat_template.json too, but only through mistral-common
-# (integrations/mistral/tokenizer.py L75-79), which this environment does not install.
+# Where transformers takes a chat template from, under the names the Hub's listing gives the files; the
+# same in 5.17.0, which #50 pins, and 5.18.0. AutoTokenizer, which the hf-template oracle loads, reads
+# chat_template.jinja and the *.jinja files directly under additional_chat_templates/
+# (PreTrainedTokenizerBase.from_pretrained), and tokenizer_config.json's "chat_template", which those
+# files override (PreTrainedTokenizerBase._from_pretrained), both in tokenization_utils_base.py.
+# AutoProcessor reads those two as well, and alone reads chat_template.json and processor_config.json's
+# "chat_template", which wins over the files (ProcessorMixin.get_processor_dict, processing_utils.py).
+# Mistral's tekken conversion reads chat_template.json too (_resolve_chat_template in
+# integrations/mistral/tokenizer.py), but only through mistral-common, which this environment lacks.
 TOKENIZER_TEMPLATE_FILE = "chat_template.jinja"
 TEMPLATE_DIR = "additional_chat_templates/"
 PROCESSOR_TEMPLATE_FILE = "chat_template.json"
 PROCESSOR_CONFIG = "processor_config.json"
 RATE_LIMITED = 429
-ATTEMPTS = 8  # the Hub counts requests in five-minute windows; eight waits outlast one
+ATTEMPTS = 8  # the Hub counts requests in five-minute windows; eight calls make seven waits, which outlast one
 DEFAULT_WAIT = 60  # seconds, when a rate-limited answer carries no Retry-After
 # Why a tokenizer or processor config could not be read, as the row's status gives it (``Details.unread``).
 INVALID_TOKENIZER_CONFIG = "invalid-tokenizer-config"  # not JSON, or not a JSON object
