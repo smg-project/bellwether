@@ -751,7 +751,7 @@ def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path)
         "model": "tiny-chat",
         "output_ids": [5, 6],
         "output_pieces": ["a", "b"],
-        "reference": {"source": "roundtrip", "text": "ab"},
+        "reference": {"source": "roundtrip", "text": "ab", "end_of_turn": {"stop_id": 7, "found_by": "turn"}},
     }
     write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/parse/a": line})
     for missing in ("output_ids", "output_pieces"):
@@ -771,6 +771,65 @@ def test_a_fixture_file_reads_a_case_whose_text_holds_unicode_line_breaks_intact
     write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": line})
     assert BREAKS in (tmp_path / "x.jsonl").read_text(encoding="utf-8")
     assert read_fixture_file(tmp_path / "x.jsonl") == {"tiny-chat/render/a": line}
+
+
+def roundtrip_line(**reference) -> dict:
+    """A round-trip parse line whose reference holds ``reference`` besides its source and text."""
+    return {
+        "id": "tiny-chat/parse/a",
+        "kind": "parse",
+        "model": "tiny-chat",
+        "output_ids": [5],
+        "output_pieces": ["a"],
+        "reference": {"source": "roundtrip", "text": "a", **reference},
+    }
+
+
+@pytest.mark.parametrize(
+    "end_of_turn",
+    [
+        None,
+        {"stop_id": 7},
+        {"found_by": "turn"},
+        {"stop_id": 7, "found_by": "banana"},
+        {"stop_id": 7, "found_by": "next_message"},
+        {"stop_id": "x", "found_by": "turn"},
+        {"stop_id": -1, "found_by": "turn"},
+        {"stop_id": 7.5, "found_by": "turn"},
+        {"stop_id": True, "found_by": "turn"},
+        {"stop_id": 7, "found_by": "turn", "stop_ids": [7]},
+        7,
+    ],
+    ids=[
+        "missing",
+        "no-found-by",
+        "no-stop-id",
+        "found-by-banana",
+        "found-by-misspelled",
+        "stop-id-string",
+        "stop-id-negative",
+        "stop-id-fraction",
+        "stop-id-boolean",
+        "misspelled-key",
+        "not-an-object",
+    ],
+)
+def test_the_case_schema_refuses_a_round_trip_parse_line_without_a_well_formed_end_of_turn(end_of_turn):
+    # A round-trip parse line says which stop id ends its output and which step found it, beside finish_reason.
+    line = roundtrip_line() if end_of_turn is None else roundtrip_line(end_of_turn=end_of_turn)
+    errors = list(validator().iter_errors(line))
+    assert errors, f"the schema took end_of_turn {end_of_turn!r}"
+
+
+def test_the_case_schema_takes_a_well_formed_end_of_turn_and_asks_it_of_round_trip_parse_lines_only():
+    for found_by in ("turn", "next-message"):
+        validator().validate(roundtrip_line(end_of_turn={"stop_id": 0, "found_by": found_by}))
+    engine = roundtrip_line()
+    engine["reference"]["source"] = "engine:vllm"
+    validator().validate(engine)
+    validator().validate(
+        {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "roundtrip"}}
+    )
 
 
 COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
@@ -875,7 +934,8 @@ def test_record_parse_names_the_stop_id_that_ends_the_output(tmp_path, tiny_mode
     im_end = token_id(tiny_model, "<|im_end|>")
     assert line["reference"]["text"] == "Hello"
     assert im_end not in line["output_ids"]
-    assert line["reference"]["provenance"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+    assert line["reference"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+    assert "end_of_turn" not in line["reference"]["provenance"]
 
 
 def turn_end_template(end: str) -> str:
@@ -1073,7 +1133,7 @@ def test_where_hf_generate_would_not_stop_the_run_says_so_once_and_sets_toml_nam
     status, out_dir = record(tmp_path, model, ("common", cases), kind="parse")
     assert status == 0
     for line in read_fixture_file(out_dir / "common.jsonl").values():
-        assert line["reference"]["provenance"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+        assert line["reference"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
     table = sets_tables(tmp_path)["parse"]["common"]
     assert (table["generate_stop_ids"], table["generate_stop_ids_from"]) == ([endoftext], "config.json")
     err = capsys.readouterr().err

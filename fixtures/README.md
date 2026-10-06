@@ -73,9 +73,12 @@ tool message per call after tool calls) opens with one, right after the turn and
 boundary: GLM writes no end marker, and its `<|user|>` and `<|observation|>` are in its generation
 config. Any other case is reported and not recorded, and so is a case whose message's own text
 (content, reasoning, a call's name or arguments, as the template gets them) holds a stop id, since
-generation would stop inside the message. The provenance's `end_of_turn` holds the
-`stop_id` and the step that found it (`found_by`: `turn` or `next-message`): vLLM's final token ids
-end with that id, while its text is dropped.
+generation would stop inside the message. The reference's `end_of_turn`, beside `finish_reason`,
+holds the `stop_id` and the step that found it (`found_by`: `turn` or `next-message`). The round
+trip knows which stop id the template writes where the turn ends when the turn is the last message,
+not which one a model emits there: Olmo-3-7B-Instruct's template writes `<|endoftext|>` (100257)
+after a last turn and `<|im_end|>` (100265) after the same turn once a user message follows. Both
+are stop ids, generation stops on either, and the line records 100257.
 
 transformers' `generate` stops on the generation config's ids alone. Where it would not stop where
 vLLM does (Qwen3.5-9B ships no `generation_config.json`, its `config.json` lists only
@@ -109,8 +112,8 @@ carries the whole character; one piece per id, and joined they are the output te
 `chunk_plans` (`whole` and `per_token` derived at replay time; `size-<n>` fixed lengths; `split-<k>`
 every two-way split for outputs of at most 32 tokens; `random-<seed>` thirty seeded plans with chunks
 of one to eight tokens) and `reference` with `source: roundtrip`, the `message` (with `role`), the
-`finish_reason` (`tool_calls` when the message has calls, else `stop`), the output `text` and the
-provenance with `end_of_turn`. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
+`finish_reason` (`tool_calls` when the message has calls, else `stop`), `end_of_turn`, the output
+`text` and the provenance. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
 sampled in context; a replay feeds them, with their pieces, as the engine's output. A case whose
 template does not extend the generation prompt when the turn is appended, or whose tokens do not give
 back its text under the incremental decode, is reported and not recorded, and the run exits 1;

@@ -85,7 +85,7 @@ def run(args: argparse.Namespace) -> int:
                 continue
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
             if isinstance(oracle, RoundtripOracle):
-                stop_ids.append(line["reference"]["provenance"]["end_of_turn"]["stop_id"])
+                stop_ids.append(line["reference"]["end_of_turn"]["stop_id"])
             old = previous.get(case_id)
             if old is not None and "witnesses" in old:
                 if old.get("request") == case.request:
@@ -158,7 +158,8 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "source": PARSE_SOURCE,
             "message": {"role": "assistant", **case.message},
             "finish_reason": output.finish_reason,
+            "end_of_turn": output.end_of_turn,
             "text": output.text,
-            "provenance": {**provenance, "end_of_turn": output.end_of_turn},
+            "provenance": provenance,
         },
     }
