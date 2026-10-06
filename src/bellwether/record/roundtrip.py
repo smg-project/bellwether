@@ -133,7 +133,7 @@ def as_vllm_gives_it(message: dict) -> dict:
 def check_parse_call_arguments(message: dict) -> None:
     """The corpus's rule for a parse case: each call carries its arguments as the JSON object string a parser returns.
 
-    vLLM would give the template ``{}`` for no arguments, or another JSON value as it is; a case that relies on either
+    vLLM v0.31.0 would give the template ``{}`` for missing, empty or non-object arguments; a case that relies on that
     states no string for a parser to return, so it is reported, not recorded.
     """
     for call in message.get("tool_calls") or []:
