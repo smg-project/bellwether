@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections import Counter
 from dataclasses import dataclass
 
 from tokenizers.decoders import DecodeStream
@@ -89,6 +90,12 @@ class RoundtripOracle:
         if end not in turn:
             raise ValueError(f"the rendered turn carries no end-of-turn token {end!r}")
         text = turn[: turn.rindex(end)]
+        missing = calls_not_rendered(message, text)
+        if missing:
+            raise ValueError(
+                f"the template does not render every tool call (no {', '.join(missing)} in the output); "
+                "the output would not carry them"
+            )
         output_ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
         if self.tokenizer.decode(output_ids) != text:
             raise ValueError("the output text does not survive a tokenize-detokenize round trip")
@@ -147,3 +154,13 @@ def check_parse_call_arguments(message: dict) -> None:
                 "a parse case's call must carry its arguments as a JSON object string (a rule of the corpus): "
                 f"{arguments!r}"
             )
+
+
+def calls_not_rendered(message: dict, text: str) -> list[str]:
+    """The names of the message's calls the output does not carry, each at least as often as it is called.
+
+    A template that drops tool calls (Phi-4-mini's, Hunyuan-A13B's) or renders only some of them would otherwise
+    give an output a parser cannot turn back into the message, and the case would be recorded lossy.
+    """
+    wanted = Counter(call["function"]["name"] for call in message.get("tool_calls") or [])
+    return sorted(name for name, count in wanted.items() if text.count(name) < count)

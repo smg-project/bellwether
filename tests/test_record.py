@@ -456,6 +456,24 @@ def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(i
     assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
 
 
+def test_a_template_that_renders_no_tool_calls_fails_the_case(tiny_model, tmp_path_factory):
+    # Phi-4-mini's and Hunyuan-A13B's templates drop the calls; the output would be the end of the turn alone.
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-calls-chat", assistant_template(""))
+    with pytest.raises(ValueError, match="does not render every tool call"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_template_that_renders_only_the_first_call_fails_the_case(tiny_model, tmp_path_factory):
+    call = "{%- if loop.first %}{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}{%- endif %}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "first-call-chat", assistant_template(call))
+    with pytest.raises(ValueError, match="does not render every tool call"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call(), weather_call()]}
+        )
+
+
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
