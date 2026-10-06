@@ -1,6 +1,6 @@
 """Hermes function-calling conversations as corpus sets: NousResearch/hermes-function-calling-v1.
 
-The data is three JSON files of the Hugging Face dataset at a pinned revision, read through the Hugging Face cache and
+The data is three JSON files of the Hugging Face dataset at a pinned revision, kept under the importers' cache and
 checked against their sha256 on every use (``hf.fetch``), with the license read from the dataset card
 (``hf.check_card_license``). Each row is a conversation in Hermes's own format; the importer turns it into OpenAI chat
 requests and assistant messages:
@@ -17,7 +17,8 @@ requests and assistant messages:
 
 Every assistant turn is a parse case and every user turn an assistant turn answers is a render case. A row with no
 faithful OpenAI form gives no case, and the import names it with its reason (``Unmappable``); a case that repeats an
-earlier one is left out, and the import names it with the case it repeats, so every case is distinct.
+earlier one is left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats, so
+every case is distinct.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from . import corpus_sets, github, hf
 
 REPO = "NousResearch/hermes-function-calling-v1"
 REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
-SOURCE = f"hf:datasets/{REPO}@{REVISION}"
+SOURCE = hf.source(REPO, REVISION)
 LICENSE = "Apache-2.0"
 CARD_SHA256 = "a01aa1fe59858148f87d0a584e69bd4e33a9a3c70a177fe1517cad57ead45ae5"
 CARD_LICENSE = "apache-2.0"  # the license key of the reviewed card's YAML front matter; LICENSE is its SPDX name
@@ -58,10 +59,9 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. This sample is for now: every row makes 80.6 MB
-# of plain JSON Lines, past the 50 MB one source's sets may take as plain JSON Lines (corpus_sets.LIMIT, which write
-# enforces), and every second row makes 43.6 MB. Once a source past that is stored as zstd in Git LFS, every row is
-# taken. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
+# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. Every second row makes 43.6 MB, so the sets stay
+# plain JSON Lines; every row makes 80.6 MB, past corpus_sets.LIMIT, which corpus_sets.write would store compressed in
+# Git LFS. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
 # equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
 # repeats one of func_calling_singleturn's.
 STRIDE = 2
@@ -305,16 +305,13 @@ def _line(config: str, row: dict, index: int, turn: int, request: dict, message:
 
 
 def build_sets(
-    rows: dict[str, list[dict]],
-    stride: int = STRIDE,
-    skipped: list[tuple[str, int, str]] | None = None,
-    repeated: list[tuple[str, str]] | None = None,
+    rows: dict[str, list[dict]], stride: int = STRIDE, skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)`` from every ``stride``-th row of each config, from its ``FIRST_ROW``.
 
-    A row that cannot be mapped gives no case, and is appended to ``skipped`` as ``(config, index, reason)``. A case
-    that repeats an earlier one is left out and appended to ``repeated`` (``leave_out_repeats``): rows that open with
-    the same turns give the cases of those turns once. A set no row fills is not made.
+    A row that cannot be mapped gives no case, and is appended to ``skipped`` as ``("<config> row <index>", reason)``.
+    A set no row fills is not made. The import then leaves out the cases that repeat an earlier one
+    (``corpus_sets.leave_out_repeats``): rows that open with the same turns give the cases of those turns once.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     for config, found in rows.items():
@@ -324,62 +321,24 @@ def build_sets(
                 row_render, row_parse = row_cases(found[index], index, config)
             except Unmappable as err:
                 if skipped is not None:
-                    skipped.append((config, index, str(err)))
+                    skipped.append((f"{config} row {index}", str(err)))
                 continue
             cases["render"] += row_render
             cases["parse"] += row_parse
         for kind, lines in cases.items():
             if lines:
                 sets[(kind, set_name(config))] = lines
-    kept, repeats = leave_out_repeats(sets)
-    if repeated is not None:
-        repeated.extend(repeats)
-    return kept
-
-
-def leave_out_repeats(
-    sets: dict[tuple[str, str], list[dict]],
-) -> tuple[dict[tuple[str, str], list[dict]], list[tuple[str, str]]]:
-    """The sets without the cases that repeat an earlier one, and ``(left-out name, name it repeats)`` for each.
-
-    A case repeats an earlier one when its request (render), or its request and message (parse), are the same JSON as
-    written, so every case kept is distinct; a render case, which has no message, never repeats a parse case. Earlier
-    is in the order of ``sets``, then of each set's lines. A set whose every case repeats stays, empty. This is
-    ``corpus_sets.leave_out_repeats`` of #35, which this importer takes once its base has it.
-    """
-    first: dict[str, str] = {}  # a case's request and message, as written -> its name
-    kept: dict[tuple[str, str], list[dict]] = {}
-    repeats: list[tuple[str, str]] = []
-    for key, lines in sets.items():
-        kept[key] = []
-        for line in lines:
-            compared = json.dumps([line["request"], line.get("message")], ensure_ascii=False)
-            if compared in first:
-                repeats.append((line["name"], first[compared]))
-            else:
-                first[compared] = line["name"]
-                kept[key].append(line)
-    return kept, repeats
+    return sets
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
     """Write every set and the License copy, and remove ``hermes-*`` set files no config writes any more."""
-    written = corpus_sets.write(sets, corpus_dir, "hermes-")
-    copy = corpus_dir / LICENSE_COPY
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    copy.write_bytes(license_text)
-    return [*written, copy]
+    return corpus_sets.write(sets, corpus_dir, "hermes-", {LICENSE_COPY: license_text})
 
 
 def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
     """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
-    problems = corpus_sets.check(sets, corpus_dir, "hermes-", "Hermes config")
-    copy = corpus_dir / LICENSE_COPY
-    if not copy.is_file():
-        problems.append(f"{copy}: missing")
-    elif copy.read_bytes() != license_text:
-        problems.append(f"{copy}: differs from a fresh import")
-    return problems
+    return corpus_sets.check(sets, corpus_dir, "hermes-", "Hermes config", {LICENSE_COPY: license_text})
 
 
 def check_license_text(text: bytes) -> None:
@@ -391,19 +350,19 @@ def check_license_text(text: bytes) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    card = hf.fetch(REPO, REVISION, hf.CARD, CARD_SHA256).read_bytes().decode("utf-8")
-    hf.check_card_license(REPO, card, CARD_LICENSE)
+    hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, cache=args.cache)
     pin = (LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256)
     license_text = github.fetch(*pin, cache=args.cache).read_bytes()
     check_license_text(license_text)
     rows = {
-        config: read_rows(hf.fetch(REPO, REVISION, filename, sha256)) for config, (filename, sha256) in CONFIGS.items()
+        config: read_rows(hf.fetch(REPO, REVISION, filename, sha256, cache=args.cache))
+        for config, (filename, sha256) in CONFIGS.items()
     }
-    skipped: list[tuple[str, int, str]] = []
-    repeated: list[tuple[str, str]] = []
-    sets = build_sets(rows, skipped=skipped, repeated=repeated)
+    skipped: list[tuple[str, str]] = []
+    sets = build_sets(rows, skipped=skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus, license_text)
+        problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -412,14 +371,7 @@ def run(args: argparse.Namespace) -> int:
     for config, found in rows.items():
         taken = len(range(FIRST_ROW[config], len(found), STRIDE))
         print(f"{config}: {taken} of {len(found)} rows, from row {FIRST_ROW[config]} in steps of {STRIDE}")
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
-    rows_by_reason: dict[tuple[str, str], list[str]] = {}
-    for config, index, why in skipped:
-        rows_by_reason.setdefault((config, why), []).append(str(index))
-    for (config, why), indices in rows_by_reason.items():
-        print(f"no cases for {len(indices)} row(s) of {config} ({', '.join(indices)}): {why}")
-    for name, earlier in repeated:
-        print(f"no case {name}: it repeats {earlier}")
-    write_sets(sets, args.corpus, license_text)
+    corpus_sets.report("Hermes", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped)
+    write_sets(kept, args.corpus, license_text)
     return 0

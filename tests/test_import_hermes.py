@@ -7,7 +7,7 @@ import huggingface_hub
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import github, hermes, hf
+from bellwether.importers import corpus_sets, github, hermes, hf, pinned
 
 REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
 CARD = "---\nlicense: apache-2.0\ntask_categories:\n- text-generation\n---\n\n# Hermes Function-Calling V1\n"
@@ -309,9 +309,10 @@ def test_rows_that_differ_only_by_their_tools_give_cases_of_their_own():
     clock = json.dumps([{"type": "function", "function": CLOCK}])
     hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
     hello_clock = row(("system", GLAIVE.replace(TOOLS, clock)), ("human", "Hi"), ("gpt", "Hello!"), tools=clock)
-    repeated: list = []
-    sets = hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}, stride=1, repeated=repeated)
-    assert repeated == []
+    sets, repeats = corpus_sets.leave_out_repeats(
+        hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}, stride=1)
+    )
+    assert repeats == []
     names = ["hermes-glaive-func-calling-0-2", "hermes-glaive-func-calling-1-2"]
     assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == names
 
@@ -364,32 +365,9 @@ def test_sets_take_every_stride_row_from_the_configs_first_row_and_name_each_row
     assert [line["name"] for line in sets[("render", "hermes-func-calling")]] == ["hermes-func-calling-1-1"]
     assert [line["name"] for line in sets[("parse", "hermes-func-calling")]] == ["hermes-func-calling-1-2"]
     assert skipped == [
-        ("func_calling_singleturn", 2, "a response without a call"),
-        ("func_calling", 3, "a response without a call"),
+        ("func_calling_singleturn row 2", "a response without a call"),
+        ("func_calling row 3", "a response without a call"),
     ]
-
-
-def test_a_case_that_repeats_an_earlier_one_of_its_kind_is_left_out_and_named_with_the_case_it_repeats():
-    def case(name: str, user: str, answer: str | None = None) -> dict:
-        line = {"name": name, "request": {"messages": [{"role": "user", "content": user}]}}
-        return line if answer is None else {**line, "message": {"content": answer}}
-
-    sets = {
-        ("render", "hermes-a"): [case("a-1", "Hi"), case("a-3", "Hi")],
-        ("parse", "hermes-a"): [case("a-2", "Hi", "Hello!"), case("a-4", "Hi", "Hey!")],
-        ("render", "hermes-b"): [case("b-1", "Hi"), case("b-3", "Bye")],
-        ("parse", "hermes-b"): [case("b-2", "Hi", "Hello!")],
-    }
-    kept, repeats = hermes.leave_out_repeats(sets)
-    # A render and a parse case may share a request, and two parse cases a request with different messages. A
-    # repeat is left out in any set, and a set it empties stays, empty, as corpus_sets.leave_out_repeats has it.
-    assert {key: [line["name"] for line in lines] for key, lines in kept.items()} == {
-        ("render", "hermes-a"): ["a-1"],
-        ("parse", "hermes-a"): ["a-2", "a-4"],
-        ("render", "hermes-b"): ["b-3"],
-        ("parse", "hermes-b"): [],
-    }
-    assert repeats == [("a-3", "a-1"), ("b-1", "a-1"), ("b-2", "a-2")]
 
 
 def test_a_config_whose_rows_give_no_case_has_no_set():
@@ -400,18 +378,20 @@ def test_rows_that_open_with_the_same_turns_give_the_cases_of_those_turns_once()
     # Six pairs of the glaive_func_calling rows taken open with the same turns and part later, as rows 48 and 622 do.
     hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
     hey = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hey there!"))
-    repeated: list = []
-    sets = hermes.build_sets({"glaive_func_calling": [hello, hey, hello]}, stride=1, repeated=repeated)
+    sets, repeats = corpus_sets.leave_out_repeats(
+        hermes.build_sets({"glaive_func_calling": [hello, hey, hello]}, stride=1)
+    )
     name = "hermes-glaive-func-calling-{}".format
     assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]] == [name("0-1")]
     assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == [name("0-2"), name("1-2")]
-    assert repeated == [(name("1-1"), name("0-1")), (name("2-1"), name("0-1")), (name("2-2"), name("0-2"))]
+    assert repeats == [(name("1-1"), name("0-1")), (name("2-1"), name("0-1")), (name("2-2"), name("0-2"))]
     # Calls carry the same ids in both rows, so the cases at and after them repeat too.
     opening = [(turn["from"], turn["value"]) for turn in CONVERSATION["conversations"][:5]]
     rome = row(*opening, ("human", "And in Rome?"), ("gpt", "Rain."))
-    repeated = []
-    sets = hermes.build_sets({"glaive_func_calling": [CONVERSATION, rome]}, stride=1, repeated=repeated)
-    assert repeated == [(name("1-1"), name("0-1")), (name("1-2"), name("0-2")), (name("1-4"), name("0-4"))]
+    sets, repeats = corpus_sets.leave_out_repeats(
+        hermes.build_sets({"glaive_func_calling": [CONVERSATION, rome]}, stride=1)
+    )
+    assert repeats == [(name("1-1"), name("0-1")), (name("1-2"), name("0-2")), (name("1-4"), name("0-4"))]
     assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]][-1] == name("1-5")
 
 
@@ -441,7 +421,8 @@ def test_written_sets_check_clean_and_a_changed_or_stale_hermes_file_is_reported
 def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE, **rows: list[dict]) -> SimpleNamespace:
     """``hf_hub_download`` served from files written here, each pinned by its sha256 in place of the dataset's: the
     card, and each config's rows (no config given: none); and ``github.fetch`` serving ``license_text``. Returns the
-    downloads asked for: ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256).
+    downloads asked for: ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256), with
+    ``github_caches`` the cache each was given.
     """
     paths = {hf.CARD: tmp_path / "hub" / hf.CARD}
     paths[hf.CARD].parent.mkdir(parents=True)
@@ -460,16 +441,18 @@ def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE,
 
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
     fetched: list[tuple] = []
+    caches: list = []
 
     def fetch(owner, repo, commit, path, sha256, cache=None):
         fetched.append((owner, repo, commit, path, sha256))
+        caches.append(cache)
         served = tmp_path / "github" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(license_text)
         return served
 
     monkeypatch.setattr(github, "fetch", fetch)
-    return SimpleNamespace(hub=calls, github=fetched)
+    return SimpleNamespace(hub=calls, github=fetched, github_caches=caches)
 
 
 def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_out_then_checks(
@@ -484,26 +467,31 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
         func_calling=[ORPHAN, ask("Lima"), ask("Quito")],
         glaive_func_calling=[hello, hello, hey],
     )
-    corpus = tmp_path / "corpus"
-    assert main(["import", "hermes", "--corpus", str(corpus), "--check"]) == 1
-    assert main(["import", "hermes", "--corpus", str(corpus)]) == 0
+    corpus, cache = tmp_path / "corpus", tmp_path / "cache"
+    argv = ["import", "hermes", "--corpus", str(corpus), "--cache", str(cache)]
+    assert main([*argv, "--check"]) == 1
+    assert main(argv) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 2 cases" in out
-    assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 1 cases" in out
-    assert f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases" in out
+    lines = out.splitlines()
+    assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 2 cases" in lines
+    assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 1 cases" in lines
+    assert f"{corpus / 'render' / 'hermes-glaive-func-calling.jsonl'}: 1 cases, 1 left out as repeats" in lines
+    assert f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases, 2 distinct messages" in lines
+    assert f"{corpus}: 9 cases in the 6 Hermes sets, 1 left out as repeats, 5 distinct messages" in lines
     assert "func_calling_singleturn: 6 of 11 rows, from row 0 in steps of 2" in out
     assert "func_calling: 1 of 3 rows, from row 1 in steps of 2" in out
     # Every row is named, however many share a reason.
-    assert (
-        "no cases for 4 row(s) of func_calling_singleturn (2, 6, 8, 10): a response without a call" in out.splitlines()
-    )
+    rows = ", ".join(f"func_calling_singleturn row {index}" for index in (2, 6, 8, 10))
+    assert f"no case for 4 row(s) ({rows}): a response without a call" in lines
     assert "no case hermes-glaive-func-calling-2-1: it repeats hermes-glaive-func-calling-0-1" in out
-    assert main(["import", "hermes", "--corpus", str(corpus), "--check"]) == 0
+    assert main([*argv, "--check"]) == 0
     assert f"{corpus}: the Hermes sets equal a fresh import of hf:datasets/" in capsys.readouterr().out
-    # Every file comes from the dataset at the pinned commit.
+    # Every file comes from the dataset at the pinned commit, and is kept under --cache, the License copy too.
     assert {(repo, options["revision"]) for repo, _, options in served.hub} == {
         ("NousResearch/hermes-function-calling-v1", REVISION)
     }
+    assert {options["cache_dir"] for _, _, options in served.hub} == {cache / "huggingface"}
+    assert set(served.github_caches) == {cache}
 
 
 def test_the_command_checks_the_cards_license_before_it_reads_any_row_and_writes_nothing_on_a_refusal(
@@ -512,7 +500,9 @@ def test_the_command_checks_the_cards_license_before_it_reads_any_row_and_writes
     served = serve(tmp_path, monkeypatch, card=CARD.replace("apache-2.0", "mit"), func_calling=[ask("Paris")])
     corpus = tmp_path / "corpus"
     refusal = "the card's license is 'mit', not the reviewed 'apache-2.0'; review it before importing"
-    with pytest.raises(ValueError, match=f"NousResearch/hermes-function-calling-v1 README.md: {refusal}"):
+    with pytest.raises(
+        ValueError, match=f"hf:datasets/NousResearch/hermes-function-calling-v1@{REVISION} README.md: {refusal}"
+    ):
         main(["import", "hermes", "--corpus", str(corpus)])
     assert [filename for _, filename, _ in served.hub] == ["README.md"] and not corpus.exists()
 
@@ -555,10 +545,10 @@ def real_rows(config: str) -> list[dict]:
     """The pinned file of ``config`` from the Hugging Face cache; skipped when it is not there (no download)."""
     filename, sha256 = hermes.CONFIGS[config]
     cached = huggingface_hub.try_to_load_from_cache(
-        hermes.REPO, filename, revision=hermes.REVISION, repo_type="dataset"
+        hermes.REPO, filename, cache_dir=pinned.CACHE / "huggingface", revision=hermes.REVISION, repo_type="dataset"
     )
     if not isinstance(cached, str):
-        pytest.skip(f"{filename} is not in the Hugging Face cache; `bellwether import hermes` downloads it")
+        pytest.skip(f"{filename} is not in the importers' cache; `bellwether import hermes` downloads it")
     return hermes.read_rows(hf.fetch(hermes.REPO, hermes.REVISION, filename, sha256))
 
 
