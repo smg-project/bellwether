@@ -806,6 +806,20 @@ def test_a_set_that_changes_form_leaves_one_file(tmp_path, tiny_model):
     assert sets_tables(tmp_path)["render"]["x"]["form"] == "zstd"
 
 
+def test_a_set_that_changes_back_to_plain_leaves_one_file_with_its_witnesses(tmp_path, tiny_model):
+    status, out_dir = record(tmp_path, tiny_model, ("x", [imported("x-0", "X")]))
+    assert status == 0 and (out_dir / "x.jsonl.zst").exists()
+    recorded = read_fixture_file(out_dir / "x.jsonl.zst")
+    recorded["tiny-chat/render/x-0"]["witnesses"] = {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    write_fixture_file(out_dir / "x.jsonl.zst", recorded)
+    status, _ = record(tmp_path, tiny_model, ("x", [{"name": "x-0", "request": {"messages": [user("X")]}}]))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["x.jsonl"]
+    line = read_fixture_file(out_dir / "x.jsonl")["tiny-chat/render/x-0"]
+    assert line.get("witnesses") == {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    assert sets_tables(tmp_path)["render"]["x"]["form"] == "plain"
+
+
 def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, tiny_model):
     record(
         tmp_path,
@@ -827,7 +841,12 @@ def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, t
     assert (tables["common"]["cases"], tables["common"]["rejected"]) == (1, 1)
 
 
-LFS_POINTER = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 12\n"
+# What Git LFS 3.7.1 leaves in place of a file it has not fetched; this one stands for the 13 bytes "compressed-x\n".
+LFS_POINTER = (
+    "version https://git-lfs.github.com/spec/v1\n"
+    "oid sha256:af16c249d1a79d093931e0317035d67af8c1f47632feca7b2216bc4787d7983e\n"
+    "size 13\n"
+)
 
 
 def test_unpack_writes_one_plain_tree_of_both_forms_and_the_manifests(tmp_path, tiny_model):
@@ -962,3 +981,42 @@ def test_unpack_names_the_sets_it_could_not_fetch_and_writes_nothing(git_sandbox
     assert str(pointer) in err
     assert "git lfs pull --include 'fixtures/tiny-chat/render/bench-x.jsonl.zst' --exclude ''" in err
     assert not out.exists()
+
+
+def test_is_lfs_pointer_tells_a_pointer_from_a_set_in_either_form(tmp_path):
+    (tmp_path / "pointer.jsonl.zst").write_text(LFS_POINTER)
+    for name in ("set.jsonl", "set.jsonl.zst"):
+        write_fixture_file(tmp_path / name, render_cases("a"))
+    assert is_lfs_pointer(tmp_path / "pointer.jsonl.zst")
+    assert not is_lfs_pointer(tmp_path / "set.jsonl")
+    assert not is_lfs_pointer(tmp_path / "set.jsonl.zst")
+
+
+def test_unpack_writes_a_model_that_has_only_hand_written_sets(tmp_path, tiny_model, monkeypatch):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    assert asked == []  # nothing to fetch; an empty --include would fetch every set
+    written = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
+    assert written == ["tiny-chat/manifest.toml", "tiny-chat/render/common.jsonl", "tiny-chat/sets.toml"]
+    assert (out / "tiny-chat" / "render" / "common.jsonl").read_bytes() == (
+        fixtures / "tiny-chat" / "render" / "common.jsonl"
+    ).read_bytes()
+
+
+def test_unpack_model_writes_and_fetches_that_model_only(tmp_path, tiny_model, monkeypatch):
+    common = [{"name": "a", "request": {"messages": [user("A")]}}]
+    record(tmp_path, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))
+    write_manifest(tmp_path / "fixtures", "other", "acme/Other")
+    write_fixture_file(tmp_path / "fixtures" / "other" / "render" / "common.jsonl", render_cases("a"))
+    (tmp_path / "fixtures" / "other" / "render" / "bench-y.jsonl.zst").write_text(LFS_POINTER)
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    out = tmp_path / "plain"
+    argv = ["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out), "--model", str(tiny_model)]
+    assert main(argv) == 0
+    assert asked == []
+    assert sorted(p.name for p in out.iterdir()) == ["tiny-chat"]
+    assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == ["bench-x.jsonl", "common.jsonl"]
