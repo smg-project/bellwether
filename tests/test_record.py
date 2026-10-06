@@ -11,7 +11,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
-from bellwether.record.roundtrip import RoundtripOracle
+from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -336,12 +336,124 @@ def test_roundtrip_records_the_turn_between_the_prompt_and_the_end_of_turn(tiny_
     request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
     message = {"reasoning_content": "think", "content": "Sure.", "tool_calls": [weather_call()]}
     out = oracle.render_output(request, message)
-    call_json = json.dumps(weather_call()["function"])
+    call_json = json.dumps({"name": "get_weather", "arguments": {"city": "Paris"}})
     assert out.text == f"<think>\nthink\n</think>\n\nSure.\n<tool_call>\n{call_json}\n</tool_call>"
     assert out.output_ids == oracle.tokenizer.encode(out.text, add_special_tokens=False)
     assert out.finish_reason == "tool_calls"
     plain = oracle.render_output({"messages": [user("Hi")]}, {"content": "Hello"})
     assert (plain.text, plain.finish_reason) == ("Hello", "stop")
+
+
+def tiny_variant(tiny_model, tmp_path_factory, name: str, template: str) -> pathlib.Path:
+    """The tiny model's tokenizer with another chat template."""
+    directory = tmp_path_factory.mktemp(name)
+    (directory / "tokenizer.json").write_bytes((tiny_model / "tokenizer.json").read_bytes())
+    config = json.loads((tiny_model / "tokenizer_config.json").read_text())
+    (directory / "tokenizer_config.json").write_text(json.dumps({**config, "chat_template": template}))
+    return directory
+
+
+def assistant_template(call: str) -> str:
+    return (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' + (m['content'] or '') }}"
+        "{%- for c in (m['tool_calls'] or []) %}" + call + "{%- endfor %}{{ '<|im_end|>\\n' }}"
+        "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+@pytest.fixture(scope="session")
+def items_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """A template that iterates a call's arguments, as most current templates do."""
+    call = (
+        "{{ '<tool_call>' + c['function']['name'] }}"
+        "{%- for k, v in c['function']['arguments'].items() %}{{ ' ' + k + '=' + v | string }}{%- endfor %}"
+        "{{ '</tool_call>' }}"
+    )
+    return tiny_variant(tiny_model, tmp_path_factory, "items-chat", assistant_template(call))
+
+
+@pytest.fixture(scope="session")
+def concat_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """A template that concatenates a call's arguments as a string, as DeepSeek's do."""
+    call = "{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] + '</tool_call>' }}"
+    return tiny_variant(tiny_model, tmp_path_factory, "concat-chat", assistant_template(call))
+
+
+def test_roundtrip_gives_the_template_the_arguments_as_an_object_as_vllm_does(items_model):
+    out = RoundtripOracle(str(items_model), "local").render_output(
+        {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
+
+
+def test_a_template_that_cannot_take_object_arguments_fails_the_case(concat_model):
+    with pytest.raises(TypeError, match="concatenate"):
+        RoundtripOracle(str(concat_model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_roundtrip_reports_arguments_that_are_not_a_json_object(tiny_model):
+    # A rule of the corpus, not an engine's: a parse case's call carries the JSON object string a parser returns.
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    for arguments in ('["a"]', "not json", "", None):
+        call = {"type": "function", "function": {"name": "f", "arguments": arguments}}
+        with pytest.raises(ValueError, match="a JSON object"):
+            oracle.render_output({"messages": [user("Go")]}, {"content": "", "tool_calls": [call]})
+
+
+@pytest.mark.parametrize(
+    ("arguments", "given"),
+    [
+        ("", {}),
+        (None, {}),
+        ("null", {}),
+        ([], {}),
+        ("{}", {}),
+        ('{"a": 1}', {"a": 1}),
+        ('["a"]', {}),
+        ('"x"', {}),
+        ("2", {}),
+        ("{a", {}),
+        ({"a": 1}, {"a": 1}),
+        (["a"], {}),
+    ],
+)
+def test_a_history_call_reaches_the_template_with_the_arguments_vllm_gives_it(arguments, given):
+    call = {"type": "function", "function": {"name": "f", "arguments": arguments}}
+    message = {"role": "assistant", "content": "", "tool_calls": [call]}
+    assert as_vllm_gives_it(message)["tool_calls"][0]["function"]["arguments"] == given
+    assert call["function"]["arguments"] == arguments
+
+
+def test_a_history_call_without_arguments_reaches_the_template_with_an_empty_object():
+    message = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "f"}}]}
+    assert as_vllm_gives_it(message)["tool_calls"][0]["function"]["arguments"] == {}
+
+
+def test_an_empty_tool_calls_list_is_dropped_as_vllm_drops_it():
+    message = {"role": "assistant", "content": "Hi", "tool_calls": []}
+    assert as_vllm_gives_it(message) == {"role": "assistant", "content": "Hi"}
+    assert message["tool_calls"] == []
+
+
+def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(items_model):
+    empty = {"type": "function", "function": {"name": "get_time", "arguments": ""}}
+    request = {
+        "messages": [
+            user("Time?"),
+            {"role": "assistant", "content": "", "tool_calls": [empty]},
+            {"role": "tool", "content": "noon"},
+            user("And the weather in Paris?"),
+        ]
+    }
+    out = RoundtripOracle(str(items_model), "local").render_output(
+        request, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
 
 
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
@@ -591,3 +703,19 @@ def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model,
     record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
     assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1
     assert "no corpus set named missing" in capsys.readouterr().err
+
+
+def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_model):
+    request = {
+        "messages": [
+            user("Weather in Paris?"),
+            {"role": "assistant", "content": "", "tool_calls": [weather_call()]},
+            {"role": "tool", "content": "Sunny"},
+            user("And now?"),
+        ]
+    }
+    out = RoundtripOracle(str(items_model), "local").render_output(
+        request, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
+    assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'
