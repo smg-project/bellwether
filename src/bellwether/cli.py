@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from bellwether import __version__
+from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
 from bellwether.importers import run as import_run
 from bellwether.record import run as record_run
@@ -77,6 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="compare a fresh import with the corpus instead of writing it; exit 1 on a difference",
     )
     importer.set_defaults(func=import_run)
+
+    count = sub.add_parser("count", help="cases per model, kind and source")
+    count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    count.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    count.set_defaults(func=count_run)
 
     verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")
     verify.add_argument("--smg", required=True, help="SMG base URL, e.g. http://127.0.0.1:30000")
