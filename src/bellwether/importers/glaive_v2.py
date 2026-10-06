@@ -18,11 +18,10 @@ license. A row becomes OpenAI chat messages:
   such id, so bellwether writes it and ``origin`` marks the cases that hold one (``WRITTEN``). The ids leave the row
   out, so a chat that recurs in another row gives the same cases there.
 
-Each assistant turn is a parse case, and each user turn an assistant answers a render case. The whole file maps to about
-1.2 GB of plain JSON Lines, so the corpus holds a sample, every ``STEP``-th row by index, until a compressed corpus form
-lands. A row these rules cannot map has no case, and the import names it with its reason; a case that repeats an
-earlier one is left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The
-dataset ships no LICENSE
+Each assistant turn is a parse case, and each user turn an assistant answers a render case; a turn with no text is kept
+as written, a message whose content is "". For now the corpus holds a sample, every ``STEP``-th row by index. A row
+these rules cannot map has no case, and the import names it with its reason; a case that repeats an earlier one is left
+out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The dataset ships no LICENSE
 file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this
 module imports only what it shares with the other importers: the readers of pinned Hugging Face and GitHub files
 (``hf``, ``github``) and the set writer (``corpus_sets``).
@@ -56,8 +55,10 @@ LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d
 # Where the import writes that copy, under the corpus root.
 LICENSE_COPY = "licenses/glaive-v2-LICENSE"
 DATASET = "glaive-v2"
-# The sample is every STEP-th row by index. The whole file maps to 1,235 MB of corpus; 31 keeps 40.1 MB of it, under
-# corpus_sets.LIMIT, the 50 MB a source may keep plain.
+# The rows taken: every STEP-th row by index. This sample is for now: every row makes 1,135 MB of plain JSON Lines once
+# repeats are left out, past corpus_sets.LIMIT, the 50 MB an import's sets may take and stay plain, and every 31st row
+# makes 39.2 MB. Past the limit corpus_sets.write stores every set compressed in Git LFS, and every row is taken once
+# those sets land.
 STEP = 31
 SET_SIZE = 5000  # cases per set file, of either kind, at most
 

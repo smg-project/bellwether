@@ -452,6 +452,22 @@ def test_a_user_turn_no_assistant_answers_is_no_render_case():
 NO_FUNCTIONS = "SYSTEM: You are a helpful assistant, with no access to external functions.\n\n"
 
 
+def test_an_empty_turn_is_kept_as_written():
+    # Rows 11267 and 33683 have an assistant turn with no text, rows 84134 and 97124 a user turn: each is a message
+    # whose content is "", and the cases around it are kept.
+    chat = "USER: Hi\n\nASSISTANT:  <|endoftext|>\n\nUSER: \n\nASSISTANT: Bye. <|endoftext|>"
+    messages, tools = glaive_v2.messages_for({"system": NO_FUNCTIONS, "chat": chat})
+    assert messages[1:] == [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": ""},
+        {"role": "user", "content": ""},
+        {"role": "assistant", "content": "Bye."},
+    ]
+    render, parse = glaive_v2.cases_for(5, messages, tools)
+    assert [line["request"]["messages"][-1] for line in render] == [messages[1], messages[3]]
+    assert [line["message"] for line in parse] == [{"content": ""}, {"content": "Bye."}]
+
+
 def chat_row(*rounds: str) -> dict:
     """A row without functions: per round, a user turn and the assistant's answer."""
     turns = [turn for text in rounds for turn in (f"USER: {text}?", f"ASSISTANT: {text}. <|endoftext|>")]
