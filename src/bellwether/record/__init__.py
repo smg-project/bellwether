@@ -38,6 +38,7 @@ def run(args: argparse.Namespace) -> int:
     if not sets:
         print(f"bellwether record: no corpus under {args.corpus / args.kind}", file=sys.stderr)
         return NOT_IMPLEMENTED
+    in_corpus = set(sets)
     wanted = list(getattr(args, "sets", None) or [])
     unknown = sorted(set(wanted) - set(sets))
     if unknown:
@@ -48,6 +49,14 @@ def run(args: argparse.Namespace) -> int:
         return 1
     if wanted:
         sets = {name: cases for name, cases in sets.items() if name in wanted}
+    else:
+        # Imported sets are tens of MB per model as plain JSON Lines; they are recorded once the storage form
+        # (docs/benchmark-sets.md, Storage) lands. Until then only `--set` records one.
+        imported = sorted(name for name, cases in sets.items() if any(case.origin is not None for case in cases))
+        if imported:
+            sets = {name: cases for name, cases in sets.items() if name not in imported}
+            noun = "set" if len(imported) == 1 else "sets"
+            print(f"{len(imported)} imported {noun} left out until the storage form lands: {', '.join(imported)}")
     oracle = (
         HfTemplateOracle(manifest.model, manifest.revision)
         if args.kind == "render"
@@ -96,7 +105,7 @@ def run(args: argparse.Namespace) -> int:
     kind_dir = args.fixtures / manifest.slug / args.kind
     if kind_dir.is_dir() and not wanted:
         for stale in sorted(p for p in kind_dir.iterdir() if p.is_file() and p.suffix == ".jsonl"):
-            if stale.stem not in sets:
+            if stale.stem not in in_corpus:
                 stale.unlink()
                 print(f"{stale}: removed, the corpus has no set of that name")
     for case_id, reason in not_recorded:

@@ -550,6 +550,36 @@ def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, 
     assert (out_dir / "extra.jsonl").read_text() == extra_before
 
 
+def test_record_without_set_leaves_imported_sets_to_the_storage_form(tmp_path, tiny_model, capsys):
+    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bfcl-x", [imported]),
+    )
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
+    assert "1 imported set left out until the storage form lands: bfcl-x" in capsys.readouterr().out
+
+
+def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny_model):
+    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bfcl-x", [imported]),
+    )
+    assert main(record_argv(tmp_path, tiny_model, "--set", "bfcl-x")) == 0
+    out_dir = tmp_path / "fixtures" / "tiny-chat" / "render"
+    recorded = (out_dir / "bfcl-x.jsonl").read_text()
+
+    assert main(record_argv(tmp_path, tiny_model)) == 0
+
+    assert (out_dir / "bfcl-x.jsonl").read_text() == recorded
+
+
 def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model, capsys):
     record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
     assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1

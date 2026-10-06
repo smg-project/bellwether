@@ -46,5 +46,5 @@ not write. Name hand-written sets otherwise.
 still serve that exact file: a yanked release still does when pinned by version; a release deleted from PyPI does not,
 and the check fails until the importer pins another.
 
-Until the benchmark sets' storage form lands (`docs/benchmark-sets.md`, delivery step 5), record the hand-written
-sets alone: `bellwether record --model <id> --kind <kind> --oracle reference --set common`.
+Until the benchmark sets' storage form lands (`docs/benchmark-sets.md`, Storage), `bellwether record` without
+`--set` leaves the imported sets out and names them; `--set NAME` records the named sets as plain JSON Lines.
