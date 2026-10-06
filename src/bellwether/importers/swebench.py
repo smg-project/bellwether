@@ -8,9 +8,14 @@ SWE-bench has no prompt and no tools, so the request and the messages are bellwe
 - a content case: the gold patch in a fenced ``diff`` block.
 
 Verified is imported whole. SWE-bench's test split holds all of Verified's rows, so a test row that Verified already
-gave is imported once, in the Verified sets. A row whose repository's license is copyleft goes to its family's
-``-copyleft`` sets. The files are read through the Hugging Face cache (``hf.fetch``) and parsed with ``pyarrow``; the
-sets are written and checked by the set writer the importers share (``corpus_sets``).
+gave is imported once, in the Verified sets. The files are read through the Hugging Face cache (``hf.fetch``) and parsed
+with ``pyarrow``; the sets are written and checked by the set writer the importers share (``corpus_sets``).
+
+The dataset cards state no license. A row's code, its gold patch, is under its repository's license at the row's base
+commit, read from the repository's license file there (``license_of``). ``swebench_licenses.json`` pins that file and
+any NOTICE file at every base commit, by repository, commit and sha256; the import fetches them (``github.fetch``),
+copies them next to the sets, and names on each parse line the license, its holder and the copies that go with it. A
+row whose code is copyleft goes to its family's ``-copyleft`` sets.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import corpus_sets, hf
+from . import corpus_sets, github, hf
 
 
 @dataclass(frozen=True)
@@ -64,30 +69,119 @@ TEST = Source(
 )
 SOURCES = (VERIFIED, TEST)
 DATASET = "swebench"
-
-# The license of each repository's code, which is each row's license: the dataset cards state none. Read on
-# 2026-10-06 from the GitHub license API and each repository's LICENSE file on its default branch; a row whose
-# repository is not here stops the import until its license is reviewed.
-LICENSES = {
-    "astropy/astropy": "BSD-3-Clause",
-    "django/django": "BSD-3-Clause",
-    # Not on the SPDX list: Matplotlib's own PSF-style license agreement, LICENSE/LICENSE.
-    "matplotlib/matplotlib": "LicenseRef-Matplotlib",
-    "mwaskom/seaborn": "BSD-3-Clause",
-    "pallets/flask": "BSD-3-Clause",
-    "psf/requests": "Apache-2.0",
-    "pydata/xarray": "Apache-2.0",
-    # GitHub's license API names it GPL-2.0, which does not tell "only" from "or later".
-    "pylint-dev/pylint": "GPL-2.0",
-    "pytest-dev/pytest": "MIT",
-    "scikit-learn/scikit-learn": "BSD-3-Clause",
-    # GitHub: NOASSERTION; LICENSE.rst grants it as the "two clause BSD license".
-    "sphinx-doc/sphinx": "BSD-2-Clause",
-    # GitHub: NOASSERTION; LICENSE is BSD-3-Clause, with the notices of the code it bundles.
-    "sympy/sympy": "BSD-3-Clause",
+# The repositories' license files that the import copies next to its sets, under the corpus root, and the table that
+# pins them: for every row's base commit, its repository's license file, its NOTICE file if any, and the full text of
+# the Apache License where the license file only points to it, each by repository, commit and sha256. Built from the
+# repositories' history by scripts/swebench_licenses.py.
+LICENSE_DIR = "licenses"
+LICENSE_TABLE = Path(__file__).with_name("swebench_licenses.json")
+# Who holds the copyright in each repository's code, as its license or NOTICE file names them. The license files of
+# xarray and pylint are the Apache License and the GPL alone: xarray's README.rst names "xarray Developers", and
+# pylint's files name the contributors listed in CONTRIBUTORS.txt.
+HOLDERS = {
+    "astropy/astropy": "Astropy Developers",
+    "django/django": "Django Software Foundation and individual contributors",
+    "matplotlib/matplotlib": "Matplotlib Development Team",
+    "mwaskom/seaborn": "Michael L. Waskom",
+    "pallets/flask": "Pallets",
+    "psf/requests": "Kenneth Reitz",
+    "pydata/xarray": "xarray Developers",
+    "pylint-dev/pylint": "the pylint contributors",
+    "pytest-dev/pytest": "Holger Krekel and others",
+    "scikit-learn/scikit-learn": "The scikit-learn developers",
+    "sphinx-doc/sphinx": "the Sphinx team",
+    "sympy/sympy": "SymPy Development Team",
 }
-# A row under one of these goes to the `-copyleft` sets, kept apart from the others.
-COPYLEFT = frozenset({"GPL-2.0"})
+# The GPL's text does not say whether a program is under that version only or any later one; the repository does.
+# pylint declares GPL-2.0-or-later in setup.cfg or pyproject.toml at every base commit (scripts/swebench_licenses.py
+# checks it).
+GPL_DECLARED = {"pylint-dev/pylint": "GPL-2.0-or-later"}
+# Every license the import can read from a license file, and whether code under it is copyleft: such rows go to the
+# -copyleft sets. A license file that reads as none of these stops the import until it is reviewed.
+LICENSE_KINDS = {
+    "Apache-2.0": "permissive",
+    "BSD-2-Clause": "permissive",
+    "BSD-3-Clause": "permissive",
+    "GPL-2.0-only": "copyleft",
+    "GPL-2.0-or-later": "copyleft",
+    "ISC": "permissive",
+    "LicenseRef-Matplotlib": "permissive",  # not on the SPDX list: Matplotlib's own license agreement
+    "MIT": "permissive",
+}
+# A render line holds only the issue text and its hints, comments by GitHub users under no license that is established;
+# SPDX's word for that.
+NO_LICENSE = "NOASSERTION"
+
+
+@dataclass(frozen=True)
+class RowLicense:
+    """The license of a row's code: what its repository's license file grants at the row's base commit."""
+
+    spdx: str
+    holder: str
+    notices: tuple[str, ...]  # the copied files that go with the code, as paths under the corpus root
+
+    @property
+    def copyleft(self) -> bool:
+        return LICENSE_KINDS[self.spdx] == "copyleft"
+
+
+def license_of(text: str, repository: str) -> str:
+    """The SPDX id of the license that a license file's own words grant.
+
+    Read from the text, not from what anyone says of it: the first terms the file states, up to its first disclaimer,
+    so that the licenses of bundled code which some files list after their own do not count. A text that is none of
+    the licenses in ``LICENSE_KINDS``, or the GPL for a repository with no entry in ``GPL_DECLARED``, stops the import.
+    """
+    words = " ".join(text.split())
+    own = words.split("THIS SOFTWARE IS PROVIDED", 1)[0]
+    if words.startswith("GNU GENERAL PUBLIC LICENSE Version 2, June 1991"):
+        if repository not in GPL_DECLARED:
+            raise ValueError(f"{repository}: the GPL's text alone cannot tell 'only' from 'or later'; declare it first")
+        return GPL_DECLARED[repository]
+    if words.startswith("License agreement for matplotlib versions 1.3.0 and later"):
+        return "LicenseRef-Matplotlib"
+    if (
+        words.startswith("Apache License Version 2.0, January 2004")
+        or "Licensed under the Apache License, Version 2.0" in own
+    ):
+        return "Apache-2.0"
+    if "Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee" in own:
+        return "ISC"
+    if "Permission is hereby granted, free of charge, to any person obtaining a copy of this software" in own:
+        return "MIT"
+    if "Redistribution and use in source and binary forms, with or without modification, are permitted" in own:
+        return "BSD-3-Clause" if "endorse or promote products derived from this software" in own else "BSD-2-Clause"
+    raise ValueError(f"{repository}: a license file the import cannot read as a license it knows; review it first")
+
+
+def load_license_table() -> dict:
+    """The committed table of license files: ``files`` pins each one, ``versions`` names those at each base commit."""
+    return json.loads(LICENSE_TABLE.read_text("utf-8"))
+
+
+def licenses_from(table: dict, texts: dict[str, bytes]) -> dict[tuple[str, str], RowLicense]:
+    """``(repository, base commit) -> RowLicense`` for every base commit in ``table``, read from the files' ``texts``.
+
+    Code under the Apache License goes with a full text of it (Apache-2.0 4(a)), which a license file that only points
+    to the License is not, so the table joins one to it; a base commit whose files hold none stops the import.
+    """
+    licenses = {}
+    for version in table["versions"]:
+        repository = version["repository"]
+        names = [name for name in (version["license"], version["notice"], version["full_text"]) if name]
+        spdx = license_of(texts[version["license"]].decode("utf-8"), repository)
+        if spdx == "Apache-2.0" and not any(
+            b" ".join(texts[name].split()).startswith(b"Apache License Version 2.0, January 2004") for name in names
+        ):
+            raise ValueError(f"{repository}: {version['license']} goes with no full text of the Apache License")
+        if repository not in HOLDERS:
+            raise ValueError(f"{repository}: no copyright holder is named for it; name it first")
+        notices = tuple(f"{LICENSE_DIR}/{name}" for name in names)
+        for commit in version["commits"]:
+            licenses[(repository, commit)] = RowLicense(spdx, HOLDERS[repository], notices)
+    return licenses
+
 
 COLUMNS = ("repo", "instance_id", "base_commit", "patch", "problem_statement", "hints_text")
 # A row with either of these blank has no case to give; none has at the pinned revisions.
@@ -166,19 +260,31 @@ def set_name(family: str, form: str | None, copyleft: bool) -> str:
     return "-".join(["swebench", family, *([form] if form else []), *(["copyleft"] if copyleft else [])])
 
 
-def origin(source: Source, row_id: str, spdx: str) -> dict:
-    """Where a case came from. A parse case's message comes from the same row, its ``patch``."""
+def origin(source: Source, row: dict, code: RowLicense | None) -> dict:
+    """Where a case came from: the row, its repository, and the license of what the line holds.
+
+    A render line (``code`` None) holds the issue text and its hints alone: no license is established for them. A parse
+    line's message is the row's gold patch, code under its repository's license at the base commit, which names its
+    copyright holder and the copied files that go with it. A parse case's message comes from the same row, its
+    ``patch``, so no other file is named.
+    """
     found = {"dataset": DATASET, "source": source.uri, "sha256": source.sha256, "file": source.file}
-    return {**found, "row": row_id, "license": spdx}
+    found |= {"row": row["instance_id"], "repository": row["repo"]}
+    if code is None:
+        return {**found, "license": NO_LICENSE}
+    return {**found, "license": code.spdx, "copyright": code.holder, "notices": list(code.notices)}
 
 
 def build_sets(
     sources: Sequence[tuple[Source, list[dict]]],
+    licenses: dict[tuple[str, str], RowLicense],
     skipped: list[tuple[str, str]] | None = None,
     repeated: list[str] | None = None,
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: for every row a render case, a call case and a content case.
 
+    ``licenses`` gives the license of each row's code by its repository and base commit (``licenses_from``); a row
+    whose base commit it does not name stops the import. A row whose code is copyleft goes to the ``-copyleft`` sets.
     A row whose problem statement or patch is empty gets no cases, and is appended to ``skipped`` with its reason.
     A row whose instance an earlier source already gave (SWE-bench's test split holds all of Verified) gets no cases of
     its own, and its id is appended to ``repeated``; it must equal the earlier row in every column the import reads,
@@ -215,21 +321,22 @@ def build_sets(
                 if skipped is not None:
                     skipped.append((row_id, f"the {empty} is empty"))
                 continue
-            if row["repo"] not in LICENSES:
-                raise ValueError(f"{row_id}: {row['repo']} is not in the reviewed license table; review it first")
-            spdx = LICENSES[row["repo"]]
-            copyleft = spdx in COPYLEFT
+            code = licenses.get((row["repo"], row["base_commit"]))
+            if code is None:
+                raise ValueError(
+                    f"{row_id}: {row['repo']} at {row['base_commit']} is not in {LICENSE_TABLE.name}; "
+                    "rebuild it with scripts/swebench_licenses.py"
+                )
             request = request_for(row)
             notes = f"{source.label} {row_id}"
-            found = origin(source, row_id, spdx)
             case_slug = slug(row_id)
             render = {
                 "name": f"swebench-{source.family}-{case_slug}",
                 "request": request,
                 "notes": notes,
-                "origin": found,
+                "origin": origin(source, row, None),
             }
-            add("render", set_name(source.family, None, copyleft), render, row_id)
+            add("render", set_name(source.family, None, code.copyleft), render, row_id)
             for form, message, probe in (
                 ("call", call_message(row["patch"]), "the gold patch as one submit_patch call"),
                 ("content", content_message(row["patch"]), "the gold patch in a diff block"),
@@ -239,35 +346,64 @@ def build_sets(
                     "request": request,
                     "message": message,
                     "notes": f"{notes}: {probe}",
-                    "origin": found,
+                    "origin": origin(source, row, code),
                 }
-                add("parse", set_name(source.family, form, copyleft), line, row_id)
+                add("parse", set_name(source.family, form, code.copyleft), line, row_id)
     return sets
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``swebench-*`` files the import no longer writes."""
-    return corpus_sets.write(sets, corpus_dir, "swebench-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files: dict[str, bytes]) -> list[Path]:
+    """Write every set and ``files``, and remove ``swebench-*`` set files the import no longer writes.
+
+    ``files`` are the import's other files, the copied license files, as bytes by path under ``corpus_dir``.
+    """
+    written = corpus_sets.write(sets, corpus_dir, "swebench-")
+    for relative, content in sorted(files.items()):
+        path = corpus_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        written.append(path)
+    return written
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "swebench-", "SWE-bench set")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files: dict[str, bytes]) -> list[str]:
+    """One line per set file, or file of ``files``, that differs from a fresh import; empty when none does."""
+    problems = corpus_sets.check(sets, corpus_dir, "swebench-", "SWE-bench set")
+    for relative, content in sorted(files.items()):
+        path = corpus_dir / relative
+        if not path.is_file():
+            problems.append(f"{path}: missing")
+        elif path.read_bytes() != content:
+            problems.append(f"{path}: differs from a fresh import")
+    return problems
+
+
+def license_texts(table: dict, cache: Path) -> dict[str, bytes]:
+    """The bytes of every file the license table pins, fetched by repository, commit and sha256."""
+    texts = {}
+    for name, pin in table["files"].items():
+        owner, repository = pin["repository"].split("/")
+        texts[name] = github.fetch(
+            owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache
+        ).read_bytes()
+    return texts
 
 
 def run(args: argparse.Namespace) -> int:
     sources = []
     for source in SOURCES:
+        # The cards state no license: each row's code is under its repository's, read below.
         card = hf.fetch(source.dataset_id, source.revision, hf.CARD, source.card_sha256).read_text("utf-8")
-        hf.check_card_license(
-            source.dataset_id, card, None
-        )  # the cards state no license; each row's is its repository's
+        hf.check_card_license(source.dataset_id, card, None)
         sources.append((source, read_rows(hf.fetch(source.dataset_id, source.revision, source.file, source.sha256))))
+    table = load_license_table()
+    texts = license_texts(table, args.cache)
+    files = {f"{LICENSE_DIR}/{name}": text for name, text in texts.items()}
     skipped: list[tuple[str, str]] = []
     repeated: list[str] = []
-    sets = build_sets(sources, skipped=skipped, repeated=repeated)
+    sets = build_sets(sources, licenses_from(table, texts), skipped=skipped, repeated=repeated)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(sets, args.corpus, files)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -286,5 +422,5 @@ def run(args: argparse.Namespace) -> int:
             f"{len(repeated)} {TEST.label} row(s) are also {VERIFIED.label} rows; each is imported once, in the "
             "Verified sets"
         )
-    write_sets(sets, args.corpus)
+    write_sets(sets, args.corpus, files)
     return 0

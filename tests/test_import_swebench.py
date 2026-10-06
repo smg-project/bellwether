@@ -1,13 +1,16 @@
+import hashlib
 import json
 import re
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import corpus_sets, hf, swebench
+from bellwether.importers import corpus_sets, github, hf, swebench
 
+CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 COMMIT = "d26b2424437dabeeca94d7900b37d2df4410da0c"
 ISSUE = "UsernameValidator allows a trailing newline\r\nDescription\n"
 PATCH = (
@@ -96,6 +99,175 @@ def write_parquet(path, rows: list[dict]):
     return path
 
 
+BSD_3 = (
+    "Copyright (c) Django Software Foundation and individual contributors.\nAll rights reserved.\n\n"
+    "Redistribution and use in source and binary forms, with or without modification,\n"
+    "are permitted provided that the following conditions are met:\n\n"
+    "    1. Redistributions of source code must retain the above copyright notice,\n"
+    "       this list of conditions and the following disclaimer.\n\n"
+    "    2. Redistributions in binary form must reproduce the above copyright\n"
+    "       notice, this list of conditions and the following disclaimer.\n\n"
+    "    3. Neither the name of Django nor the names of its contributors may be used\n"
+    "       to endorse or promote products derived from this software without\n"
+    "       specific prior written permission.\n\n"
+    'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"\n'
+)
+# Two clauses for the project, then a bundled library's three after the first disclaimer, as Sphinx's LICENSE has.
+BSD_2 = (
+    "License for Sphinx\n==================\n\nCopyright (c) 2007-2019 by the Sphinx team (see AUTHORS file).\n"
+    "All rights reserved.\n\nRedistribution and use in source and binary forms, with or without\n"
+    "modification, are permitted provided that the following conditions are\nmet:\n\n"
+    "* Redistributions of source code must retain the above copyright\n  notice.\n\n"
+    "* Redistributions in binary form must reproduce the above copyright\n  notice.\n\n"
+    'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS\n"AS IS".\n\n'
+    "Licenses for incorporated software\n==================================\n\n"
+    "Redistribution and use in source and binary forms ... Neither the name of the copyright holder may be\n"
+    "used to endorse or promote products derived from this software.\n"
+)
+MIT = (
+    "The MIT License (MIT)\n\nCopyright (c) 2004 Holger Krekel and others\n\n"
+    "Permission is hereby granted, free of charge, to any person obtaining a copy of\n"
+    'this software and associated documentation files (the "Software"), to deal in\n'
+)
+ISC = (
+    "Copyright (c) 2012 Kenneth Reitz.\n\n"
+    "Permission to use, copy, modify, and/or distribute this software for any\n"
+    "purpose with or without fee is hereby granted, provided that the above\n"
+    "copyright notice and this permission notice appear in all copies.\n"
+)
+APACHE_NOTICE = (
+    "Copyright 2017 Kenneth Reitz\n\n"
+    '   Licensed under the Apache License, Version 2.0 (the "License");\n'
+    "   you may not use this file except in compliance with the License.\n"
+)
+APACHE_TEXT = (
+    "\n                                 Apache License\n                           Version 2.0, January 2004\n"
+    "                        http://www.apache.org/licenses/\n\n"
+    "   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n"
+)
+MATPLOTLIB = (
+    "License agreement for matplotlib versions 1.3.0 and later\n"
+    "=========================================================\n\n"
+    "1. This LICENSE AGREEMENT is between the Matplotlib Development Team\n"
+    '("MDT"), and the Individual or Organization\n'
+)
+GPL_2 = (
+    "                    GNU GENERAL PUBLIC LICENSE\n                       Version 2, June 1991\n\n"
+    " Copyright (C) 1989, 1991 Free Software Foundation, Inc.,\n"
+)
+LGPL_2_1 = "                  GNU LESSER GENERAL PUBLIC LICENSE\n                       Version 2.1, February 1999\n"
+
+
+@pytest.mark.parametrize(
+    ("text", "repository", "spdx"),
+    [
+        (BSD_3, "django/django", "BSD-3-Clause"),
+        (BSD_2, "sphinx-doc/sphinx", "BSD-2-Clause"),
+        (MIT, "pytest-dev/pytest", "MIT"),
+        (ISC, "psf/requests", "ISC"),
+        (APACHE_NOTICE, "psf/requests", "Apache-2.0"),
+        (APACHE_TEXT, "pydata/xarray", "Apache-2.0"),
+        (MATPLOTLIB, "matplotlib/matplotlib", "LicenseRef-Matplotlib"),
+        (GPL_2, "pylint-dev/pylint", "GPL-2.0-or-later"),
+    ],
+    ids=["bsd-3", "bsd-2", "mit", "isc", "apache-notice", "apache-text", "matplotlib", "gpl-2"],
+)
+def test_a_license_file_is_read_as_the_license_its_own_words_grant(text, repository, spdx):
+    assert swebench.license_of(text, repository) == spdx
+
+
+def test_a_license_text_the_import_does_not_know_or_a_gpl_whose_version_is_not_declared_stops_it():
+    with pytest.raises(
+        ValueError, match="astroid/astroid: a license file the import cannot read as a license it knows"
+    ):
+        swebench.license_of(LGPL_2_1, "astroid/astroid")
+    with pytest.raises(ValueError, match="org/gpl: the GPL's text alone cannot tell 'only' from 'or later'"):
+        swebench.license_of(GPL_2, "org/gpl")
+
+
+def committed_licenses() -> tuple[dict, dict[str, bytes], dict]:
+    """The committed license table, the copies of its files in the corpus, and the license of every base commit."""
+    table = swebench.load_license_table()
+    texts = {name: (CORPUS / swebench.LICENSE_DIR / name).read_bytes() for name in table["files"]}
+    return table, texts, swebench.licenses_from(table, texts)
+
+
+# What each repository's license files grant at the base commits the rows use: requests moved from ISC to Apache-2.0
+# in 2013, and pylint declares GPL-2.0-or-later in its packaging metadata.
+REPOSITORY_LICENSES = {
+    "astropy/astropy": {"BSD-3-Clause"},
+    "django/django": {"BSD-3-Clause"},
+    "matplotlib/matplotlib": {"LicenseRef-Matplotlib"},
+    "mwaskom/seaborn": {"BSD-3-Clause"},
+    "pallets/flask": {"BSD-3-Clause"},
+    "psf/requests": {"ISC", "Apache-2.0"},
+    "pydata/xarray": {"Apache-2.0"},
+    "pylint-dev/pylint": {"GPL-2.0-or-later"},
+    "pytest-dev/pytest": {"MIT"},
+    "scikit-learn/scikit-learn": {"BSD-3-Clause"},
+    "sphinx-doc/sphinx": {"BSD-2-Clause"},
+    "sympy/sympy": {"BSD-3-Clause"},
+}
+
+
+def test_each_copied_license_file_is_the_pinned_one():
+    table, texts, _ = committed_licenses()
+    assert {name: hashlib.sha256(text).hexdigest() for name, text in texts.items()} == {
+        name: pin["sha256"] for name, pin in table["files"].items()
+    }
+
+
+def test_every_base_commit_reads_as_its_repositorys_license():
+    _, _, licenses = committed_licenses()
+    found: dict[str, set[str]] = {}
+    for (repository, _), row_license in licenses.items():
+        found.setdefault(repository, set()).add(row_license.spdx)
+    assert found == REPOSITORY_LICENSES
+
+
+def test_each_copyright_holder_is_named_in_its_repositorys_license_or_notice_file():
+    table, texts, _ = committed_licenses()
+    for version in table["versions"]:
+        repository = version["repository"]
+        if repository in ("pydata/xarray", "pylint-dev/pylint"):
+            continue  # their license files are the Apache and GPL texts alone, which name no holder
+        files = b"\n".join(texts[name] for name in (version["license"], version["notice"]) if name)
+        assert swebench.HOLDERS[repository] in " ".join(files.decode("utf-8").split()), (repository, version["license"])
+
+
+def test_requests_rows_based_in_2012_are_isc_and_later_ones_apache_with_the_licenses_full_text():
+    _, texts, licenses = committed_licenses()
+    for commit in ("27b55a74d7b9bd2f8c60fd0ee342bcbbf40e0a66", "a0df2cbb10419037d11d04352b3175405ab52941"):
+        assert licenses[("psf/requests", commit)].spdx == "ISC"  # requests-774 and requests-863
+    later = licenses[("psf/requests", "2d763c90ae6ccee1a3c64bf70add776a2ba395ef")]  # requests-4106, 2017
+    assert later.spdx == "Apache-2.0"
+    [notice, full_text] = [texts[path.removeprefix(f"{swebench.LICENSE_DIR}/")] for path in later.notices]
+    assert b"Licensed under the Apache License, Version 2.0" in notice
+    assert full_text.split()[:4] == [b"Apache", b"License", b"Version", b"2.0,"]
+
+
+def test_the_committed_requests_cases_based_in_2012_say_isc():
+    found = {}
+    for form in ("call", "content"):
+        for raw in (CORPUS / "parse" / f"swebench-test-{form}.jsonl").read_bytes().split(b"\n"):
+            if b'"repository": "psf/requests"' in raw:
+                line = json.loads(raw)
+                found[(form, line["origin"]["row"])] = line["origin"]["license"]
+    for form in ("call", "content"):
+        assert found[(form, "psf__requests-774")] == found[(form, "psf__requests-863")] == "ISC"
+        assert found[(form, "psf__requests-4106")] == "Apache-2.0"
+
+
+DJANGO_COPY = f"swebench-django-django-{COMMIT[:12]}-LICENSE"
+PYLINT_COPY = f"swebench-pylint-dev-pylint-{COMMIT[:12]}-LICENSE"
+DJANGO = swebench.RowLicense(
+    "BSD-3-Clause", "Django Software Foundation and individual contributors", (f"licenses/{DJANGO_COPY}",)
+)
+PYLINT_LICENSE = swebench.RowLicense("GPL-2.0-or-later", "the pylint contributors", (f"licenses/{PYLINT_COPY}",))
+# The licenses of the made-up rows below: every one is based at COMMIT.
+LICENSES = {("django/django", COMMIT): DJANGO, ("pylint-dev/pylint", COMMIT): PYLINT_LICENSE}
+
+
 def test_rows_are_read_from_parquet_in_file_order_with_the_columns_the_import_uses(tmp_path):
     rows = [row(instance_id="django__django-11100", hints_text="Hint.\n"), row()]
     assert swebench.read_rows(write_parquet(tmp_path / "test.parquet", rows)) == rows
@@ -115,7 +287,7 @@ PYLINT = row(repo="pylint-dev/pylint", instance_id="pylint-dev__pylint-4551")
 
 def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
     test_row = row(instance_id="django__django-10097")
-    sets = swebench.build_sets([(swebench.VERIFIED, [row(), PYLINT]), (swebench.TEST, [test_row])])
+    sets = swebench.build_sets([(swebench.VERIFIED, [row(), PYLINT]), (swebench.TEST, [test_row])], LICENSES)
     assert sorted(sets) == [
         ("parse", "swebench-test-call"),
         ("parse", "swebench-test-content"),
@@ -127,14 +299,27 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         ("render", "swebench-verified"),
         ("render", "swebench-verified-copyleft"),
     ]
-    origin = {**VERIFIED_ORIGIN, "row": "django__django-11099", "license": "BSD-3-Clause"}
+    # A render line holds only the issue text and hints, comments by GitHub users with no license established.
+    render_origin = {
+        **VERIFIED_ORIGIN,
+        "row": "django__django-11099",
+        "repository": "django/django",
+        "license": "NOASSERTION",
+    }
+    # A parse line's message is the gold patch: code under the license of its repository at the row's base commit.
+    parse_origin = {
+        **render_origin,
+        "license": "BSD-3-Clause",
+        "copyright": "Django Software Foundation and individual contributors",
+        "notices": [f"licenses/{DJANGO_COPY}"],
+    }
     request = swebench.request_for(row())
     assert sets[("render", "swebench-verified")] == [
         {
             "name": "swebench-verified-django-django-11099",
             "request": request,
             "notes": "SWE-bench Verified django__django-11099",
-            "origin": origin,
+            "origin": render_origin,
         }
     ]
     [call] = sets[("parse", "swebench-verified-call")]
@@ -143,17 +328,29 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         "request": request,
         "message": swebench.call_message(PATCH),
         "notes": "SWE-bench Verified django__django-11099: the gold patch as one submit_patch call",
-        "origin": origin,
+        "origin": parse_origin,
     }
     assert list(call) == ["name", "request", "message", "notes", "origin"]
-    assert list(call["origin"]) == ["dataset", "source", "sha256", "file", "row", "license"]
+    assert list(call["origin"]) == [
+        "dataset", "source", "sha256", "file", "row", "repository", "license", "copyright", "notices"
+    ]  # fmt: skip
     [content] = sets[("parse", "swebench-verified-content")]
     assert content["name"] == "swebench-verified-content-django-django-11099"
     assert content["message"] == swebench.content_message(PATCH)
     assert content["notes"] == "SWE-bench Verified django__django-11099: the gold patch in a diff block"
+    assert content["origin"] == parse_origin
     [copyleft] = sets[("render", "swebench-verified-copyleft")]
     assert copyleft["name"] == "swebench-verified-pylint-dev-pylint-4551"
-    assert copyleft["origin"] == {**VERIFIED_ORIGIN, "row": "pylint-dev__pylint-4551", "license": "GPL-2.0"}
+    pylint = {**VERIFIED_ORIGIN, "row": "pylint-dev__pylint-4551", "repository": "pylint-dev/pylint"}
+    assert copyleft["origin"] == {**pylint, "license": "NOASSERTION"}
+    for form in ("call", "content"):
+        [line] = sets[("parse", f"swebench-verified-{form}-copyleft")]
+        assert line["origin"] == {
+            **pylint,
+            "license": "GPL-2.0-or-later",
+            "copyright": "the pylint contributors",
+            "notices": [f"licenses/{PYLINT_COPY}"],
+        }
     [tested] = sets[("render", "swebench-test")]
     assert tested["name"] == "swebench-test-django-django-10097"
     assert tested["notes"] == "SWE-bench test django__django-10097"
@@ -163,7 +360,8 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         "sha256": "d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567",
         "file": "data/test-00000-of-00001.parquet",
         "row": "django__django-10097",
-        "license": "BSD-3-Clause",
+        "repository": "django/django",
+        "license": "NOASSERTION",
     }
 
 
@@ -173,12 +371,12 @@ def names(lines: list[dict]) -> list[str]:
 
 def test_test_rows_that_are_verified_rows_are_left_to_the_verified_sets_and_reported():
     sources = [(swebench.VERIFIED, [row()]), (swebench.TEST, [row(), row(instance_id="django__django-10097")])]
-    sets = swebench.build_sets(sources)
+    sets = swebench.build_sets(sources, LICENSES)
     assert names(sets[("render", "swebench-test")]) == ["swebench-test-django-django-10097"]
     assert names(sets[("parse", "swebench-test-call")]) == ["swebench-test-call-django-django-10097"]
     assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11099"]
     repeated: list[str] = []
-    swebench.build_sets(sources, repeated=repeated)
+    swebench.build_sets(sources, LICENSES, repeated=repeated)
     assert repeated == ["django__django-11099"]
 
 
@@ -189,7 +387,7 @@ def test_a_repeated_row_that_differs_from_the_first_stops_the_import():
         match="django__django-11099: the SWE-bench test row differs from the SWE-bench "
         "Verified row in patch, hints_text",
     ):
-        swebench.build_sets(sources)
+        swebench.build_sets(sources, LICENSES)
 
 
 def test_rows_with_an_empty_patch_or_problem_statement_are_skipped_and_each_is_named():
@@ -198,12 +396,12 @@ def test_rows_with_an_empty_patch_or_problem_statement_are_skipped_and_each_is_n
         row(instance_id="django__django-2", problem_statement="\n"),
         row(),
     ]
-    sets = swebench.build_sets([(swebench.VERIFIED, rows)])
+    sets = swebench.build_sets([(swebench.VERIFIED, rows)], LICENSES)
     assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11099"]
     assert names(sets[("parse", "swebench-verified-content")]) == ["swebench-verified-content-django-django-11099"]
     skipped: list[tuple[str, str]] = []
     swebench.build_sets(
-        [(swebench.VERIFIED, [*rows, row(instance_id="django__django-3", patch=None)])], skipped=skipped
+        [(swebench.VERIFIED, [*rows, row(instance_id="django__django-3", patch=None)])], LICENSES, skipped=skipped
     )
     assert skipped == [
         ("django__django-1", "the patch is empty"),
@@ -212,10 +410,10 @@ def test_rows_with_an_empty_patch_or_problem_statement_are_skipped_and_each_is_n
     ]
 
 
-def test_a_repository_whose_license_was_not_reviewed_stops_the_import():
+def test_a_row_whose_base_commit_is_not_in_the_license_table_stops_the_import():
     rows = [row(repo="numpy/numpy", instance_id="numpy__numpy-1")]
-    with pytest.raises(ValueError, match="numpy__numpy-1: numpy/numpy is not in the reviewed license table"):
-        swebench.build_sets([(swebench.VERIFIED, rows)])
+    with pytest.raises(ValueError, match=f"numpy__numpy-1: numpy/numpy at {COMMIT} is not in swebench_licenses.json"):
+        swebench.build_sets([(swebench.VERIFIED, rows)], LICENSES)
 
 
 def test_two_rows_with_one_case_name_stop_the_import():
@@ -225,28 +423,34 @@ def test_two_rows_with_one_case_name_stop_the_import():
         match="rows 'django__django-11099' and 'Django__Django-11099' both become the case "
         "name swebench-verified-django-django-11099",
     ):
-        swebench.build_sets([(swebench.VERIFIED, [row(), twin])])
+        swebench.build_sets([(swebench.VERIFIED, [row(), twin])], LICENSES)
 
 
-def test_written_sets_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
-    sets, corpus = swebench.build_sets([(swebench.VERIFIED, [row(), PYLINT])]), tmp_path / "corpus"
+def test_written_sets_and_license_copies_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
+    sets, corpus = swebench.build_sets([(swebench.VERIFIED, [row(), PYLINT])], LICENSES), tmp_path / "corpus"
+    files = {f"licenses/{DJANGO_COPY}": BSD_3.encode(), f"licenses/{PYLINT_COPY}": GPL_2.encode()}
     (corpus / "render").mkdir(parents=True)
     for other in ("common.jsonl", "bfcl-simple-python.jsonl", "swebench-old.jsonl"):
         (corpus / "render" / other).write_text("{}\n")
-    swebench.write_sets(sets, corpus)
+    swebench.write_sets(sets, corpus, files)
     assert not (corpus / "render" / "swebench-old.jsonl").exists()
     assert (corpus / "render" / "common.jsonl").read_text() == "{}\n"
     assert (corpus / "render" / "bfcl-simple-python.jsonl").read_text() == "{}\n"
+    assert (corpus / "licenses" / DJANGO_COPY).read_bytes() == BSD_3.encode()
     text = (corpus / "parse" / "swebench-verified-call.jsonl").read_bytes().decode("utf-8")
     assert "Café" in text and "\\r\\n" in text and text.endswith("}\n") and text.count("\n") == 1
-    assert swebench.check_sets(sets, corpus) == []
+    assert swebench.check_sets(sets, corpus, files) == []
     (corpus / "parse" / "swebench-verified-call.jsonl").write_text("{}\n")
     (corpus / "parse" / "swebench-verified-content-copyleft.jsonl").unlink()
     (corpus / "render" / "swebench-stale.jsonl").write_text("{}\n")
-    assert swebench.check_sets(sets, corpus) == [
+    (corpus / "licenses" / DJANGO_COPY).write_text(MIT)
+    (corpus / "licenses" / PYLINT_COPY).unlink()
+    assert swebench.check_sets(sets, corpus, files) == [
         f"{corpus / 'parse' / 'swebench-verified-call.jsonl'}: differs from a fresh import",
         f"{corpus / 'parse' / 'swebench-verified-content-copyleft.jsonl'}: missing",
         f"{corpus / 'render' / 'swebench-stale.jsonl'}: no SWE-bench set writes it",
+        f"{corpus / 'licenses' / DJANGO_COPY}: differs from a fresh import",
+        f"{corpus / 'licenses' / PYLINT_COPY}: missing",
     ]
 
 
@@ -272,13 +476,45 @@ def fake_hub(tmp_path, verified: list[dict], test: list[dict], cards: dict[str, 
     return fetch, calls
 
 
+def fake_licenses(tmp_path, monkeypatch, texts: dict[str, str]) -> list[tuple]:
+    """A license table naming one license file per repository at ``COMMIT``, and ``github.fetch`` serving it.
+
+    Returns the fetches made, as ``(owner, repo, commit, path, sha256)``.
+    """
+    files, versions, served, calls = {}, [], {}, []
+    for repository, text in texts.items():
+        name = f"swebench-{repository.replace('/', '-')}-{COMMIT[:12]}-LICENSE"
+        sha256 = hashlib.sha256(text.encode()).hexdigest()
+        files[name] = {"repository": repository, "commit": COMMIT, "path": "LICENSE", "sha256": sha256}
+        versions.append(
+            {"repository": repository, "license": name, "notice": None, "full_text": None, "commits": [COMMIT]}
+        )
+        served[(repository, COMMIT, "LICENSE", sha256)] = tmp_path / "github" / name
+        served[(repository, COMMIT, "LICENSE", sha256)].parent.mkdir(parents=True, exist_ok=True)
+        served[(repository, COMMIT, "LICENSE", sha256)].write_text(text)
+
+    def fetch(owner, repo, commit, path, sha256, cache=github.CACHE):
+        calls.append((owner, repo, commit, path, sha256))
+        return served[(f"{owner}/{repo}", commit, path, sha256)]
+
+    monkeypatch.setattr(swebench, "load_license_table", lambda: {"files": files, "versions": versions})
+    monkeypatch.setattr(github, "fetch", fetch)
+    return calls
+
+
 def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, monkeypatch, capsys):
     empty = row(instance_id="django__django-1", patch="")
     fetch, calls = fake_hub(tmp_path, [row(), PYLINT, empty], [row(), row(instance_id="django__django-10097")])
     monkeypatch.setattr(hf, "fetch", fetch)
+    fetched = fake_licenses(tmp_path, monkeypatch, {"django/django": BSD_3, "pylint-dev/pylint": GPL_2})
     corpus = tmp_path / "corpus"
     assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 1
+    err = capsys.readouterr().err
+    assert f"{corpus / 'render' / 'swebench-verified.jsonl'}: missing" in err
+    assert f"{corpus / 'licenses' / DJANGO_COPY}: missing" in err
     assert main(["import", "swebench", "--corpus", str(corpus)]) == 0
+    assert (corpus / "licenses" / DJANGO_COPY).read_text() == BSD_3
+    assert (corpus / "licenses" / PYLINT_COPY).read_text() == GPL_2
     assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 0
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'swebench-verified.jsonl'}: 1 cases" in out
@@ -292,6 +528,11 @@ def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, m
     cards = {(s.dataset_id, s.revision, "README.md", s.card_sha256) for s in swebench.SOURCES}
     rows = {(s.dataset_id, s.revision, s.file, s.sha256) for s in swebench.SOURCES}
     assert set(calls) == cards | rows and len(cards | rows) == 4
+    django = ("django", "django", COMMIT, "LICENSE", hashlib.sha256(BSD_3.encode()).hexdigest())
+    assert django in fetched
+    (corpus / "licenses" / DJANGO_COPY).write_text(MIT)
+    assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 1
+    assert capsys.readouterr().err == f"{corpus / 'licenses' / DJANGO_COPY}: differs from a fresh import\n"
 
 
 @pytest.mark.parametrize("source", swebench.SOURCES, ids=lambda source: source.family)
@@ -310,6 +551,7 @@ def test_the_command_refuses_a_dataset_card_that_states_a_license_and_writes_not
 def test_the_command_refuses_sets_past_the_limit_and_writes_nothing(tmp_path, monkeypatch):
     fetch, _ = fake_hub(tmp_path, [row()], [row(instance_id="django__django-10097")])
     monkeypatch.setattr(hf, "fetch", fetch)
+    fake_licenses(tmp_path, monkeypatch, {"django/django": BSD_3})
     monkeypatch.setattr(corpus_sets, "LIMIT", 1)
     with pytest.raises(ValueError, match=r"^the swebench-\* sets take [0-9]+ bytes, past the 1 one source may take"):
         main(["import", "swebench", "--corpus", str(tmp_path / "corpus")])

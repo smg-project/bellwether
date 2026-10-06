@@ -63,9 +63,9 @@ together.
 | Shapes (BFCL and GSM8K) | `shapes-<shape>` for six message shapes, `reasoning`, `content`, `reasoning-content`, `reasoning-calls`, `content-calls` and `reasoning-content-calls`: 1000 parse cases each, all distinct, with 6000 distinct messages among them, the same 1000 pairs of a BFCL parse case and a GSM8K test row in every set | BFCL's and GSM8K's pins above: the wheel, and `grade_school_math/data/test.jsonl` with `LICENSE` | Apache-2.0 for the BFCL part of each case and MIT for the GSM8K part, each checked by its importer's check on every import; the GSM8K notice is the copy in `corpus/licenses/gsm8k-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla; Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 | MGSM | `mgsm-<lang>` for 10 of its 11 languages (bn, de, es, fr, ja, ru, sw, te, th, zh): 250 render cases each, 2500 in all, one per row, and none for English (below); `mgsm-<lang>-content` for all 11: the same rows as parse cases, the final answer alone as content, 2750 cases holding 134 distinct messages; `mgsm-exemplars`: 88 parse cases, the 8 worked exemplars of each language (no row or exemplar of the pinned files is left out, and no case repeats an earlier one) | `github:google-research/url-nlp@3622039cf51f7eeffa58b957332a8e8c337981d7`, directory `mgsm/`; the sha256 of each file is listed below | CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/), checked against the LICENSE file's sha256 and first line on every import and copied to `corpus/licenses/mgsm-LICENSE`; the GSM8K problems it translates are MIT (below) | MGSM, Shi et al. 2022, Google Research: https://github.com/google-research/url-nlp |
 | Hermes | `hermes-func-calling-singleturn`, `hermes-func-calling` and `hermes-glaive-func-calling`, from every row of the dataset's three function-calling configs, kept as `.jsonl.zst` in Git LFS (99.6 MB as plain JSON Lines, past the 50 MB that stay plain; 5.8 MB compressed): 20769 render cases, one per user turn or tool result an assistant turn answers; 20773 parse cases, one per assistant turn; every case distinct, with 10830 distinct messages among the parse cases (8803 of the 18746 in `hermes-glaive-func-calling`). 1836 of the 8995 rows give no case, and 1964 cases that repeat an earlier one are left out (the import names both) | `hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d28cfbcf4b915c04ea1e072030529b4bda`, each file's sha256 in the importer; the License copy from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84` (`content/licenses/LICENSE-2.0.txt`), sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` | Apache-2.0, checked in the dataset card's YAML front matter on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt) to `corpus/licenses/hermes-LICENSE`, which `--check` checks | Hermes Function-Calling V1, NousResearch; synthetic data led by @interstellarninja with @NousResearch, @teknium, @THEODOROS and others, and Glaive AI's Glaive Function Calling 5k, updated and cleaned: https://huggingface.co/datasets/NousResearch/hermes-function-calling-v1 |
-| SWE-bench Verified | `swebench-verified` (render), `swebench-verified-call` and `swebench-verified-content` (parse): 490 cases each, one per row outside pylint | `hf://datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3`, `data/test-00000-of-00001.parquet`, sha256 `030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25` | each row's repository's license, in its `origin` (below) | SWE-bench, Jimenez et al. 2024, Princeton NLP: https://github.com/SWE-bench/SWE-bench; Verified, OpenAI |
+| SWE-bench Verified | `swebench-verified` (render), `swebench-verified-call` and `swebench-verified-content` (parse): 490 cases each, one per row outside pylint | `hf://datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3`, `data/test-00000-of-00001.parquet`, sha256 `030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25` | each row's code: its repository's license at the row's base commit, read from the repository's license file there and copied to `corpus/licenses/` (below); none is established for the issue texts | SWE-bench, Jimenez et al. 2024, Princeton NLP: https://github.com/SWE-bench/SWE-bench; Verified, OpenAI |
 | SWE-bench test | `swebench-test`, `swebench-test-call` and `swebench-test-content`: 1747 cases each, one per test row outside pylint that is not a Verified row. All 500 Verified rows are test rows, equal in every column the import reads, so each is imported once, as Verified | `hf://datasets/SWE-bench/SWE-bench@c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2`, `data/test-00000-of-00001.parquet`, sha256 `d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567` | as above | as above |
-| SWE-bench, copyleft | the rows from pylint-dev/pylint, kept apart: `swebench-verified-copyleft`, `swebench-verified-call-copyleft` and `swebench-verified-content-copyleft` (10 cases each); `swebench-test-copyleft`, `swebench-test-call-copyleft` and `swebench-test-content-copyleft` (47 each) | the two files above | GPL-2.0 | as above |
+| SWE-bench, copyleft | the rows from pylint-dev/pylint, kept apart: `swebench-verified-copyleft`, `swebench-verified-call-copyleft` and `swebench-verified-content-copyleft` (10 cases each); `swebench-test-copyleft`, `swebench-test-call-copyleft` and `swebench-test-content-copyleft` (47 each) | the two files above | GPL-2.0-or-later, copied as above | as above |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -254,16 +254,30 @@ commit." Each row gives two parse cases on that request. In `-call`, the message
 call whose arguments are `{"patch": ...}` with the gold patch, written as JSON with raw Unicode. In `-content`, the
 message's content is the gold patch in a fenced `diff` block; a patch without a final newline gets one before the
 closing fence, and every patch at these pins has one. A row with an empty problem statement or patch is skipped and
-named; at these pins none is. The sets take 47.0 MB as plain JSON Lines, under the 50 MB at which a source moves to the
+named; at these pins none is. The sets take 47.8 MB as plain JSON Lines, under the 50 MB at which a source moves to the
 fixtures' form (`docs/benchmark-sets.md`, Storage), and the import refuses to write more.
 
 The SWE-bench dataset cards state no license, and the import checks on every run that their front matter still states
-none. Each row's code is under its repository's license, which the importer takes from a table in its code, read on
-2026-10-06 from each repository's LICENSE file and GitHub's license API: BSD-3-Clause for astropy, django,
-scikit-learn, seaborn, flask and sympy; BSD-2-Clause for sphinx; MIT for pytest; Apache-2.0 for requests and xarray;
-Matplotlib's own license; GPL-2.0 for pylint. The data has no file to check those licenses against, so the import cannot
-notice a change; a repository missing from the table stops it. The issue texts and hints are comments by GitHub users,
-which those licenses do not obviously cover. Sets built from copyleft code end in `-copyleft` and hold nothing else.
+none. A row's code is under its repository's license at the row's base commit, read from the repository's own license
+file there: `LICENSE`, `LICENSE.md`, `LICENSE.rst`, `COPYING`, or Matplotlib's `LICENSE/LICENSE`.
+`scripts/swebench_licenses.py` finds that file and any `NOTICE` file at every base commit, in the repositories' history,
+and pins each by repository, commit and sha256 in `src/bellwether/importers/swebench_licenses.json`. The import fetches
+each pinned file through `importers/github.py` and copies it to
+`corpus/licenses/swebench-<owner>-<repo>-<commit>-<file>`, named for the earliest base commit that holds it, and
+`--check` compares the copies as it does a set. Where a license file changed across the base commits, each version is
+copied and each row names its own: requests was under ISC until 2013 and under Apache-2.0 after, and most other changes
+are copyright years. A license file that only points to the Apache License (requests, 2013 to 2019) goes with the
+repository's full text of it, which Apache-2.0 4(a) asks for.
+
+The license is read from the file's own words, and a file that reads as none of the licenses the import knows stops it:
+BSD-3-Clause for astropy, django, scikit-learn, seaborn, flask and sympy; BSD-2-Clause for sphinx; MIT for pytest; ISC
+and then Apache-2.0 for requests; Apache-2.0 for xarray; Matplotlib's own license; GPL-2.0-or-later for pylint, whose
+license file is the GPL's text and whose packaging metadata declares the version. A parse line's `origin` adds the
+repository, the license of its message (the gold patch), the copyright holder that the license or NOTICE file names
+(xarray's README and pylint's file headers, whose license files name none), and the copies that go with it, as
+`notices`. A render line holds only the issue text and its hints, comments by GitHub users under no license that is
+established, so its `origin` names the repository and the license `NOASSERTION`. Sets built from copyleft code end in
+`-copyleft` and hold nothing else.
 
 Set names starting with `bfcl-`, `gsm8k-`, `hermes-`, `mgsm-`, `shapes-` or `swebench-` belong to that importer:
 `bellwether import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import
@@ -273,11 +287,12 @@ sets otherwise.
 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` and downloads them on a miss. It then needs PyPI to
 still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from PyPI does not,
-and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL import copies and
-the License the Hermes import copies are read from `raw.githubusercontent.com` at the pinned commit, which serves them
-as long as the repository keeps that commit. `bellwether import shapes --check` reads the same pinned files as the BFCL
-and GSM8K imports. The Hermes files are read from the Hugging Face Hub at the pinned commit and kept in the same cache,
-under `huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`.
+and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL import copies, the
+License the Hermes import copies and the license files the SWE-bench import copies are read from
+`raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that commit.
+`bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The Hermes files are read
+from the Hugging Face Hub at the pinned commit and kept in the same cache, under `huggingface/`, so a cached copy also
+serves `HF_HUB_OFFLINE=1`.
 SWE-bench's files are read through the Hugging Face cache (`HF_HUB_CACHE`) instead, downloaded on a miss or never with
 `HF_HUB_OFFLINE=1`, and each is checked against its sha256 on every read. The Hub serves them as long as each dataset
 keeps its pinned commit, which a squashed history or a deleted dataset would end.
