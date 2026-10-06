@@ -197,7 +197,7 @@ def _cast(properties: dict) -> dict:
 
 OMIT = object()
 NOT_STRINGS = "carries a value that is not a string, which the category's checker refuses (#26)"
-NO_FIRST_CALL = "the first turn has no gold call, so there is no message to parse"
+NO_FIRST_CALL = "the first turn has no ground-truth call, so there is no message to parse"
 
 
 class Unanswerable(ValueError):
@@ -283,10 +283,10 @@ def message_for(answer: dict, functions: list[dict]) -> dict:
 
 
 def first_turn_message(answer: dict, functions: list[dict], defs: dict[str, list[str]]) -> dict:
-    """The assistant message a parser must return for a multi_turn row's first turn: its gold calls, in order.
+    """The assistant message a parser must return for a multi_turn row's first turn: its ground-truth calls, in order.
 
-    BFCL writes each gold call as Python source, ``cd(folder='document')``, and its executor runs it on the class.
-    Positional values take the parameters of the method's ``def`` in order (``defs``: each method's, from
+    BFCL writes each ground-truth call as Python source, ``cd(folder='document')``, and its executor runs it on the
+    class. Positional values take the parameters of the method's ``def`` in order (``defs``: each method's, from
     ``read_func_defs``), which the function doc may list otherwise. Keyword values keep their names, and each value is
     read with ``ast.literal_eval``. A call this cannot read stops the import, naming the row and the call: one that is
     not a call to a named function, passes keywords by unpacking, gives a value that is not a literal, or passes values
@@ -405,7 +405,7 @@ def _source_file(node: ast.expr, strings: dict[str, str]) -> str:
 def read_func_defs(wheel: zipfile.ZipFile) -> dict[str, dict[str, list[str]]]:
     """Each multi_turn class's methods, with the parameters each takes by position: its ``def``'s, after ``self``.
 
-    BFCL's executor runs a gold call on an instance of the class (``execute_multi_turn_func_call``,
+    BFCL's executor runs a ground-truth call on an instance of the class (``execute_multi_turn_func_call``,
     ``bfcl_eval/eval_checker/multi_turn_eval/multi_turn_utils.py:13``), so a value passed by position takes the
     ``def``'s parameter, and a function doc may list them in another order (``TravelAPI.purchase_insurance`` swaps
     ``booking_id`` and ``insurance_cost``). Each class's source is parsed with ``ast``, never imported or run. Only the
@@ -511,10 +511,10 @@ def build_sets(
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
 
-    A multi_turn row gives the request and the gold calls of its first turn. A Java or JavaScript row gets its parse
-    case only when every value it carries is a string (``string_valued``), a multi_turn row only when its first turn
-    has a gold call, and a row for which no call the rule builds passes BFCL's checker gets none (``Unanswerable``);
-    each such row is appended to ``skipped`` with its reason.
+    A multi_turn row gives the request and the ground-truth calls of its first turn. A Java or JavaScript row gets its
+    parse case only when every value it carries is a string (``string_valued``), a multi_turn row only when its first
+    turn has a ground-truth call, and a row for which no call the rule builds passes BFCL's checker gets none
+    (``Unanswerable``); each such row is appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}

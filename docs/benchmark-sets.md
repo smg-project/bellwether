@@ -163,13 +163,13 @@ first turn, as `bfcl-multi-turn-<category>`. The request is the first one the ha
 row: the turn's messages and no system message, with the functions of the row's classes as
 tools, less those `missed_function` holds back for a later turn. The functions come from the
 class-to-file map in the wheel's source, parsed with `ast`, and go through the same language hint
-and `convert_to_tool`. The parse message is the turn's gold calls in order: each call string is
-parsed with `ast`, a value passed by position takes the parameter of the class method's `def`,
-read from the class's source with `ast` (BFCL's executor runs the call on the class, and
+and `convert_to_tool`. The parse message is the turn's ground-truth calls in order: each call
+string is parsed with `ast`, a value passed by position takes the parameter of the class method's
+`def`, read from the class's source with `ast` (BFCL's executor runs the call on the class, and
 `purchase_insurance`'s doc lists two of its parameters the other way round), and each call is
 held to the same checker rules. That gives 600 render cases and 425 parse cases; the 175 miss_func
-and miss_param rows whose first turn has no gold call stay render-only. Later turns wait for a
-decision: each of their requests carries the results of the earlier calls, which only BFCL's
+and miss_param rows whose first turn has no ground-truth call stay render-only. Later turns wait
+for a decision: each of their requests carries the results of the earlier calls, which only BFCL's
 simulators produce.
 
 The three sets repeat cases: 481 of the 600 render cases are distinct requests, and 309 of the 425

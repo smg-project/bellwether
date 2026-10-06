@@ -759,7 +759,7 @@ NOTE = fn("note", {"tags": {"type": "array"}, "due": {"type": "dict"}, "pin": {"
 DEFS = {"order": ["drink", "size"], "send": ["to"], "sort": [], "note": ["tags", "due", "pin"]}
 
 
-def test_the_first_turn_gold_calls_become_one_message_in_their_order():
+def test_the_first_turn_ground_truth_calls_become_one_message_in_their_order():
     answer = {
         "id": "multi_turn_base_0",
         "ground_truth": [
