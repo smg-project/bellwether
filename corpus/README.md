@@ -340,8 +340,10 @@ SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept
 sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history
 or a deleted dataset would end.
 
-`bellwether import glaive-v2 --check` reads the pinned file through the Hugging Face cache (`~/.cache/huggingface/hub`)
-and downloads it on a miss; with `HF_HUB_OFFLINE=1` it reads the cache only. CI caches the file by revision.
+The glaive-v2 file and card come through `hf.fetch`, which keeps them in the Hugging Face cache layout under the same
+`~/.cache/bellwether/datasets` (`huggingface/`) and downloads them on a miss; with `HF_HUB_OFFLINE=1` it reads the
+cache only. CI keeps that directory whole, the store Xet keeps a file's bytes in included, in its one cache of pinned
+files.
 
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.

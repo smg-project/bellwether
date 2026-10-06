@@ -39,12 +39,6 @@ jobs:
       - run: uv run bellwether import shapes --check
       - run: uv run bellwether import hermes --check
       - run: uv run bellwether import swebench --check
-      # The glaive-v2 import reads its pinned file (271 MB) through the Hugging Face cache; at a commit revision a
-      # cached file is served without a request to the Hub.
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/huggingface/hub/datasets--glaiveai--glaive-function-calling-v2
-          key: hf-glaiveai-glaive-function-calling-v2-e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac
       - run: uv run bellwether import glaive-v2 --check
       - uses: actions/cache@v6
         with:
