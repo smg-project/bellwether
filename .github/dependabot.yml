@@ -8,3 +8,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Pinned to what vllm/vllm-openai ships; they move with that pin (pyproject.toml).
+      - dependency-name: transformers
+      - dependency-name: tokenizers
+      - dependency-name: jinja2
