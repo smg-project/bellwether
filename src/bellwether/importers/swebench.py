@@ -8,9 +8,9 @@ SWE-bench has no prompt and no tools, so the request and the messages are bellwe
 - a content case: the gold patch in a fenced ``diff`` block.
 
 Verified is imported whole. SWE-bench's test split holds all of Verified's rows, so a test row that Verified already
-gave is imported once, in the Verified sets. The files are read with ``hf.fetch`` into the importers' cache and parsed
-with ``pyarrow``; the sets are written and checked, and what the import keeps and leaves out is printed, by the set
-writer the importers share (``corpus_sets``).
+gave goes where that row goes. SWE-bench's dev split is not imported: its repositories' licenses are not reviewed. The
+files are read with ``hf.fetch`` into the importers' cache and parsed with ``pyarrow``; the sets are written and
+checked, and what the import keeps and leaves out is printed, by the set writer the importers share (``corpus_sets``).
 
 The dataset cards state no license. A row's code, its gold patch, is under its repository's license at the row's base
 commit, read from the repository's license file there (``license_of``). ``swebench_licenses.json`` pins that file and
@@ -272,8 +272,13 @@ def licenses_from(table: dict, texts: dict[str, bytes]) -> dict[tuple[str, str],
 
 
 COLUMNS = ("repo", "instance_id", "base_commit", "patch", "problem_statement", "hints_text")
-# A row with either of these blank has no case to give; none has at the pinned revisions.
-EMPTY = (("problem statement", "problem_statement"), ("patch", "patch"))
+# A row with any of these blank has no case to give; none has at the pinned revisions.
+EMPTY = (
+    ("problem statement", "problem_statement"),
+    ("patch", "patch"),
+    ("base commit", "base_commit"),
+    ("repository", "repo"),
+)
 SYSTEM = "You are working on the {repo} repository at commit {base_commit}."
 HINTS = "\n\nHints:\n"
 # The text bellwether writes into a SWE-bench case, which the dataset does not have, by the short names that
@@ -386,20 +391,25 @@ def build_sets(
     sources: Sequence[tuple[Source, list[dict]]],
     licenses: dict[tuple[str, str], RowLicense],
     skipped: list[tuple[str, str]] | None = None,
-    repeated: list[str] | None = None,
+    repeated: list[tuple[str, str, str]] | None = None,
+    blank_hints: list[str] | None = None,
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: for every row a render case, a call case and a content case.
 
     ``licenses`` gives the license of each row's code by its repository and base commit (``licenses_from``); a row
     whose base commit it does not name stops the import. A row whose code is copyleft goes to the ``-copyleft`` sets.
-    A row whose problem statement or patch is empty, or whose patch carries code under other terms (``OTHER_TERMS``),
-    gets no cases, and is appended to ``skipped`` with its reason.
-    A row whose instance an earlier source already gave (SWE-bench's test split holds all of Verified) gets no cases of
-    its own, and its id is appended to ``repeated``; it must equal the earlier row in every column the import reads,
-    or the import stops.
+    A row whose problem statement, patch, base commit or repository is empty, or whose patch carries code under other
+    terms (``OTHER_TERMS``), gets no cases, and is appended to ``skipped`` with its reason.
+
+    A row whose instance an earlier row already gave, in its own file or an earlier one (SWE-bench's test split holds
+    all of Verified), must equal that row in every column the import reads, or the import stops. It gets no cases of
+    its own: when the first row gave cases, ``(id, its file's label, the first row's file's label)`` is appended to
+    ``repeated``; when the first row gave none, the row is appended to ``skipped``, since it gives none either. A row
+    whose hints hold only whitespace gets a user turn without them, and its id is appended to ``blank_hints``.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     first: dict[str, tuple[Source, dict]] = {}
+    gave: dict[str, bool] = {}  # whether the first row of an instance gave cases
     owner: dict[tuple[str, str], str] = {}
 
     def add(kind: str, into: str, line: dict, row_id: str) -> None:
@@ -420,10 +430,14 @@ def build_sets(
                     raise ValueError(
                         f"{row_id}: the {source.label} row differs from the {earlier.label} row in {', '.join(differ)}"
                     )
-                if repeated is not None:
-                    repeated.append(row_id)
+                if gave[row_id]:
+                    if repeated is not None:
+                        repeated.append((row_id, source.label, earlier.label))
+                elif skipped is not None:
+                    skipped.append((row_id, f"it repeats a {earlier.label} row that gives no case"))
                 continue
             first[row_id] = (source, row)
+            gave[row_id] = False
             empty = next((what for what, column in EMPTY if blank(row[column])), None)
             if empty is not None:
                 if skipped is not None:
@@ -439,6 +453,9 @@ def build_sets(
                     f"{row_id}: {row['repo']} at {row['base_commit']} is not in {LICENSE_TABLE.name}; "
                     "rebuild it with scripts/swebench_licenses.py"
                 )
+            gave[row_id] = True
+            if row["hints_text"] and not has_hints(row) and blank_hints is not None:
+                blank_hints.append(row_id)
             request = request_for(row)
             notes = f"{source.label} {row_id}"
             case_slug = slug(row_id)
@@ -462,6 +479,18 @@ def build_sets(
                 }
                 add("parse", set_name(source.family, form, code.copyleft), line, row_id)
     return sets
+
+
+def report_repeated(repeated: list[tuple[str, str, str]]) -> None:
+    """Print, for each file and the file that first gave its rows, how many of its rows repeat one imported there."""
+    counts: dict[tuple[str, str], int] = {}
+    for _, label, earlier in repeated:
+        counts[(label, earlier)] = counts.get((label, earlier), 0) + 1
+    for (label, earlier), count in counts.items():
+        print(
+            f"{count} {label} row(s) repeat a {earlier} row, equal in every column the import reads; each is "
+            "imported once, as that row"
+        )
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files: dict[str, bytes]) -> list[Path]:
@@ -496,8 +525,10 @@ def run(args: argparse.Namespace) -> int:
     texts = license_texts(table, args.cache)
     files = {f"{LICENSE_DIR}/{name}": text for name, text in texts.items()}
     skipped: list[tuple[str, str]] = []
-    repeated: list[str] = []
-    sets = build_sets(sources, licenses_from(table, texts), skipped=skipped, repeated=repeated)
+    repeated: list[tuple[str, str, str]] = []
+    blank_hints: list[str] = []
+    licenses = licenses_from(table, texts)
+    sets = build_sets(sources, licenses, skipped=skipped, repeated=repeated, blank_hints=blank_hints)
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
         problems = check_sets(kept, args.corpus, files)
@@ -509,10 +540,8 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     corpus_sets.report("SWE-bench", sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped(skipped)
-    if repeated:
-        print(
-            f"{len(repeated)} {TEST.label} row(s) are also {VERIFIED.label} rows; each is imported once, in the "
-            "Verified sets"
-        )
+    report_repeated(repeated)
+    if blank_hints:
+        print(f"no hints for {len(blank_hints)} row(s) ({', '.join(blank_hints)}): they hold only whitespace")
     write_sets(kept, args.corpus, files)
     return 0

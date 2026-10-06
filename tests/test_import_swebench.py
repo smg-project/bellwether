@@ -397,45 +397,79 @@ def names(lines: list[dict]) -> list[str]:
     return [line["name"] for line in lines]
 
 
-def test_test_rows_that_are_verified_rows_are_left_to_the_verified_sets_and_reported():
-    sources = [(swebench.VERIFIED, [row()]), (swebench.TEST, [row(), row(instance_id="django__django-10097")])]
-    sets = swebench.build_sets(sources, LICENSES)
+def test_a_repeated_row_goes_where_its_first_went_and_is_reported_by_what_became_of_that_row():
+    other = row(instance_id="django__django-10097", problem_statement="Another issue.\n")
+    empty = row(instance_id="django__django-1", patch="")
+    sources = [(swebench.VERIFIED, [row(), empty, row()]), (swebench.TEST, [row(), other, empty])]
+    repeated: list[tuple[str, str, str]] = []
+    skipped: list[tuple[str, str]] = []
+    sets = swebench.build_sets(sources, LICENSES, skipped=skipped, repeated=repeated)
+    assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11099"]
     assert names(sets[("render", "swebench-test")]) == ["swebench-test-django-django-10097"]
     assert names(sets[("parse", "swebench-test-call")]) == ["swebench-test-call-django-django-10097"]
-    assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11099"]
-    repeated: list[str] = []
-    swebench.build_sets(sources, LICENSES, repeated=repeated)
-    assert repeated == ["django__django-11099"]
+    # A row repeated within its own file, and a test row that is a Verified row: each is imported once, as the first.
+    assert repeated == [
+        ("django__django-11099", "SWE-bench Verified", "SWE-bench Verified"),
+        ("django__django-11099", "SWE-bench test", "SWE-bench Verified"),
+    ]
+    # A repeat of a row that gives no case gives none either, and is named with the others left out.
+    assert skipped == [
+        ("django__django-1", "the patch is empty"),
+        ("django__django-1", "it repeats a SWE-bench Verified row that gives no case"),
+    ]
 
 
-def test_a_repeated_row_that_differs_from_the_first_stops_the_import():
-    sources = [(swebench.VERIFIED, [row()]), (swebench.TEST, [row(hints_text="New.\n", patch="-a\n+b\n")])]
-    with pytest.raises(
-        ValueError,
-        match="django__django-11099: the SWE-bench test row differs from the SWE-bench "
-        "Verified row in patch, hints_text",
-    ):
+DIFFERENT = {
+    "repo": "django/other",
+    "base_commit": "f" * 40,
+    "patch": "-a\n+b\n",
+    "problem_statement": "New.\n",
+    "hints_text": "New.\n",
+}
+
+
+def test_every_column_the_import_reads_but_the_id_is_compared_for_a_repeated_row():
+    assert set(DIFFERENT) == set(swebench.COLUMNS) - {"instance_id"}
+
+
+@pytest.mark.parametrize("column", DIFFERENT)
+def test_a_repeated_row_that_differs_from_the_first_in_any_column_stops_the_import(column):
+    sources = [(swebench.VERIFIED, [row()]), (swebench.TEST, [row(**{column: DIFFERENT[column]})])]
+    differs = f"django__django-11099: the SWE-bench test row differs from the SWE-bench Verified row in {column}$"
+    with pytest.raises(ValueError, match=differs):
         swebench.build_sets(sources, LICENSES)
 
 
-def test_rows_with_an_empty_patch_or_problem_statement_are_skipped_and_each_is_named():
+def test_rows_with_an_empty_patch_problem_statement_base_commit_or_repository_are_skipped_and_named():
     rows = [
         row(instance_id="django__django-1", patch=""),
         row(instance_id="django__django-2", problem_statement="\n"),
+        row(instance_id="django__django-3", patch=None),
+        row(instance_id="django__django-4", base_commit=None),
+        row(instance_id="django__django-5", repo=" "),
         row(),
     ]
-    sets = swebench.build_sets([(swebench.VERIFIED, rows)], LICENSES)
+    skipped: list[tuple[str, str]] = []
+    sets = swebench.build_sets([(swebench.VERIFIED, rows)], LICENSES, skipped=skipped)
     assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11099"]
     assert names(sets[("parse", "swebench-verified-content")]) == ["swebench-verified-content-django-django-11099"]
-    skipped: list[tuple[str, str]] = []
-    swebench.build_sets(
-        [(swebench.VERIFIED, [*rows, row(instance_id="django__django-3", patch=None)])], LICENSES, skipped=skipped
-    )
     assert skipped == [
         ("django__django-1", "the patch is empty"),
         ("django__django-2", "the problem statement is empty"),
         ("django__django-3", "the patch is empty"),
+        ("django__django-4", "the base commit is empty"),
+        ("django__django-5", "the repository is empty"),
     ]
+
+
+def test_hints_that_hold_only_whitespace_stay_out_of_the_user_turn_and_each_row_is_named():
+    rows = [row(instance_id="django__django-11100", hints_text=" \n\t"), row(hints_text="Hint.\n")]
+    blank_hints: list[str] = []
+    sets = swebench.build_sets([(swebench.VERIFIED, rows)], LICENSES, blank_hints=blank_hints)
+    assert blank_hints == ["django__django-11100"]
+    [blank, hinted] = sets[("render", "swebench-verified")]
+    assert blank["request"]["messages"][1]["content"] == ISSUE
+    assert hinted["request"]["messages"][1]["content"] == ISSUE + "\n\nHints:\nHint.\n"
 
 
 def test_a_row_whose_patch_carries_code_under_other_terms_is_left_out_and_named(monkeypatch):
@@ -561,11 +595,11 @@ def fake_licenses(tmp_path, monkeypatch, texts: dict[str, str]) -> list[tuple]:
 
 
 def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, monkeypatch, capsys):
-    empty = row(instance_id="django__django-1", patch="")
-    tested = row(instance_id="django__django-10097", problem_statement="Another issue.\n")
+    empty = [row(instance_id=f"django__django-{number}", patch="") for number in range(1, 5)]
+    tested = row(instance_id="django__django-10097", problem_statement="Another issue.\n", hints_text=" \n")
     # The same request and patch as django__django-11099: each of its cases repeats one of that row's.
     repeat = row(instance_id="django__django-10098")
-    fetch, calls = fake_hub(tmp_path, [row(), PYLINT, empty], [row(), tested, repeat])
+    fetch, calls = fake_hub(tmp_path, [row(), PYLINT, *empty], [row(), tested, repeat])
     monkeypatch.setattr(hf, "fetch", fetch)
     fetched = fake_licenses(tmp_path, monkeypatch, {"django/django": BSD_3, "pylint-dev/pylint": GPL_2})
     corpus, cache = tmp_path / "corpus", tmp_path / "cache"
@@ -587,8 +621,11 @@ def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, m
         f"{corpus / 'parse' / 'swebench-test-call.jsonl'}: 1 cases, 1 left out as repeats, 1 distinct messages",
         f"{corpus / 'parse' / 'swebench-verified-call-copyleft.jsonl'}: 1 cases, 1 distinct messages",
         f"{corpus}: 9 cases in the 9 SWE-bench sets, 3 left out as repeats, 2 distinct messages",
-        "no case for 1 row(s) (django__django-1): the patch is empty",
-        "1 SWE-bench test row(s) are also SWE-bench Verified rows; each is imported once, in the Verified sets",
+        "no case for 4 row(s) (django__django-1, django__django-2, django__django-3, django__django-4): the patch is "
+        "empty",
+        "1 SWE-bench test row(s) repeat a SWE-bench Verified row, equal in every column the import reads; each is "
+        "imported once, as that row",
+        "no hints for 1 row(s) (django__django-10097): they hold only whitespace",
     ):
         assert line in out
     assert out[-1].startswith(f"{corpus}: the SWE-bench sets equal a fresh import of hf:datasets/")
