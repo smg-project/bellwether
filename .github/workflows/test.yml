@@ -21,6 +21,14 @@ jobs:
           path: ~/.cache/bellwether/datasets
           key: bellwether-datasets-${{ hashFiles('src/bellwether/importers/**') }}
       - run: uv run bellwether import bfcl --check
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/bellwether/registries
+          key: bellwether-registries-${{ hashFiles('src/bellwether/models/pins.py') }}
+      - name: The committed list of models equals a fresh build at the pins
+        run: uv run bellwether models --registry-only --check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - name: Benchmark sets are committed as Git LFS pointers

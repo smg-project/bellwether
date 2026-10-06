@@ -10,6 +10,7 @@ cached file that differs is fetched again, and a fetched one that differs is ref
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -163,8 +164,11 @@ def _modules_from_checkout(pin: Pin, checkout: Path, rel: str) -> dict[str, byte
 def _modules_from_github(pin: Pin, client: httpx.Client, rel: str) -> dict[str, bytes]:
     """The directory's top-level ``.py`` files at the commit, listed through GitHub's contents API."""
     url = f"https://api.github.com/repos/{pin.repo}/contents/{rel}"
+    headers = {"Accept": "application/vnd.github+json"}
+    if token := os.environ.get("GITHUB_TOKEN"):  # a CI runner's address is shared: 60 listings an hour without one
+        headers["Authorization"] = f"Bearer {token}"
     try:
-        resp = client.get(url, params={"ref": pin.commit}, headers={"Accept": "application/vnd.github+json"})
+        resp = client.get(url, params={"ref": pin.commit}, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPError as err:
         raise PinError(

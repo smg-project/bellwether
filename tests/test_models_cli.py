@@ -6,7 +6,7 @@ import hashlib
 import json
 import subprocess
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -51,7 +51,15 @@ def test_help_names_the_models_command(capsys) -> None:
 def test_registry_only_writes_the_list_and_says_what_is_in_it(cache: Path, tmp_path: Path, capsys) -> None:
     out = tmp_path / "lists" / "models.jsonl"
     assert main(["models", "--registry-only", "--out", str(out), "--cache", str(cache)]) == 0
-    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    header, *lines = out.read_text().splitlines()
+    assert json.loads(header) == {  # what the list was built from: the pins, and no Hub
+        "registries": {
+            "vllm": {"repo": "vllm-project/vllm", "ref": "v0.31.0", "commit": VLLM.commit},
+            "sglang": {"repo": "sgl-project/sglang", "ref": "7d22b7a8", "commit": SGLANG.commit},
+        },
+        "hub": None,
+    }
+    rows = [json.loads(line) for line in lines]
     assert len(rows) == 28
     assert rows[0]["model"] == "deepseek-ai/DeepSeek-V4.1-Flash"
     assert {row["status"] for row in rows} == {"unchecked", "no-checkpoint-named"}
@@ -81,10 +89,40 @@ def test_without_registry_only_the_hub_is_asked(cache: Path, tmp_path: Path, mon
     monkeypatch.setattr(models_command, "HfHub", OneModelHub)
     out = tmp_path / "models.jsonl"
     assert main(["models", "--out", str(out), "--cache", str(cache)]) == 0
-    rows = {row["model"]: row for row in map(json.loads, out.read_text().splitlines())}
+    rows = {row["model"]: row for row in map(json.loads, out.read_text().splitlines()[1:])}
     assert (rows["Qwen/Qwen3-8B"]["revision"], rows["Qwen/Qwen3-8B"]["status"]) == ("b968826d", "pending")
     assert rows["Qwen/Qwen3-0.6B"]["status"] == "not-on-hub"
     assert "Qwen: 0 listed, 0 added" in capsys.readouterr().err
+
+
+def test_the_registry_only_list_goes_to_the_committed_file_and_a_hub_list_to_runs_under_its_date(
+    cache: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["models", "--registry-only", "--cache", str(cache)]) == 0
+    committed = (tmp_path / "models.jsonl").read_text()
+    monkeypatch.setattr(models_command, "HfHub", OneModelHub)
+    assert main(["models", "--cache", str(cache)]) == 0
+    today = datetime.now(UTC).date().isoformat()
+    header = json.loads((tmp_path / "runs" / f"models-{today}.jsonl").read_text().splitlines()[0])
+    assert header["hub"] == today  # the day the Hub was read: tier 2 and downloads depend on it
+    assert (tmp_path / "models.jsonl").read_text() == committed  # a Hub run leaves the committed list alone
+
+
+def test_check_compares_a_fresh_registry_only_list_with_the_committed_one(cache: Path, tmp_path: Path, capsys) -> None:
+    out = tmp_path / "models.jsonl"
+    argv = ["models", "--registry-only", "--cache", str(cache), "--out", str(out)]
+    assert main(argv) == 0
+    capsys.readouterr()
+    assert main([*argv, "--check"]) == 0
+    assert "equals a fresh build" in capsys.readouterr().out
+    tampered = out.read_text().replace('"unchecked"', '"pending"', 1)
+    out.write_text(tampered)
+    assert main([*argv, "--check"]) == 1
+    assert "differs from a fresh build" in capsys.readouterr().err
+    assert out.read_text() == tampered  # a check writes nothing
+    assert main(["models", "--check", "--cache", str(cache), "--out", str(out)]) == 2  # a Hub list changes daily
+    assert "--registry-only" in capsys.readouterr().err
 
 
 def test_a_pinned_file_out_of_reach_fails_the_run_with_what_to_do(tmp_path: Path, capsys) -> None:

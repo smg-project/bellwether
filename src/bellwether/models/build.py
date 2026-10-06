@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from .hub import Details, Hub, HubUnavailable
+from .pins import Pin
 from .registry import NOTHING_SERVED, Entry, Served
 from .rules import (
     NO_CHECKPOINT,
@@ -303,6 +304,18 @@ def missing_from_tier1(rows: Iterable[Row]) -> list[str]:
 
 def ordered(rows: Iterable[Row]) -> list[Row]:
     return sorted(rows, key=lambda row: order_key(row.model, row.tier, row.downloads))
+
+
+def header(pins: Iterable[Pin], hub: date | None) -> str:
+    """The list's first line: the registries it was read from, and the day the Hub was read, if it was.
+
+    Tier 2 and downloads depend on that day; without the Hub nothing in the list depends on a date.
+    """
+    values = {
+        "registries": {pin.engine: {"repo": pin.repo, "ref": pin.ref, "commit": pin.commit} for pin in pins},
+        "hub": hub.isoformat() if hub else None,
+    }
+    return json.dumps(values, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def to_jsonl(rows: Iterable[Row]) -> str:

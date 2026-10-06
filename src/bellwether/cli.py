@@ -51,11 +51,20 @@ def build_parser() -> argparse.ArgumentParser:
     gaps.set_defaults(func=gaps_run)
 
     models = sub.add_parser("models", help="the list of checkpoints to record: engine registries and the Hub")
-    models.add_argument("--out", type=Path, default=Path("models.jsonl"), help="where the list goes, as JSON Lines")
+    models.add_argument(
+        "--out",
+        type=Path,
+        help="where the list goes, as JSON Lines; models.jsonl with --registry-only, else runs/models-<date>.jsonl",
+    )
     models.add_argument(
         "--registry-only",
         action="store_true",
         help="list the registries' checkpoints without asking the Hugging Face Hub; offline once the files are cached",
+    )
+    models.add_argument(
+        "--check",
+        action="store_true",
+        help="with --registry-only: compare a fresh list with the committed one, writing nothing; exit 1 on a change",
     )
     models.add_argument("--vllm-src", type=Path, help="a vLLM checkout to read the pinned registry from")
     models.add_argument("--sglang-src", type=Path, help="an SGLang checkout to read the pinned docs from")

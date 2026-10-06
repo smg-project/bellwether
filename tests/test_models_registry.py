@@ -391,6 +391,25 @@ def test_a_pinned_directory_from_github_is_listed_once_and_then_read_from_the_ca
     assert len(urls) == 3  # a full cache, checked whole, makes no request
 
 
+def test_the_contents_api_alone_is_asked_with_the_workflow_token_when_one_is_set(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_example")
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.host, request.headers.get("Authorization")))
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json=[{"name": "a.py", "type": "file"}, {"name": "b.py", "type": "file"}])
+        return httpx.Response(200, content=MODULES[request.url.path.rsplit("/", 1)[1]].encode())
+
+    pin = Pin("sglang", "example/sglang", "x", "b" * 40, {}, {"python/pkg/models": sha256sum(MODULES)})
+    pinned_root(pin, tmp_path / "cache", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert seen == [
+        ("api.github.com", "Bearer ghs_example"),  # 60 listings an hour without one, from a runner's shared address
+        ("raw.githubusercontent.com", None),
+        ("raw.githubusercontent.com", None),
+    ]
+
+
 def test_a_pinned_directory_that_is_not_the_pinned_content_is_refused(tmp_path: Path) -> None:
     listing = [{"name": "a.py", "type": "file"}, {"name": "b.py", "type": "file"}]
     changed = {**MODULES, "b.py": "EntryClass = C\n"}

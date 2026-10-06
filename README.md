@@ -141,8 +141,9 @@ witnesses, which nothing here invokes.
 ## The list of models
 
 ```bash
-uv run bellwether models                   # registries and the Hugging Face Hub; writes models.jsonl
-uv run bellwether models --registry-only   # the registries alone, offline once their files are cached
+uv run bellwether models --registry-only           # the registries alone; writes the committed models.jsonl
+uv run bellwether models --registry-only --check   # build it again and compare with models.jsonl, as CI does
+uv run bellwether models                           # registries and the Hub; writes runs/models-<date>.jsonl
 ```
 
 `models` builds the list of checkpoints to record: every generative model vLLM or SGLang supports,
@@ -165,20 +166,22 @@ two sources:
   engines give as an architecture's example (vLLM's default checkpoint, the ids in SGLang's docs),
   or as one of vLLM's extras that is a real checkpoint rather than a tiny or random test model or a
   quantized copy (NousResearch's Hermes 3, mistral-community's Pixtral), whose `config.json` names a
-  registered architecture and that ships a chat template, leaving out
-  quantized and converted copies (GGUF, AWQ, GPTQ, MLX, ONNX, FP8, NVFP4, MXFP4, MXFP8, Int4,
-  Int8 or bitsandbytes in the name, or the Hub's `base_model:quantized` tag), embedding, reranking
-  and classification models, and checkpoints created before 2025 that no registry names. A token
-  (`HF_TOKEN`) raises the Hub's rate limits; none is needed, and a rate-limited call waits and is
-  made again. A model whose tokenizer or processor config cannot be read (gated, an error from the
-  Hub, a file that is not JSON) is kept, with a status that says so. A checkpoint vLLM loads with
-  another repository's tokenizer (moondream3-preview with starmie-v1) is judged on that repository's
-  template. When the Hub gives no answer
-  about a model at all, a checkpoint a registry names keeps its row with the error as its status, and
-  a model or an organization only a listing would have added is left out and named on stderr.
+  registered architecture and that ships a chat template, leaving out quantized and converted copies
+  (GGUF, AWQ, GPTQ, MLX, ONNX, FP8, NVFP4, MXFP4, MXFP8, Int4, Int8 or bitsandbytes in the name, or
+  the Hub's `base_model:quantized` tag), embedding, reranking and classification models, and
+  checkpoints created before 2025 that no registry names. A token (`HF_TOKEN`) raises the Hub's rate
+  limits; none is needed, and a rate-limited call waits and is made again. A model whose tokenizer or
+  processor config cannot be read (gated, an error from the Hub, a file that is not JSON) is kept,
+  with a status that says so. A checkpoint vLLM loads with another repository's tokenizer
+  (moondream3-preview with starmie-v1) is judged on that repository's template. When the Hub gives no
+  answer about a model at all, a checkpoint a registry names keeps its row with the error as its
+  status, and a model or an organization only a listing would have added is left out and named on
+  stderr.
 
-It writes one JSON line per checkpoint, and one per registry entry that names none, ordered by tier
-and then within the tier:
+The file's first line says what the list was built from: each engine's repository, ref and commit,
+and `hub`, the day the Hub was read, or `null` without it. Tier 2 and downloads depend on that day;
+nothing in a list built without the Hub depends on a date. One JSON line follows per checkpoint, and
+one per registry entry that names none, ordered by tier and then within the tier:
 
 | field | meaning |
 |---|---|
@@ -190,8 +193,12 @@ and then within the tier:
 | `modality` | `multimodal` when one of its architectures is multimodal in either engine's code (vLLM's multimodal table, an SGLang multimodal processor), else `text`; its architectures are those vLLM lists it under and, with the Hub, those its config names. `null` when none is known: an id only SGLang's docs give, without the Hub |
 | `sources` | the engines whose registries name the checkpoint, or `hub` |
 
-The registries are pinned and the Hub is not, so a rebuild can change rows: what is reproducible is
-the committed `models.jsonl` with each row's revision, and a rebuild's diff shows what changed.
+Without the Hub the list depends on the pins alone, so it is committed: `models.jsonl` at the
+repository's root, which CI builds again, with the registry files cached, and compares (`--check`),
+as the importers check their sets. A list read from the Hub changes every day, its downloads and
+their order with it, so it is that day's evidence, not a committed file: it goes to
+`runs/models-<date>.jsonl` and is published to smg-project/artifacts, each row pinning the sha the
+Hub gave that day.
 
 ## Layout
 
