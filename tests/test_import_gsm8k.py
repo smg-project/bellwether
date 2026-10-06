@@ -215,6 +215,13 @@ def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp
     ]
 
 
+def test_check_names_a_set_file_that_is_not_utf_8_instead_of_stopping(tmp_path):
+    sets, corpus = gsm8k.build_sets({"test": jsonl([ROW])}), tmp_path / "corpus"
+    gsm8k.write_sets(sets, corpus)
+    (corpus / "render" / "gsm8k-test.jsonl").write_bytes(b"\xff\n")
+    assert gsm8k.check_sets(sets, corpus) == [f"{corpus / 'render' / 'gsm8k-test.jsonl'}: differs from a fresh import"]
+
+
 def test_a_question_holding_unicode_line_breaks_reads_back_from_the_written_corpus(tmp_path):
     row = dict(ROW, question="Clive opens a box of balls.  \u2028It holds 6 blue balls.  \u2028How many?")
     gsm8k.write_sets(gsm8k.build_sets({"train": jsonl([row])}), tmp_path)

@@ -43,7 +43,7 @@ def check(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, prefix: str
     for path, content in sorted(expected.items()):
         if not path.is_file():
             problems.append(f"{path}: missing")
-        elif path.read_bytes().decode("utf-8") != content:
+        elif path.read_bytes() != content.encode("utf-8"):
             problems.append(f"{path}: differs from a fresh import")
     for kind in KINDS:
         for path in sorted((corpus_dir / kind).glob(f"{prefix}*.jsonl")):
