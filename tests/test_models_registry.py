@@ -7,6 +7,7 @@ are skipped otherwise.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from pathlib import Path
@@ -132,11 +133,20 @@ def test_sglang_reader_refuses_a_table_without_an_example_column() -> None:
         read_sglang(page, GENERATIVE_PAGE)
 
 
+def test_sglang_reader_refuses_a_page_without_its_table() -> None:
+    with pytest.raises(ValueError, match="no table"):
+        read_sglang("<html><body>429 Too Many Requests</body></html>", GENERATIVE_PAGE)
+
+
 def test_the_pins_are_the_designs_refs() -> None:
     assert (VLLM.ref, VLLM.commit) == ("v0.31.0", "db9527a46873454610df6dbedf79a36d6bf1a7f6")
-    assert VLLM.files == ("tests/models/registry.py",)
+    assert tuple(VLLM.files) == ("tests/models/registry.py",)
     assert SGLANG.commit == "7d22b7a8750f53a04e41a5a5671f9a56ab6cd001"
-    assert SGLANG.files == tuple(SGLANG_PAGES) == (GENERATIVE_PAGE, MULTIMODAL_PAGE, DIFFUSION_PAGE)
+    assert tuple(SGLANG.files) == tuple(SGLANG_PAGES) == (GENERATIVE_PAGE, MULTIMODAL_PAGE, DIFFUSION_PAGE)
+
+
+def sha256(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def git(repo: Path, *args: str) -> str:
@@ -156,7 +166,7 @@ def test_pinned_files_come_from_a_checkout_at_the_pinned_commit_not_its_working_
     (repo / "tests/models/registry.py").write_text("later = 2\n")
     git(repo, "commit", "-q", "-am", "later")
     (repo / "tests/models/registry.py").write_text("uncommitted = 3\n")
-    pin = Pin("vllm", "example/vllm", "v1", pinned, ("tests/models/registry.py",))
+    pin = Pin("vllm", "example/vllm", "v1", pinned, {"tests/models/registry.py": sha256("pinned = 1\n")})
     root = pinned_root(pin, tmp_path / "cache", checkout=repo)
     assert root == tmp_path / "cache" / "vllm" / pinned
     assert (root / "tests/models/registry.py").read_text() == "pinned = 1\n"
@@ -166,7 +176,7 @@ def test_a_checkout_without_the_pinned_commit_is_reported(tmp_path: Path) -> Non
     repo = tmp_path / "checkout"
     repo.mkdir()
     git(repo, "init", "-q")
-    pin = Pin("vllm", "example/vllm", "v1", "f" * 40, ("tests/models/registry.py",))
+    pin = Pin("vllm", "example/vllm", "v1", "f" * 40, {"tests/models/registry.py": sha256("pinned = 1\n")})
     with pytest.raises(PinError, match="f{40}"):
         pinned_root(pin, tmp_path / "cache", checkout=repo)
 
@@ -179,7 +189,7 @@ def test_pinned_files_are_downloaded_once_and_then_read_from_the_cache(tmp_path:
         return httpx.Response(200, content=b"pinned = 1\n")
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    pin = Pin("sglang", "example/sglang", "abc", "a" * 40, ("docs/a.mdx", "docs/b.mdx"))
+    pin = Pin("sglang", "example/sglang", "abc", "a" * 40, {f"docs/{n}.mdx": sha256("pinned = 1\n") for n in "ab"})
     root = pinned_root(pin, tmp_path / "cache", client=client)
     assert urls == [f"https://raw.githubusercontent.com/example/sglang/{'a' * 40}/docs/{n}.mdx" for n in "ab"]
     assert (root / "docs/b.mdx").read_text() == "pinned = 1\n"
@@ -189,10 +199,48 @@ def test_pinned_files_are_downloaded_once_and_then_read_from_the_cache(tmp_path:
 
 def test_a_failed_download_says_how_to_read_the_files_offline(tmp_path: Path) -> None:
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
-    pin = Pin("vllm", "example/vllm", "v1", "b" * 40, ("tests/models/registry.py",))
+    pin = Pin("vllm", "example/vllm", "v1", "b" * 40, {"tests/models/registry.py": sha256("pinned = 1\n")})
     with pytest.raises(PinError, match="--vllm-src"):
         pinned_root(pin, tmp_path / "cache", client=client)
     assert not (tmp_path / "cache" / "vllm" / ("b" * 40) / "tests/models/registry.py").exists()
+
+
+def serving(content: bytes, urls: list[str]) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        urls.append(str(request.url))
+        return httpx.Response(200, content=content)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_a_cached_file_that_is_not_the_pinned_content_is_fetched_again(tmp_path: Path) -> None:
+    pin = Pin("vllm", "example/vllm", "v1", "c" * 40, {"tests/models/registry.py": sha256("pinned = 1\n")})
+    stale = tmp_path / "cache" / "vllm" / ("c" * 40) / "tests/models/registry.py"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("<html>an error page saved in its place</html>")
+    urls: list[str] = []
+    root = pinned_root(pin, tmp_path / "cache", client=serving(b"pinned = 1\n", urls))
+    assert (root / "tests/models/registry.py").read_text() == "pinned = 1\n"
+    assert len(urls) == 1
+
+
+def test_a_downloaded_file_that_is_not_the_pinned_content_is_refused(tmp_path: Path) -> None:
+    pin = Pin("vllm", "example/vllm", "v1", "d" * 40, {"tests/models/registry.py": sha256("pinned = 1\n")})
+    with pytest.raises(PinError, match="sha256"):
+        pinned_root(pin, tmp_path / "cache", client=serving(b"<html>429 Too Many Requests</html>", []))
+    assert not (tmp_path / "cache" / "vllm" / ("d" * 40) / "tests/models/registry.py").exists()
+
+
+def test_a_checkout_file_that_is_not_the_pinned_content_is_refused(tmp_path: Path) -> None:
+    repo = tmp_path / "checkout"
+    (repo / "tests/models").mkdir(parents=True)
+    git(repo, "init", "-q")
+    (repo / "tests/models/registry.py").write_text("other = 1\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "other")
+    pin = Pin("vllm", "example/vllm", "v1", git(repo, "rev-parse", "HEAD"), {"tests/models/registry.py": sha256("x")})
+    with pytest.raises(PinError, match="sha256"):
+        pinned_root(pin, tmp_path / "cache", checkout=repo)
 
 
 def cached(pin: Pin, rel: str) -> str:

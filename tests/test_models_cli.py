@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +13,7 @@ import pytest
 
 import bellwether.models as models_command
 from bellwether.cli import main
+from bellwether.models import registry
 from bellwether.models.hub import Details
 from bellwether.models.pins import SGLANG, VLLM
 
@@ -18,16 +21,24 @@ DATA = Path(__file__).parent / "data" / "models"
 
 
 @pytest.fixture
-def cache(tmp_path: Path) -> Path:
-    """A registry cache holding the excerpts where the pinned files go, so nothing is fetched."""
+def cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A registry cache holding the excerpts where the pinned files go, pinned by the excerpts' own sha256.
+
+    The pinned files are checked on every use, so the excerpts stand in for them only under pins of their own.
+    """
     root = tmp_path / "cache"
-    vllm = root / "vllm" / VLLM.commit / VLLM.files[0]
-    vllm.parent.mkdir(parents=True)
-    vllm.write_text((DATA / "vllm-registry-excerpt.py.txt").read_text())
-    for page in SGLANG.files:
-        path = root / "sglang" / SGLANG.commit / page
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text((DATA / f"sglang-{Path(page).stem}-excerpt.mdx").read_text())
+    excerpts = {"tests/models/registry.py": DATA / "vllm-registry-excerpt.py.txt"} | {
+        page: DATA / f"sglang-{Path(page).stem}-excerpt.mdx" for page in SGLANG.files
+    }
+    for pin in (VLLM, SGLANG):
+        files = {}
+        for rel in pin.files:
+            content = excerpts[rel].read_bytes()
+            path = root / pin.engine / pin.commit / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            files[rel] = hashlib.sha256(content).hexdigest()
+        monkeypatch.setattr(registry, pin.engine.upper(), replace(pin, files=files))
     return root
 
 

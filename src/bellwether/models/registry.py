@@ -16,7 +16,7 @@ from pathlib import Path
 
 import httpx
 
-from .pins import SGLANG, SGLANG_PAGES, VLLM, pinned_root
+from .pins import SGLANG, SGLANG_PAGES, VLLM, VLLM_REGISTRY, pinned_root
 from .rules import GENERATIVE_TABLES, is_generative_architecture
 
 MULTIMODAL_TABLE = "_MULTIMODAL_EXAMPLE_MODELS"
@@ -40,7 +40,7 @@ def read_pinned(
     """Every entry of both engines at the pinned commits."""
     vllm = pinned_root(VLLM, cache, vllm_src, client)
     sglang = pinned_root(SGLANG, cache, sglang_src, client)
-    entries = read_vllm((vllm / VLLM.files[0]).read_text())
+    entries = read_vllm((vllm / VLLM_REGISTRY).read_text())
     for page in SGLANG.files:
         entries.extend(read_sglang((sglang / page).read_text(), page))
     return entries
@@ -115,10 +115,16 @@ _MARKUP = re.compile(r"<[^>]+>|\*\*")
 
 
 def read_sglang(source: str, page: str) -> list[Entry]:
-    """One entry per table row, in page order; a row the docs give no example for has no checkpoints."""
+    """One entry per table row, in page order; a row the docs give no example for has no checkpoints.
+
+    A page without a table changed shape, or is not the page: an error, never an empty list.
+    """
     multimodal = SGLANG_PAGES[page]
+    tables = _TABLE.findall(source)
+    if not tables:
+        raise ValueError(f"SGLang's {page}: no table; the page changed shape or is not the page")
     entries = []
-    for table in _TABLE.findall(source):
+    for table in tables:
         column = _example_column(page, table)
         for row in _ROW.findall(table):
             cells = _CELL.findall(row)
