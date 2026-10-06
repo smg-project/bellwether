@@ -163,21 +163,39 @@ def check(
 ) -> list[str]:
     """One line per set file, or file of ``files``, that differs from a fresh import; empty when none does.
 
-    ``files`` are as ``write`` takes them. ``unit`` names what one set comes from (a BFCL category, a GSM8K split) in
-    the line for a stale ``<prefix>*`` file.
+    The sets are compared in the form a fresh import writes them (``set_files``), by plain content, so a compressed set
+    passes whatever bytes its compressor wrote; a set stored in the other form is named with the form ``LIMIT`` gives
+    it. A set Git LFS has not fetched is named with the command that fetches it. ``files`` are as ``write`` takes them.
+    ``unit`` names what one set comes from (a BFCL category, a GSM8K split) in the line for a stale ``<prefix>*`` file.
     """
-    expected = {
-        corpus_dir / kind / f"{name}.jsonl": text(lines).encode("utf-8") for (kind, name), lines in sets.items()
-    }
+    fresh = set_files(sets, corpus_dir)
+    size = sum(len(content) for _, content in fresh.values())
+    expected = dict(fresh.values())
     expected.update({corpus_dir / relative: content for relative, content in (files or {}).items()})
     problems = []
     for path, content in sorted(expected.items()):
         if not path.is_file():
             problems.append(f"{path}: missing")
-        elif path.read_bytes() != content:
+            continue
+        try:
+            stored = storage.plain_bytes(path)
+        except ValueError as err:  # a Git LFS pointer: the content is not here to compare
+            problems.append(str(err))
+            continue
+        if stored != content:
             problems.append(f"{path}: differs from a fresh import")
-    for kind in KINDS:
-        for path in sorted((corpus_dir / kind).glob(f"{prefix}*.jsonl")):
-            if path not in expected:
-                problems.append(f"{path}: no {unit} writes it")
+    other_form = {
+        path.with_name(f"{name}{'.jsonl' if storage.is_compressed(path) else storage.COMPRESSED_SUFFIX}"): path
+        for (_, name), (path, _) in fresh.items()
+    }
+    for path in prefixed(corpus_dir, prefix):
+        if path in expected:
+            continue
+        if path in other_form:
+            written = other_form[path]
+            limit = f"{'past' if storage.is_compressed(written) else 'within'} the {LIMIT} that stay plain"
+            reason = f"the {prefix}* sets take {size} bytes as plain JSON Lines, {limit}"
+            problems.append(f"{path}: a fresh import writes this set as {written.name}: {reason}")
+        else:
+            problems.append(f"{path}: no {unit} writes it")
     return problems

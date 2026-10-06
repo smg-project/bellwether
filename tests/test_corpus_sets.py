@@ -1,4 +1,5 @@
 import pytest
+import zstandard
 
 from bellwether import storage
 from bellwether.importers import corpus_sets
@@ -244,4 +245,66 @@ def test_the_report_names_each_set_file_in_the_form_the_import_writes(tmp_path, 
     assert capsys.readouterr().out.splitlines()[:2] == [
         f"{tmp_path / 'parse' / 'x-a.jsonl.zst'}: 1 cases, 1 distinct messages",
         f"{tmp_path / 'render' / 'x-a.jsonl.zst'}: 2 cases",
+    ]
+
+
+def check(sets: dict, root) -> list[str]:
+    return corpus_sets.check(sets, root, "x-", "x part")
+
+
+@pytest.mark.parametrize("past", [False, True], ids=["plain", "compressed"])
+def test_check_passes_an_import_as_write_left_it_in_either_form(tmp_path, monkeypatch, past):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - past)
+    corpus_sets.write(sets, tmp_path, "x-")
+    assert check(sets, tmp_path) == []
+
+
+def test_check_compares_a_compressed_sets_plain_content_not_its_bytes(tmp_path, monkeypatch):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    corpus_sets.write(sets, tmp_path, "x-")
+    path = tmp_path / "render" / "x-a.jsonl.zst"
+    path.write_bytes(zstandard.ZstdCompressor(level=3).compress(storage.plain_bytes(path)))
+    assert check(sets, tmp_path) == []
+    path.write_bytes(zstandard.ZstdCompressor(level=3).compress(b'{"name": "x-a-0"}\n'))
+    assert check(sets, tmp_path) == [f"{path}: differs from a fresh import"]
+
+
+@pytest.mark.parametrize("past", [False, True], ids=["now plain", "now compressed"])
+def test_check_applies_the_limit_to_a_corpus_written_in_the_other_form(tmp_path, monkeypatch, past):
+    sets = an_import()
+    size = plain_size(sets)
+    monkeypatch.setattr(corpus_sets, "LIMIT", size - (not past))
+    corpus_sets.write(sets, tmp_path, "x-")
+    monkeypatch.setattr(corpus_sets, "LIMIT", size - past)
+    fresh, stored = (".jsonl.zst", ".jsonl") if past else (".jsonl", ".jsonl.zst")
+    limit = f"the x-* sets take {size} bytes as plain JSON Lines, {'past' if past else 'within'} the {size - past}"
+    reason = f"a fresh import writes this set as x-a{fresh}: {limit} that stay plain"
+    assert check(sets, tmp_path) == [
+        f"{tmp_path / 'parse' / f'x-a{fresh}'}: missing",
+        f"{tmp_path / 'render' / f'x-a{fresh}'}: missing",
+        f"{tmp_path / 'parse' / f'x-a{stored}'}: {reason}",
+        f"{tmp_path / 'render' / f'x-a{stored}'}: {reason}",
+    ]
+
+
+def test_check_names_a_set_git_lfs_has_not_fetched_with_the_command_that_fetches_it(tmp_path, monkeypatch):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    corpus_sets.write(sets, tmp_path, "x-")
+    pointer = tmp_path / "render" / "x-a.jsonl.zst"
+    pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 13\n")
+    fetch = f"git lfs pull --include '{pointer}' --exclude ''"
+    assert check(sets, tmp_path) == [f"{pointer} is a Git LFS pointer; fetch it first: {fetch}"]
+
+
+def test_check_names_a_set_file_no_part_of_the_import_writes_in_either_form(tmp_path, monkeypatch):
+    sets = an_import()
+    corpus_sets.write(sets, tmp_path, "x-")
+    for stale in ("render/x-gone.jsonl", "render/x-gone.jsonl.zst"):
+        (tmp_path / stale).write_bytes(b"")
+    assert check(sets, tmp_path) == [
+        f"{tmp_path / 'render' / 'x-gone.jsonl'}: no x part writes it",
+        f"{tmp_path / 'render' / 'x-gone.jsonl.zst'}: no x part writes it",
     ]
