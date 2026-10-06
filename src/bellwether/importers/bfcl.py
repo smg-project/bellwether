@@ -287,48 +287,66 @@ def first_turn_message(answer: dict, functions: list[dict], defs: dict[str, list
 
     BFCL writes each gold call as Python source, ``cd(folder='document')``, and its executor runs it on the class.
     Positional values take the parameters of the method's ``def`` in order (``defs``: each method's, from
-    ``read_func_defs``), which the function doc may list otherwise; a positional value of a function with no ``def``
-    there stops the import. Keyword values keep their names, and each value is read with ``ast.literal_eval``. Each
-    call is held to the rules ``message_for`` applies: a function the first turn offers, parameters it declares, each
-    given once, and every required one given; a call that breaks one raises ``Unanswerable``.
+    ``read_func_defs``), which the function doc may list otherwise. Keyword values keep their names, and each value is
+    read with ``ast.literal_eval``. A call this cannot read stops the import, naming the row and the call: one that is
+    not a call to a named function, passes keywords by unpacking, gives a value that is not a literal, or passes values
+    by position to a function with no ``def``. Each call is held to the rules ``message_for`` applies: a function the
+    first turn offers, parameters it declares, each given once, and every required one given; a call that breaks one
+    raises ``Unanswerable``.
     """
     declared = {function["name"]: function["parameters"] for function in functions}
     calls = []
     for text in answer["ground_truth"][0]:
-        name, arguments = _gold_call(text, declared, defs)
+        name, arguments = _read_call(answer["id"], text, declared, defs)
         call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
         calls.append({"type": "function", "function": call})
     return {"content": "", "tool_calls": calls}
 
 
-def _gold_call(text: str, declared: dict[str, dict], defs: dict[str, list[str]]) -> tuple[str, dict]:
-    node = ast.parse(text, mode="eval").body
+def _read_call(row: str, text: str, declared: dict[str, dict], defs: dict[str, list[str]]) -> tuple[str, dict]:
+    """One call of the row's ground truth: the function's name, and its arguments by parameter name."""
+    cannot = f"{row}: cannot read {text!r}:"
+    try:
+        node = ast.parse(text, mode="eval").body
+    except (SyntaxError, ValueError):
+        node = None
     if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
-        raise ValueError(f"{text!r} is not a call to a named function")
+        raise ValueError(f"{cannot} it is not a call to a named function")
+    if any(keyword.arg is None for keyword in node.keywords):
+        raise ValueError(f"{cannot} it passes keywords by unpacking")
+    values = [_literal(value, cannot) for value in node.args]
+    keywords = [(keyword.arg, _literal(keyword.value, cannot)) for keyword in node.keywords]
     name = node.func.id
     if name not in declared:
         raise Unanswerable(f"the ground truth calls {name}, which the first turn does not offer")
-    if node.args and name not in defs:
-        raise ValueError(f"{text!r} passes values by position, and BFCL's source has no def of {name} to bind them to")
+    if values and name not in defs:
+        raise ValueError(f"{cannot} BFCL's source has no def of {name} to bind its positional values to")
     positional = defs.get(name, [])
-    if len(node.args) > len(positional):
-        passed = len(node.args)
+    if len(values) > len(positional):
+        passed = len(values)
         raise Unanswerable(
             f"the def of {name} takes {len(positional)} parameters, and the ground truth passes {passed} by position"
         )
     properties = declared[name].get("properties", {})
     arguments = {}
-    given = [*zip(positional, node.args, strict=False), *((keyword.arg, keyword.value) for keyword in node.keywords)]
-    for param, value in given:
+    for param, value in [*zip(positional, values, strict=False), *keywords]:
         if param not in properties:
             raise Unanswerable(f"{name} has no parameter {param!r}, which the ground truth requires")
         if param in arguments:
             raise Unanswerable(f"{name} gets {param} both by position and by name")
-        arguments[param] = ast.literal_eval(value)
+        arguments[param] = value
     missing = [param for param in declared[name].get("required", []) if param not in arguments]
     if missing:
         raise Unanswerable(f"{name} requires {', '.join(missing)}, which the ground truth gives no value")
     return name, arguments
+
+
+def _literal(node: ast.expr, cannot: str):
+    """A value in a call, read with ``ast.literal_eval``; ``cannot`` starts the message when it is not a literal."""
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, TypeError):
+        raise ValueError(f"{cannot} {ast.unparse(node)} is not a literal value") from None
 
 
 def func_doc_files(wheel: zipfile.ZipFile) -> dict[str, str]:

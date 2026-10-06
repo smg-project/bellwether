@@ -1,4 +1,5 @@
 import json
+import re
 import zipfile
 
 import pytest
@@ -812,16 +813,30 @@ def test_values_passed_by_position_take_the_parameters_of_the_def_not_of_the_doc
     assert calls == [{"type": "function", "function": {"name": "order", "arguments": '{"size": 1.5, "drink": "tea"}'}}]
 
 
+def cannot_read(call: str, why: str) -> str:
+    """The start of the message that stops the import on a call of BASE_ROW's ground truth, as a pattern."""
+    return re.escape(f"multi_turn_base_0: cannot read {call!r}: {why}")
+
+
 def test_a_value_passed_by_position_to_a_function_without_a_def_stops_the_import(tmp_path):
     no_send = NEVER_RUN + "class Mail:\n    def sort(self): ...\n"
-    with pytest.raises(ValueError, match="no def of send"):
+    with pytest.raises(ValueError, match=cannot_read("send('Bo')", "BFCL's source has no def of send")):
         first_turn_calls(tmp_path, "send('Bo')", {f"{SOURCES}/mail.py": no_send})
 
 
 def test_a_ground_truth_entry_that_is_not_a_call_to_a_named_function_stops_the_import(tmp_path):
-    for entry in ["Mail.send(to='Bo')", "send"]:
-        with pytest.raises(ValueError, match="is not a call to a named function"):
+    for entry in ["Mail.send(to='Bo')", "send", "send(to='Bo'"]:
+        with pytest.raises(ValueError, match=cannot_read(entry, "it is not a call to a named function")):
             first_turn_calls(tmp_path, entry, {})
+
+
+def test_a_ground_truth_call_whose_values_cannot_be_read_stops_the_import(tmp_path):
+    for call, why in [
+        ("send(**{'to': 'Bo'})", "it passes keywords by unpacking"),
+        ("send(to=recipient())", "recipient() is not a literal value"),
+    ]:
+        with pytest.raises(ValueError, match=cannot_read(call, why)):
+            first_turn_calls(tmp_path, call, {})
 
 
 def test_the_command_writes_first_turn_parse_cases_and_names_the_rows_without_a_first_call(
