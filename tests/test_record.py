@@ -516,7 +516,10 @@ def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(i
 def test_a_template_that_renders_no_tool_calls_fails_the_case(tiny_model, tmp_path_factory):
     # Phi-4-mini's and Hunyuan-A13B's templates drop the calls; the output would be the end of the turn alone.
     model = tiny_variant(tiny_model, tmp_path_factory, "no-calls-chat", assistant_template(""))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )
@@ -525,7 +528,10 @@ def test_a_template_that_renders_no_tool_calls_fails_the_case(tiny_model, tmp_pa
 def test_a_template_that_renders_only_the_first_call_fails_the_case(tiny_model, tmp_path_factory):
     call = "{%- if loop.first %}{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}{%- endif %}"
     model = tiny_variant(tiny_model, tmp_path_factory, "first-call-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: adding an argument to call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call(), weather_call()]}
         )
@@ -545,7 +551,10 @@ def test_a_template_that_renders_only_the_last_call_fails_even_when_the_names_st
         {"type": "function", "function": {"name": "todo", "arguments": '{"type": "add"}'}},
         {"type": "function", "function": {"name": "todo", "arguments": '{"content": "todo random"}'}},
     ]
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (todo) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Two todos")]}, {"content": "", "tool_calls": calls}
         )
@@ -555,7 +564,10 @@ def test_a_template_that_renders_the_names_without_the_arguments_fails_the_case(
     # The rename changes the rendered turn, so only the marker argument finds that the arguments never reach it.
     call = "{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}"
     model = tiny_variant(tiny_model, tmp_path_factory, "names-only-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: adding an argument to call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )
@@ -565,7 +577,10 @@ def test_a_template_that_renders_the_arguments_without_the_names_fails_the_case(
     # The marker argument changes the rendered turn, so only the rename finds that the name never reaches it.
     call = "{{ '<tool_call>' + c['function']['arguments'] | tojson + '</tool_call>' }}"
     model = tiny_variant(tiny_model, tmp_path_factory, "arguments-only-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )

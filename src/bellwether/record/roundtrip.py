@@ -180,7 +180,7 @@ class RoundtripOracle:
         template that fails on the change has read the call.
         """
         for index, call in enumerate(message.get("tool_calls") or []):
-            for change in (renamed, with_marker_argument):
+            for change, what in ((renamed, "renaming"), (with_marker_argument, "adding an argument to")):
                 variant = {"role": "assistant", **as_vllm_gives_it(change(message, index))}
                 try:
                     again = self.tokenizer.apply_chat_template(
@@ -190,7 +190,7 @@ class RoundtripOracle:
                     continue
                 if again == rendered:
                     raise ValueError(
-                        f"the template does not render every tool call: changing call {index} "
+                        f"the template does not render every tool call: {what} call {index} "
                         f"({call['function']['name']}) leaves the rendered turn as it was, so the output would not "
                         "carry it"
                     )
