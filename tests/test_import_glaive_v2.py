@@ -143,6 +143,8 @@ CALL_25475 = {
     "type": "function",
     "function": {"name": "detect_language", "arguments": '{"text": "Je suis un étudiant"}'},
 }
+# The call as a parse case expects it: a parser makes up its own id, so the expected call holds none.
+EXPECTED_25475 = {"type": "function", "function": CALL_25475["function"]}
 MESSAGES_25475 = [
     {
         "role": "user",
@@ -284,8 +286,8 @@ def test_a_row_that_cannot_be_mapped_is_refused_with_its_reason(row, reason):
     assert str(refused.value) == getattr(glaive_v2, reason)
 
 
-def origin(row: int, turn: int) -> dict:
-    return {
+def origin(row: int, turn: int, written: bool = False) -> dict:
+    found = {
         "dataset": "glaive-v2",
         "source": "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac",
         "sha256": "e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad",
@@ -294,6 +296,8 @@ def origin(row: int, turn: int) -> dict:
         "turn": turn,
         "license": "Apache-2.0",
     }
+    # A case whose request holds a call holds ids bellwether wrote, and its origin says so.
+    return {**found, "written": ["tool call ids"]} if written else found
 
 
 def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_render_case():
@@ -324,7 +328,7 @@ def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_rende
         {
             "name": "glaive-v2-25475-3",
             "request": {"messages": MESSAGES_25475[:3], "tools": [DETECT_LANGUAGE]},
-            "message": {"content": "", "tool_calls": [CALL_25475]},
+            "message": {"content": "", "tool_calls": [EXPECTED_25475]},
             "notes": notes(3),
             "origin": origin(25475, 3),
         },
@@ -333,12 +337,47 @@ def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_rende
             "request": {"messages": MESSAGES_25475[:5], "tools": [DETECT_LANGUAGE]},
             "message": {"content": "The text you provided is in French."},
             "notes": notes(5),
-            "origin": origin(25475, 5),
+            "origin": origin(25475, 5, written=True),
         },
     ]
     assert [list(line) for line in render] == [["name", "request", "notes", "origin"]] * 2
     assert [list(line) for line in parse] == [["name", "request", "message", "notes", "origin"]] * 3
     assert list(render[0]["origin"]) == ["dataset", "source", "sha256", "file", "row", "turn", "license"]
+    assert list(parse[2]["origin"]) == ["dataset", "source", "sha256", "file", "row", "turn", "license", "written"]
+    assert list(parse[1]["message"]["tool_calls"][0]) == ["type", "function"]
+
+
+def test_a_case_whose_request_holds_a_call_says_its_ids_are_written_and_expects_calls_without_ids():
+    # Row 1's shape: the second round's cases carry the first round's call in their history, with the id call_0 that
+    # bellwether wrote; the second call is expected without an id, and holds call_1 once it is history.
+    chat = "\n\n\n".join(
+        [
+            "USER: News for the US?",
+            news("United States"),
+            'FUNCTION RESPONSE: {"headlines": ["A"]}',
+            "ASSISTANT: A. <|endoftext|>",
+            "USER: And France?",
+            news("France"),
+            'FUNCTION RESPONSE: {"headlines": ["B"]}',
+            "ASSISTANT: B. <|endoftext|>",
+        ]
+    )
+    render, parse = glaive_v2.cases_for(1, *glaive_v2.messages_for({"system": NEWS_SYSTEM, "chat": chat}))
+    assert [(line["name"], "written" in line["origin"]) for line in render] == [
+        ("glaive-v2-1-0", False),
+        ("glaive-v2-1-4", True),
+    ]
+    assert [(line["name"], line["origin"].get("written")) for line in parse] == [
+        ("glaive-v2-1-1", None),
+        ("glaive-v2-1-3", ["tool call ids"]),
+        ("glaive-v2-1-5", ["tool call ids"]),
+        ("glaive-v2-1-7", ["tool call ids"]),
+    ]
+    france = {"name": "get_news_headlines", "arguments": '{"country": "France"}'}
+    assert parse[2]["message"] == {"content": "", "tool_calls": [{"type": "function", "function": france}]}
+    history = parse[3]["request"]["messages"]
+    assert [m["tool_calls"][0]["id"] for m in history if "tool_calls" in m] == ["call_0", "call_1"]
+    assert [m["tool_call_id"] for m in history if m["role"] == "tool"] == ["call_0", "call_1"]
 
 
 def test_a_row_without_functions_sends_no_tools_and_counts_turns_after_its_system_message():

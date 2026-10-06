@@ -10,11 +10,13 @@ license. A row becomes OpenAI chat messages:
   keeps what is neither the lead-in nor a function, and there is none when nothing remains.
 - ``chat`` is turns headed ``USER: ``, ``ASSISTANT: `` or ``FUNCTION RESPONSE: ``, at its start or after a blank line.
   A call turn, ``<functioncall> {"name": ..., "arguments": '<JSON>'} <|endoftext|>``, is not valid JSON, since its
-  arguments sit in single quotes. It becomes an assistant message with empty content and one call, whose id is
-  ``call_<n>``, the chat's calls numbered from 0, and whose arguments are the quoted JSON written as the BFCL importer
-  writes arguments. A function response becomes a ``tool`` message answering the call before it, and a prose turn its
-  text without the ``<|endoftext|>`` that ends it. The ids leave the row out, so a chat that recurs in another row
-  gives the same cases there.
+  arguments sit in single quotes. It becomes an assistant message with empty content and one call, whose arguments are
+  the quoted JSON written as the BFCL importer writes arguments. A function response becomes a ``tool`` message
+  answering the call before it, and a prose turn its text without the ``<|endoftext|>`` that ends it.
+- A parse case expects the call as a parser returns it, without an id. In the history the call has the id
+  ``call_<n>``, the chat's calls numbered from 0, for the tool message that answers it to name; the dataset has no
+  such id, so bellwether writes it and ``origin`` marks the cases that hold one (``WRITTEN``). The ids leave the row
+  out, so a chat that recurs in another row gives the same cases there.
 
 Each assistant turn is a parse case, and each user turn an assistant answers a render case. The whole file maps to about
 1.2 GB of plain JSON Lines, so the corpus holds a sample, every ``STEP``-th row by index, until a compressed corpus form
@@ -65,6 +67,10 @@ TEXT_BEFORE_CALL = "an assistant turn has text before its <functioncall>"
 RESPONSE_WITHOUT_CALL = "a function response does not follow a call"
 ASSISTANT_END = "an assistant turn does not end with its one <|endoftext|>"
 STRAY_END = "a user turn or function response holds <|endoftext|>"
+
+# The text bellwether writes into a glaive-v2 case that the dataset does not have, as ``origin`` names it: the id of
+# each call in a request's history, and the ``tool_call_id`` of the tool message that answers it.
+WRITTEN = "tool call ids"
 
 
 class Unmappable(ValueError):
@@ -180,9 +186,13 @@ def _turns(chat: str):
         yield header[1], chat[header.end() : following.start() if following else len(chat)]
 
 
-def origin(row: int, turn: int) -> dict:
-    """Where a case came from: the file, the row's index in it, and the chat turn the case ends at."""
-    return {
+def origin(row: int, turn: int, request: dict) -> dict:
+    """Where a case came from: the file, the row's index in it, and the chat turn the case ends at.
+
+    ``written`` lists the text bellwether wrote into the case rather than took from the row: ``WRITTEN`` when the
+    request holds a call, whose id, and the ``tool_call_id`` that names it, the dataset does not have.
+    """
+    found = {
         "dataset": DATASET,
         "source": SOURCE,
         "sha256": DATA_SHA256,
@@ -191,29 +201,42 @@ def origin(row: int, turn: int) -> dict:
         "turn": turn,
         "license": LICENSE,
     }
+    if any("tool_calls" in message for message in request["messages"]):
+        found["written"] = [WRITTEN]
+    return found
 
 
 def cases_for(index: int, messages: list[dict], tools: list[dict]) -> tuple[list[dict], list[dict]]:
     """Row ``index``'s render and parse cases, from its messages (``messages_for``).
 
-    Each assistant turn is a parse case: its request is every message before it, its message is the turn. Each user
-    turn an assistant turn answers is a render case: the request up to and including it. A case is named, and its
-    origin located, by the turn's index in the chat, the system message not counted.
+    Each assistant turn is a parse case: its request is every message before it, its message is the turn as a parser
+    returns it (``expected``). Each user turn an assistant turn answers is a render case: the request up to and
+    including it. A case is named, and its origin located, by the turn's index in the chat, the system message not
+    counted.
     """
     first = 1 if messages and messages[0]["role"] == "system" else 0
     render, parse = [], []
     for position in range(first, len(messages)):
         turn, message = position - first, messages[position]
         name = f"{DATASET}-{index}-{turn}"
-        tail = {"notes": f"glaive-function-calling-v2 row {index} turn {turn}", "origin": origin(index, turn)}
+        notes = f"glaive-function-calling-v2 row {index} turn {turn}"
         if message["role"] == "assistant":
-            reply = {key: value for key, value in message.items() if key != "role"}
             request = _request(messages[:position], tools)
-            parse.append({"name": name, "request": request, "message": reply, **tail})
+            line = {"name": name, "request": request, "message": expected(message)}
+            parse.append({**line, "notes": notes, "origin": origin(index, turn, request)})
         elif message["role"] == "user" and _role(messages, position + 1) == "assistant":
             request = _request(messages[: position + 1], tools)
-            render.append({"name": name, "request": request, **tail})
+            render.append({"name": name, "request": request, "notes": notes, "origin": origin(index, turn, request)})
     return render, parse
+
+
+def expected(message: dict) -> dict:
+    """An assistant message as a parse case expects it: without its role, and its calls without the ids the history
+    gives them, since a parser makes up its own."""
+    found = {key: value for key, value in message.items() if key != "role"}
+    if "tool_calls" in found:
+        found["tool_calls"] = [{"type": call["type"], "function": call["function"]} for call in found["tool_calls"]]
+    return found
 
 
 def _role(messages: list[dict], position: int) -> str | None:
