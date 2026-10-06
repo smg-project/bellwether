@@ -179,7 +179,7 @@ def call(city: str, id_: str | None = None) -> dict:
     return found if id_ is None else {"id": id_, **found}
 
 
-def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_case_per_assistant_turn():
+def test_a_conversation_gives_a_render_case_per_answered_user_turn_or_tool_result_and_a_parse_case_per_assistant_turn():
     render, parse = hermes.row_cases(CONVERSATION, 7, "glaive_func_calling")
     user = {"role": "user", "content": "Weather in Paris and Zürich?"}
     # A parse case expects its calls as a parser returns them, without ids; the history gives each call the id
@@ -225,6 +225,9 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
         return {**found, "written": ["tool call ids"]} if written else found
 
     notes = "Hermes glaive_func_calling row 7 turn {}: Weather / Forecast"
+    # A tool result an assistant turn answers is where a model goes on after its tools: its prompt is a render case.
+    after_results = [user, made, *results]
+    after_result = [*history, tomorrow_made, result]
     assert render == [
         {
             "name": "hermes-glaive-func-calling-7-1",
@@ -233,17 +236,29 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
             "origin": origin(1),
         },
         {
+            "name": "hermes-glaive-func-calling-7-3",
+            "request": request(after_results),
+            "notes": notes.format(3),
+            "origin": origin(3, written=True),
+        },
+        {
             "name": "hermes-glaive-func-calling-7-5",
             "request": request(history),
             "notes": notes.format(5),
             "origin": origin(5, written=True),
         },
+        {
+            "name": "hermes-glaive-func-calling-7-7",
+            "request": request(after_result),
+            "notes": notes.format(7),
+            "origin": origin(7, written=True),
+        },
     ]
     assert [(line["name"], line["request"]["messages"], line["message"]) for line in parse] == [
         ("hermes-glaive-func-calling-7-2", [user], both),
-        ("hermes-glaive-func-calling-7-4", [user, made, *results], answer),
+        ("hermes-glaive-func-calling-7-4", after_results, answer),
         ("hermes-glaive-func-calling-7-6", history, tomorrow),
-        ("hermes-glaive-func-calling-7-8", [*history, tomorrow_made, result], {"content": "Sunny again."}),
+        ("hermes-glaive-func-calling-7-8", after_result, {"content": "Sunny again."}),
     ]
     assert [line["origin"] for line in parse] == [origin(2), origin(4, True), origin(6, True), origin(8, True)]
     assert parse[0] == {
@@ -253,6 +268,13 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
         "notes": notes.format(2),
         "origin": origin(2),
     }
+
+
+def test_a_tool_result_no_assistant_turn_answers_gives_no_render_case():
+    turns = [("system", GLAIVE), ("human", "Weather in Paris?"), ("gpt", PARIS), ("tool", SUNNY)]
+    render, parse = hermes.row_cases(row(*turns), 0, "glaive_func_calling")
+    assert [line["name"] for line in render] == ["hermes-glaive-func-calling-0-1"]
+    assert [line["name"] for line in parse] == ["hermes-glaive-func-calling-0-2"]
 
 
 def test_a_response_without_a_call_or_a_call_without_a_response_is_unmappable():
@@ -309,9 +331,7 @@ def test_rows_that_differ_only_by_their_tools_give_cases_of_their_own():
     clock = json.dumps([{"type": "function", "function": CLOCK}])
     hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
     hello_clock = row(("system", GLAIVE.replace(TOOLS, clock)), ("human", "Hi"), ("gpt", "Hello!"), tools=clock)
-    sets, repeats = corpus_sets.leave_out_repeats(
-        hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}, stride=1)
-    )
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}))
     assert repeats == []
     names = ["hermes-glaive-func-calling-0-2", "hermes-glaive-func-calling-1-2"]
     assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == names
@@ -350,37 +370,48 @@ def ask(city: str) -> dict:
 ORPHAN = row(("system", FUNCTION_CALLING), ("human", "Weather in Paris?"), ("tool", SUNNY), ("gpt", "Sunny."))
 
 
-def test_sets_take_every_stride_row_from_the_configs_first_row_and_name_each_row_they_skip():
-    # func_calling's rows begin as func_calling_singleturn's of the same index, so it takes the odd rows.
-    assert hermes.STRIDE == 2
+def answered(city: str) -> dict:
+    """ask(city), then the weather and the assistant's answer, as a func_calling row goes on."""
+    opening = [(turn["from"], turn["value"]) for turn in ask(city)["conversations"]]
+    return row(*opening, ("tool", SUNNY), ("gpt", "Sunny."))
+
+
+def test_sets_take_every_row_and_name_each_row_they_skip():
     skipped: list = []
-    rows = {
-        "func_calling_singleturn": [ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome")],
-        "func_calling": [ORPHAN, ask("Lima"), ask("Quito"), ORPHAN],
-    }
-    sets = hermes.build_sets(rows, stride=2, skipped=skipped)
-    names = ["hermes-func-calling-singleturn-0-1", "hermes-func-calling-singleturn-4-1"]
+    rows = {"func_calling_singleturn": [ask("Paris"), ORPHAN, ask("Rome")], "func_calling": [ORPHAN, ask("Lima")]}
+    sets = hermes.build_sets(rows, skipped=skipped)
+    names = ["hermes-func-calling-singleturn-0-1", "hermes-func-calling-singleturn-2-1"]
     assert [line["name"] for line in sets[("render", "hermes-func-calling-singleturn")]] == names
     assert [line["name"] for line in sets[("parse", "hermes-func-calling-singleturn")]] == [n[:-1] + "2" for n in names]
     assert [line["name"] for line in sets[("render", "hermes-func-calling")]] == ["hermes-func-calling-1-1"]
-    assert [line["name"] for line in sets[("parse", "hermes-func-calling")]] == ["hermes-func-calling-1-2"]
     assert skipped == [
-        ("func_calling_singleturn row 2", "a response without a call"),
-        ("func_calling row 3", "a response without a call"),
+        ("func_calling_singleturn row 1", "a response without a call"),
+        ("func_calling row 0", "a response without a call"),
     ]
 
 
+def test_a_func_calling_row_keeps_what_follows_the_opening_it_shares_with_its_singleturn_row():
+    # func_calling's rows begin as func_calling_singleturn's of the same index (1883 of 1893 rows): the opening's cases
+    # repeat those and are left out, and the cases after the tool result stay, so neither func_calling set is empty.
+    rows = {"func_calling_singleturn": [ask("Paris")], "func_calling": [answered("Paris")]}
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets(rows))
+    assert repeats == [
+        ("hermes-func-calling-0-1", "hermes-func-calling-singleturn-0-1"),
+        ("hermes-func-calling-0-2", "hermes-func-calling-singleturn-0-2"),
+    ]
+    assert [line["name"] for line in sets[("render", "hermes-func-calling")]] == ["hermes-func-calling-0-3"]
+    assert [line["name"] for line in sets[("parse", "hermes-func-calling")]] == ["hermes-func-calling-0-4"]
+
+
 def test_a_config_whose_rows_give_no_case_has_no_set():
-    assert hermes.build_sets({"func_calling": [ORPHAN, ORPHAN, ORPHAN]}, stride=1) == {}
+    assert hermes.build_sets({"func_calling": [ORPHAN, ORPHAN, ORPHAN]}) == {}
 
 
 def test_rows_that_open_with_the_same_turns_give_the_cases_of_those_turns_once():
     # Six pairs of the glaive_func_calling rows taken open with the same turns and part later, as rows 48 and 622 do.
     hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
     hey = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hey there!"))
-    sets, repeats = corpus_sets.leave_out_repeats(
-        hermes.build_sets({"glaive_func_calling": [hello, hey, hello]}, stride=1)
-    )
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [hello, hey, hello]}))
     name = "hermes-glaive-func-calling-{}".format
     assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]] == [name("0-1")]
     assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == [name("0-2"), name("1-2")]
@@ -388,15 +419,15 @@ def test_rows_that_open_with_the_same_turns_give_the_cases_of_those_turns_once()
     # Calls carry the same ids in both rows, so the cases at and after them repeat too.
     opening = [(turn["from"], turn["value"]) for turn in CONVERSATION["conversations"][:5]]
     rome = row(*opening, ("human", "And in Rome?"), ("gpt", "Rain."))
-    sets, repeats = corpus_sets.leave_out_repeats(
-        hermes.build_sets({"glaive_func_calling": [CONVERSATION, rome]}, stride=1)
-    )
-    assert repeats == [(name("1-1"), name("0-1")), (name("1-2"), name("0-2")), (name("1-4"), name("0-4"))]
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [CONVERSATION, rome]}))
+    # The render case at the shared tool result (turn 3) repeats as well.
+    render_repeats = [(name("1-1"), name("0-1")), (name("1-3"), name("0-3"))]
+    assert repeats == [*render_repeats, (name("1-2"), name("0-2")), (name("1-4"), name("0-4"))]
     assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]][-1] == name("1-5")
 
 
 def test_written_sets_check_clean_and_a_changed_or_stale_hermes_file_is_reported(tmp_path):
-    sets, corpus = hermes.build_sets({"glaive_func_calling": [CONVERSATION]}, stride=1), tmp_path / "corpus"
+    sets, corpus = hermes.build_sets({"glaive_func_calling": [CONVERSATION]}), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "hermes-old"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
@@ -464,7 +495,7 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
         tmp_path,
         monkeypatch,
         func_calling_singleturn=[ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome"), *[ORPHAN] * 6],
-        func_calling=[ORPHAN, ask("Lima"), ask("Quito")],
+        func_calling=[answered("Paris"), answered("Lima")],
         glaive_func_calling=[hello, hello, hey],
     )
     corpus, cache = tmp_path / "corpus", tmp_path / "cache"
@@ -473,17 +504,23 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
     assert main(argv) == 0
     out = capsys.readouterr().out
     lines = out.splitlines()
-    assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 2 cases" in lines
-    assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 1 cases" in lines
-    assert f"{corpus / 'render' / 'hermes-glaive-func-calling.jsonl'}: 1 cases, 1 left out as repeats" in lines
-    assert f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases, 2 distinct messages" in lines
-    assert f"{corpus}: 9 cases in the 6 Hermes sets, 1 left out as repeats, 5 distinct messages" in lines
-    assert "func_calling_singleturn: 6 of 11 rows, from row 0 in steps of 2" in out
-    assert "func_calling: 1 of 3 rows, from row 1 in steps of 2" in out
+    assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 3 cases" in lines
+    assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 3 cases, 1 left out as repeats" in lines
+    assert (
+        f"{corpus / 'parse' / 'hermes-func-calling.jsonl'}: 3 cases, 1 left out as repeats, 2 distinct messages"
+        in lines
+    )
+    assert f"{corpus / 'render' / 'hermes-glaive-func-calling.jsonl'}: 1 cases, 2 left out as repeats" in lines
+    assert (
+        f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases, 1 left out as repeats, 2 distinct messages"
+        in lines
+    )
+    assert f"{corpus}: 15 cases in the 6 Hermes sets, 5 left out as repeats, 7 distinct messages" in lines
     # Every row is named, however many share a reason.
-    rows = ", ".join(f"func_calling_singleturn row {index}" for index in (2, 6, 8, 10))
-    assert f"no case for 4 row(s) ({rows}): a response without a call" in lines
-    assert "no case hermes-glaive-func-calling-2-1: it repeats hermes-glaive-func-calling-0-1" in out
+    rows = ", ".join(f"func_calling_singleturn row {index}" for index in (1, 2, 5, 6, 7, 8, 9, 10))
+    assert f"no case for 8 row(s) ({rows}): a response without a call" in lines
+    assert "no case hermes-func-calling-0-1: it repeats hermes-func-calling-singleturn-0-1" in lines
+    assert "no case hermes-glaive-func-calling-2-1: it repeats hermes-glaive-func-calling-0-1" in lines
     assert main([*argv, "--check"]) == 0
     assert f"{corpus}: the Hermes sets equal a fresh import of hf:datasets/" in capsys.readouterr().out
     # Every file comes from the dataset at the pinned commit, and is kept under --cache, the License copy too.
@@ -492,6 +529,14 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
     }
     assert {options["cache_dir"] for _, _, options in served.hub} == {cache / "huggingface"}
     assert set(served.github_caches) == {cache}
+
+
+def test_the_command_refuses_a_set_that_the_repeats_would_leave_empty_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, func_calling_singleturn=[ask("Paris")], func_calling=[ask("Paris")])
+    corpus = tmp_path / "corpus"
+    with pytest.raises(ValueError, match="every case of render/hermes-func-calling, parse/hermes-func-calling repeats"):
+        main(["import", "hermes", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")])
+    assert not corpus.exists()
 
 
 def test_the_command_checks_the_cards_license_before_it_reads_any_row_and_writes_nothing_on_a_refusal(

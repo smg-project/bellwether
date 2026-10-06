@@ -15,7 +15,8 @@ requests and assistant messages:
   (``WRITTEN``);
 - each ``<tool_response>`` block of a ``tool`` turn is a tool message answering the call in the same position.
 
-Every assistant turn is a parse case and every user turn an assistant turn answers is a render case. A row with no
+Every row of each config is read. Every assistant turn is a parse case, and every user turn or tool result an assistant
+turn answers is a render case: the prompt a model goes on from. A row with no
 faithful OpenAI form gives no case, and the import names it with its reason (``Unmappable``); a case that repeats an
 earlier one is left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats, so
 every case is distinct.
@@ -59,13 +60,6 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. Every second row makes 43.6 MB, so the sets stay
-# plain JSON Lines; every row makes 80.6 MB, past corpus_sets.LIMIT, which corpus_sets.write would store compressed in
-# Git LFS. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
-# equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
-# repeats one of func_calling_singleturn's.
-STRIDE = 2
-FIRST_ROW = {"func_calling_singleturn": 0, "func_calling": 1, "glaive_func_calling": 0}
 
 # The dataset's system prompts for tools, as (text before, text after) a ``<tools>`` element that holds the row's
 # ``tools`` field: func_calling and func_calling_singleturn use the first two, glaive_func_calling the third. Each is
@@ -207,10 +201,10 @@ def origin(config: str, row: dict, index: int, turn: int, request: dict) -> dict
 def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict]]:
     """The render and parse cases of one row.
 
-    The turns become OpenAI chat messages in order. A render case ends at each user turn an assistant turn answers,
-    and a parse case is each assistant turn, its request every message before it. Calls get the ids ``call_<n>``,
-    numbered across the row, and each tool result the id of the call it answers, by order. The ids leave the row out,
-    so two rows that open with the same turns give the same cases there.
+    The turns become OpenAI chat messages in order. A render case ends at each user turn or tool result an assistant
+    turn answers, and a parse case is each assistant turn, its request every message before it. Calls get the ids
+    ``call_<n>``, numbered across the row, and each tool result the id of the call it answers, by order. The ids leave
+    the row out, so two rows that open with the same turns give the same cases there.
     """
     tools = _tools(row["tools"])
     declared = {tool["function"]["name"] for tool in tools}
@@ -232,6 +226,8 @@ def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict
                 content = json.dumps(result, ensure_ascii=False)
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
             calls = []
+            if turn + 1 < len(turns) and turns[turn + 1]["from"] == "gpt":
+                render.append(_line(config, row, index, turn, _request(messages, tools)))
             continue
         if calls:
             raise Unmappable("a call without a response")
@@ -305,20 +301,22 @@ def _line(config: str, row: dict, index: int, turn: int, request: dict, message:
 
 
 def build_sets(
-    rows: dict[str, list[dict]], stride: int = STRIDE, skipped: list[tuple[str, str]] | None = None
+    rows: dict[str, list[dict]], skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)`` from every ``stride``-th row of each config, from its ``FIRST_ROW``.
+    """Corpus lines per ``(kind, set name)`` from every row of each config.
 
     A row that cannot be mapped gives no case, and is appended to ``skipped`` as ``("<config> row <index>", reason)``.
     A set no row fills is not made. The import then leaves out the cases that repeat an earlier one
-    (``corpus_sets.leave_out_repeats``): rows that open with the same turns give the cases of those turns once.
+    (``corpus_sets.leave_out_repeats``): rows that open with the same turns give the cases of those turns once. So
+    func_calling's rows, which begin as func_calling_singleturn's rows of the same index (the first three turns are
+    equal in 1883 of 1893 rows), give the cases that follow that opening.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     for config, found in rows.items():
         cases: dict[str, list[dict]] = {"render": [], "parse": []}
-        for index in range(FIRST_ROW[config], len(found), stride):
+        for index, found_row in enumerate(found):
             try:
-                row_render, row_parse = row_cases(found[index], index, config)
+                row_render, row_parse = row_cases(found_row, index, config)
             except Unmappable as err:
                 if skipped is not None:
                     skipped.append((f"{config} row {index}", str(err)))
@@ -361,6 +359,9 @@ def run(args: argparse.Namespace) -> int:
     skipped: list[tuple[str, str]] = []
     sets = build_sets(rows, skipped=skipped)
     kept, repeats = corpus_sets.leave_out_repeats(sets)
+    empty = [f"{kind}/{name}" for (kind, name), lines in kept.items() if not lines]
+    if empty:
+        raise ValueError(f"every case of {', '.join(empty)} repeats an earlier one; an import writes no empty set")
     if args.check:
         problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
@@ -368,9 +369,6 @@ def run(args: argparse.Namespace) -> int:
         if not problems:
             print(f"{args.corpus}: the Hermes sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for config, found in rows.items():
-        taken = len(range(FIRST_ROW[config], len(found), STRIDE))
-        print(f"{config}: {taken} of {len(found)} rows, from row {FIRST_ROW[config]} in steps of {STRIDE}")
     corpus_sets.report("Hermes", sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped(skipped)
     write_sets(kept, args.corpus, license_text)
