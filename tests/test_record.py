@@ -603,6 +603,158 @@ def test_a_template_that_raises_on_an_unknown_tool_name_still_records_the_case(t
     assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
 
 
+# Qwen3.5 to 3.8's shape: each argument is a tag, a string written as it is and any other value as JSON, so a null
+# and the string "null" give the same text.
+TAGGED_CALL = (
+    "{{ '<tool_call>\\n<function=' + c['function']['name'] + '>\\n' }}"
+    "{%- for k, v in c['function']['arguments'].items() %}"
+    "{{ '<parameter=' + k + '>\\n' + (v if v is string else v | tojson) + '\\n</parameter>\\n' }}"
+    "{%- endfor %}{{ '</function>\\n</tool_call>' }}"
+)
+
+
+@pytest.fixture(scope="session")
+def tagged_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """A template that writes each argument as a tag, as Qwen3.5 to 3.8 do."""
+    return tiny_variant(tiny_model, tmp_path_factory, "tagged-chat", assistant_template(TAGGED_CALL))
+
+
+def call_weather(model: pathlib.Path, properties: dict | None, arguments: dict):
+    """The round trip of one get_weather call; the request's tool declares ``properties``, or there is no tool."""
+    request = {"messages": [user("Weather?")]}
+    if properties is not None:
+        parameters = {"type": "object", "properties": properties}
+        request["tools"] = [{"type": "function", "function": {"name": "get_weather", "parameters": parameters}}]
+    call = {"type": "function", "function": {"name": "get_weather", "arguments": json.dumps(arguments)}}
+    return RoundtripOracle(str(model), "local").render_output(request, {"content": "", "tool_calls": [call]})
+
+
+STRING_UNIT = {"city": {"type": "string"}, "unit": {"type": "string"}}
+
+
+def test_a_null_under_a_declared_string_fails_the_case_under_a_tagged_template(tagged_model):
+    # vLLM keeps the text `null` as the string "null" for a parameter declared a string, and smg does the same.
+    reason = (
+        "the template renders get_weather's unit null as it renders the string 'null', and the tool declares unit a "
+        "string, so no reader gets null back from the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(tagged_model, STRING_UNIT, {"city": "Paris", "unit": None})
+
+
+def test_a_null_under_a_declared_string_is_recorded_under_a_template_that_writes_json(tiny_model):
+    out = call_weather(tiny_model, STRING_UNIT, {"city": "Paris", "unit": None})
+    assert '"arguments": {"city": "Paris", "unit": null}' in out.text
+
+
+@pytest.mark.parametrize(
+    ("declared", "value"),
+    [({"type": "boolean"}, False), ({"type": "number"}, 2), ({"type": ["string", "null"]}, None)],
+    ids=["boolean", "int-as-number", "type-list"],
+)
+def test_a_value_of_its_declared_type_is_not_checked(tagged_model, declared, value):
+    out = call_weather(tagged_model, {"unit": declared}, {"unit": value})
+    assert f"<parameter=unit>\n{json.dumps(value)}\n</parameter>" in out.text
+
+
+@pytest.mark.parametrize(("model", "text"), [("tagged_model", "false"), ("items_model", "False")])
+def test_a_boolean_under_a_declared_string_fails_the_case(request, model, text):
+    # Qwen3.5 to 3.8 write a boolean as JSON, `false`; Qwen3-Coder writes it with Jinja's `string`, `False`. Either
+    # text is also the text of a string.
+    reason = (
+        f"the template renders get_weather's unit false as it renders the string '{text}', and the tool declares unit "
+        "a string, so no reader gets false back from the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(request.getfixturevalue(model), STRING_UNIT, {"city": "Paris", "unit": False})
+
+
+def test_an_array_holding_non_ascii_text_under_a_declared_string_fails_the_case(tagged_model):
+    # transformers' tojson writes non-ASCII text as it is, so the JSON candidate must leave it unescaped too.
+    reason = (
+        'the template renders get_weather\'s unit ["é"] as it renders the string \'["é"]\', and the tool declares '
+        'unit a string, so no reader gets ["é"] back from the output'
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(tagged_model, STRING_UNIT, {"city": "Paris", "unit": ["é"]})
+
+
+def test_a_string_that_reads_as_its_declared_type_fails_the_case(tagged_model):
+    reason = (
+        "the template renders get_weather's days the string '2' as it renders 2, and the tool declares days an "
+        "integer, so no reader gets the string '2' back from the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(tagged_model, {"days": {"type": "integer"}}, {"days": "2"})
+
+
+@pytest.mark.parametrize("declared", [{"type": "integer"}, {"type": ["string", "integer"]}], ids=["integer", "list"])
+def test_a_null_written_as_null_under_a_declared_type_other_than_string_is_recorded(tagged_model, declared):
+    # vLLM and smg read the text `null` as null under any declared type but a string alone.
+    out = call_weather(tagged_model, {"days": declared}, {"days": None})
+    assert "<parameter=days>\nnull\n</parameter>" in out.text
+
+
+@pytest.mark.parametrize(
+    ("declared", "kinds"),
+    [({"type": "integer"}, "an integer"), ({"type": ["string", "null"]}, "a string or null")],
+    ids=["integer", "optional-string"],
+)
+def test_a_null_written_as_none_fails_the_case_under_any_declared_type(items_model, declared, kinds):
+    # Qwen3-Coder writes a null with Jinja's `string`, `None`. vLLM's parser (vllm/tool_parsers/utils.py,
+    # coerce_to_schema_type) reads only the text `null` as null, so `None` comes back as the string "None".
+    reason = (
+        "the template renders get_weather's days null as it renders the string 'None', and vLLM reads the text None "
+        f"as the string 'None' under {kinds}, so it does not get null back from the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(items_model, {"days": declared}, {"days": None})
+
+
+def test_an_undeclared_number_fails_the_case(tagged_model):
+    # Without a declared type the readers differ (smg infers JSON, vLLM keeps a string), so the text must say which.
+    reason = (
+        "the template renders get_weather's days 3 as it renders the string '3', and the tools declare no type for "
+        "days, so no reader can tell the two apart in the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(tagged_model, {"city": {"type": "string"}}, {"city": "Paris", "days": 3})
+
+
+@pytest.mark.parametrize(
+    ("model", "value", "candidate"),
+    [("tagged_model", "true", "true"), ("items_model", "None", "null"), ("items_model", "False", "false")],
+)
+def test_an_undeclared_string_that_reads_as_another_type_fails_the_case(request, model, value, candidate):
+    # Where no type is declared, smg reads JSON, and Python's True, False and None.
+    reason = (
+        f"the template renders get_weather's unit the string '{value}' as it renders {candidate}, and the tools "
+        "declare no type for unit, so no reader can tell the two apart in the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(request.getfixturevalue(model), None, {"unit": value})
+
+
+def test_an_undeclared_string_that_is_not_json_is_recorded(tagged_model):
+    out = call_weather(tagged_model, None, {"city": "Paris"})
+    assert "<parameter=city>\nParis\n</parameter>" in out.text
+
+
+def test_a_template_that_fails_on_the_candidate_records_the_case(tiny_model, tmp_path_factory):
+    # This template takes no string value: the candidates, the strings 'null' and 'None', fail to render, so neither
+    # reads as the null.
+    call = (
+        "{{ '<tool_call>\\n<function=' + c['function']['name'] + '>\\n' }}"
+        "{%- for k, v in c['function']['arguments'].items() %}"
+        "{%- if v is string %}{{ raise_exception('no string arguments') }}{%- endif %}"
+        "{{ '<parameter=' + k + '>\\n' + v | tojson + '\\n</parameter>\\n' }}"
+        "{%- endfor %}{{ '</function>\\n</tool_call>' }}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-strings-chat", assistant_template(call))
+    out = call_weather(model, {"unit": {"type": "string"}}, {"unit": None})
+    assert "<parameter=unit>\nnull\n</parameter>" in out.text
+
+
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
