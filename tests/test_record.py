@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -1103,3 +1104,36 @@ def test_record_keeps_the_old_form_when_the_new_file_cannot_be_written(tmp_path,
     with pytest.raises(ValueError, match="schema"):
         main(record_argv(tmp_path, tiny_model))
     assert (out_dir / "bench-x.jsonl").is_file()
+
+
+def test_unpack_everything_again_drops_a_model_the_fixtures_no_longer_have(tmp_path, tiny_model, monkeypatch):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    write_manifest(fixtures, "other", "acme/Other")
+    write_fixture_file(fixtures / "other" / "render" / "common.jsonl", render_cases("a"))
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    assert (out / "other" / "render" / "common.jsonl").is_file()
+    shutil.rmtree(fixtures / "other")
+    (out / "notes").mkdir()
+    (out / "notes" / "todo.txt").write_text("keep")
+
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+
+    assert not (out / "other").exists()
+    assert (out / "tiny-chat" / "render" / "common.jsonl").is_file()
+    assert (out / "notes" / "todo.txt").read_text() == "keep"
+
+
+def test_unpack_refuses_to_replace_a_directory_it_did_not_write(tmp_path, tiny_model, monkeypatch, capsys):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "other"
+    (out / "tiny-chat").mkdir(parents=True)
+    (out / "tiny-chat" / "notes.txt").write_text("notes")
+
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out)]) == 1
+
+    assert "did not write" in capsys.readouterr().err
+    assert (out / "tiny-chat" / "notes.txt").read_text() == "notes"
+    assert not (out / "tiny-chat" / "render").exists()

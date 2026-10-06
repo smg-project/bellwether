@@ -70,9 +70,16 @@ def fetch(paths: list[Path]) -> None:
 
 def unpack(fixtures: Path, out: Path, model: str | None = None) -> list[Path]:
     """Write each selected model's tree under ``out``, replacing what an earlier unpack left there, so a set the
-    fixtures no longer have does not stay behind for a consumer that reads every ``*.jsonl``."""
+    fixtures no longer have does not stay behind for a consumer that reads every ``*.jsonl``. Unpacking every model
+    also removes the tree of a model the fixtures no longer have. Only what an earlier unpack wrote is removed: a
+    model's directory there that holds anything else stops the run before anything is deleted."""
     manifests = selected(fixtures, model)
     refuse_out_over_fixtures(out, manifests)
+    refuse_what_unpack_did_not_write(out, manifests)
+    if model is None and out.is_dir():
+        slugs = {manifest.slug for manifest in manifests}
+        for stale in sorted(p for p in out.iterdir() if p.name not in slugs and (p / "manifest.toml").is_file()):
+            shutil.rmtree(stale)  # a model the fixtures no longer have
     written: list[Path] = []
     for manifest in manifests:
         target_dir = out / manifest.slug
@@ -98,10 +105,25 @@ def refuse_out_over_fixtures(out: Path, manifests: list[Manifest]) -> None:
             raise ValueError(f"--out {out} is the fixtures directory itself; unpack writes a separate tree")
 
 
+def unpacked(directory: Path) -> bool:
+    """A directory an earlier unpack wrote: it holds a model's ``manifest.toml``, or nothing at all."""
+    return (directory / "manifest.toml").is_file() or not any(directory.iterdir())
+
+
+def refuse_what_unpack_did_not_write(out: Path, manifests: list[Manifest]) -> None:
+    """Unpacking replaces each model's tree under ``out``; a directory there that unpack did not write is someone
+    else's, so nothing is deleted and the run stops."""
+    for manifest in manifests:
+        target = out / manifest.slug
+        if target.exists() and not (target.is_dir() and unpacked(target)):
+            raise ValueError(f"{target} holds files unpack did not write; move them away or choose another --out")
+
+
 def run(args: argparse.Namespace) -> int:
     try:
         manifests = selected(args.fixtures, args.model)
         refuse_out_over_fixtures(args.out, manifests)
+        refuse_what_unpack_did_not_write(args.out, manifests)
     except (FileNotFoundError, ValueError) as err:
         print(f"bellwether unpack: {err}", file=sys.stderr)
         return 1
