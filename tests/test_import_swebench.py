@@ -410,6 +410,36 @@ def test_rows_with_an_empty_patch_or_problem_statement_are_skipped_and_each_is_n
     ]
 
 
+def test_a_row_whose_patch_carries_code_under_other_terms_is_left_out_and_named(monkeypatch):
+    terms = "django/core/validators.py holds code from elsewhere, under its own license"
+    monkeypatch.setitem(swebench.OTHER_TERMS, "django__django-11099", terms)
+    skipped: list[tuple[str, str]] = []
+    sets = swebench.build_sets(
+        [(swebench.VERIFIED, [row(), row(instance_id="django__django-11100")])], LICENSES, skipped=skipped
+    )
+    assert skipped == [("django__django-11099", terms)]
+    assert all("11099" not in line["name"] for lines in sets.values() for line in lines)
+    assert names(sets[("render", "swebench-verified")]) == ["swebench-verified-django-django-11100"]
+
+
+# Lines 896, 846, 400 and 1332 of the parse call set, as #46's review found them: a patch to requests' copy of urllib3
+# (MIT), a file from packaging (Apache-2.0 or BSD-2-Clause), Python's code in Django (PSF), docutils' (public domain).
+REVIEWED_OTHER_TERMS = (
+    "psf__requests-2678",
+    "mwaskom__seaborn-2766",
+    "django__django-13915",
+    "sphinx-doc__sphinx-7356",
+)
+
+
+def test_the_rows_the_review_found_under_other_terms_are_listed_and_not_in_the_committed_corpus():
+    assert set(REVIEWED_OTHER_TERMS) <= set(swebench.OTHER_TERMS)
+    for kind in ("render", "parse"):
+        for path in sorted((CORPUS / kind).glob("swebench-*.jsonl")):
+            for row_id in REVIEWED_OTHER_TERMS:
+                assert f'"row": "{row_id}"'.encode() not in path.read_bytes(), (path.name, row_id)
+
+
 def test_a_row_whose_base_commit_is_not_in_the_license_table_stops_the_import():
     rows = [row(repo="numpy/numpy", instance_id="numpy__numpy-1")]
     with pytest.raises(ValueError, match=f"numpy__numpy-1: numpy/numpy at {COMMIT} is not in swebench_licenses.json"):

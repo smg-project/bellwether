@@ -1,6 +1,6 @@
 """Build the table of license files that ``bellwether import swebench`` copies next to its sets.
 
-    uv run python scripts/swebench_licenses.py <directory for bare clones> [--check]
+    uv run python scripts/swebench_licenses.py <directory for bare clones> [--check | --terms]
 
 For every row the importer reads, the license file and the NOTICE file at the root of the row's repository at the
 row's base commit: ``LICENSE``, ``LICENSE.md``, ``LICENSE.rst``, ``LICENSE.txt`` or ``COPYING``, or ``LICENSE/LICENSE``
@@ -14,6 +14,10 @@ The repositories are cloned bare into the directory given, or used as they are w
 written to ``src/bellwether/importers/swebench_licenses.json``; ``--check`` compares instead, and exits 1 on a
 difference. Reading the rows needs the pinned parquet files in the Hugging Face cache (``HF_HUB_OFFLINE=1`` reads them
 offline).
+
+``--terms`` prints, for every row, the license and copyright statements in each file its patch touches (the whole file
+at the base commit) and in the patch's own lines, leaving out each repository's own standard header lines (``OWN``):
+what ``swebench.OTHER_TERMS`` was reviewed from, by hand. It exits 1 if a row in ``OTHER_TERMS`` shows no statement.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +36,30 @@ TABLE = Path(__file__).resolve().parent.parent / "src" / "bellwether" / "importe
 LICENSE_NAMES = ("LICENSE", "LICENSE.md", "LICENSE.rst", "LICENSE.txt", "COPYING")
 NOTICE_NAME = "NOTICE"
 METADATA = ("setup.cfg", "pyproject.toml", "setup.py")
+# A line that may state a license or a copyright.
+STATEMENT = re.compile(
+    r"copyright|licen[cs]ed\b|\blicen[cs]e\b|public domain|spdx-license|all rights reserved|permission is hereby "
+    r"granted|redistribution and use|under the terms of|python software foundation|\bpsf\b|__license__",
+    re.IGNORECASE,
+)
+# Each repository's own standard header lines, which state its own terms.
+OWN = {
+    "astropy/astropy": [r"^Licensed under a 3-clause BSD style license( - see LICE?NSE\.rst)?$"],
+    "psf/requests": [
+        r"^:copyright: \(c\) \d{4}(-\d{4})? by Kenneth Reitz\.?$",
+        r"^:license: (Apache 2\.0|ISC), see LICENSE",
+    ],
+    "pylint-dev/pylint": [
+        r"^Copyright \(c\) ",
+        r"^Licensed under the GPL: https://www\.gnu\.org/licenses/old-licenses/gpl-2\.0\.html",
+        r"^For details: https://github\.com/(PyCQA|pylint-dev)/pylint/blob/(master|main)/(LICENSE|COPYING)",
+    ],
+    "scikit-learn/scikit-learn": [r"^License: (BSD 3 clause|BSD 3 Clause|BSD|3-clause BSD|BSD 3 clause \(C\).*)$"],
+    "sphinx-doc/sphinx": [
+        r"^:copyright: Copyright \d{4}-\d{4} by the Sphinx team, see AUTHORS\.$",
+        r"^:license: BSD, see LICENSE for details\.$",
+    ],
+}
 
 
 def git(clone: Path, *args: str) -> bytes:
@@ -76,7 +105,8 @@ def is_apache_text(text: str) -> bool:
     return " ".join(text.split()).startswith("Apache License Version 2.0, January 2004")
 
 
-def build(clones: Path) -> dict:
+def read_rows() -> list[dict]:
+    """Every row the importer reads, once, in its order."""
     rows, seen = [], set()
     for source in swebench.SOURCES:
         path = hf.fetch(source.dataset_id, source.revision, source.file, source.sha256)
@@ -84,6 +114,11 @@ def build(clones: Path) -> dict:
             if row["instance_id"] not in seen:
                 seen.add(row["instance_id"])
                 rows.append(row)
+    return rows
+
+
+def build(clones: Path) -> dict:
+    rows = read_rows()
     pins: dict[tuple[str, str, str], tuple[int, str]] = {}  # (repository, path, sha256) -> earliest (time, commit)
     at_commit: dict[tuple[str, str], dict[str, tuple[str, str] | None]] = {}
     texts: dict[tuple[str, str, str], str] = {}
@@ -153,12 +188,59 @@ def build(clones: Path) -> dict:
     }
 
 
+def statements(clone: Path, row: dict) -> list[str]:
+    """The license and copyright statements in the files ``row``'s patch touches, and in the patch, but its own."""
+    own = [re.compile(pattern) for pattern in OWN.get(row["repo"], [])]
+
+    def foreign(line: str) -> bool:
+        text = re.sub(r"^[\s#*/\"'!;-]+", "", line).strip()
+        return bool(STATEMENT.search(line)) and not any(pattern.search(text) for pattern in own)
+
+    touched = []
+    for a, b in re.findall(r"^diff --git a/(\S+) b/(\S+)$", row["patch"], flags=re.M):
+        touched += [path for path in (a, b) if path not in touched]
+    found = []
+    for path in touched:
+        listed = subprocess.run(["git", "-C", str(clone), "show", f"{row['base_commit']}:{path}"], capture_output=True)
+        if listed.returncode == 0:
+            for number, line in enumerate(listed.stdout.decode("utf-8", "replace").split("\n"), start=1):
+                if foreign(line):
+                    found.append(f"{path}:{number}: {line.strip()[:160]}")
+    current = None
+    for line in row["patch"].split("\n"):
+        header = re.match(r"^diff --git a/\S+ b/(\S+)$", line)
+        if header:
+            current = header.group(1)
+        elif line[:1] in "+- " and not line.startswith(("+++", "---")) and foreign(line[1:]):
+            found.append(f"patch {line[:1]} {current}: {line[1:].strip()[:160]}")
+    return found
+
+
+def terms(clones: Path) -> int:
+    unexplained = []
+    for row in read_rows():
+        found = statements(clone_of(clones, row["repo"]), row)
+        listed = swebench.OTHER_TERMS.get(row["instance_id"])
+        if found:
+            print(f"\n## {row['instance_id']}" + (f" (left out: {listed})" if listed else ""))
+            for statement in found:
+                print(f"   {statement}")
+        elif listed:
+            unexplained.append(row["instance_id"])
+    for row_id in unexplained:
+        print(f"{row_id}: in OTHER_TERMS with no statement behind it", file=sys.stderr)
+    return 1 if unexplained else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("clones", type=Path, help="directory for bare clones of the SWE-bench repositories")
     parser.add_argument("--check", action="store_true", help="compare with the committed table instead of writing it")
+    parser.add_argument("--terms", action="store_true", help="print the statements OTHER_TERMS was reviewed from")
     args = parser.parse_args()
     args.clones.mkdir(parents=True, exist_ok=True)
+    if args.terms:
+        return terms(args.clones)
     table = json.dumps(build(args.clones), indent=1) + "\n"
     if args.check:
         if TABLE.read_text("utf-8") != table:

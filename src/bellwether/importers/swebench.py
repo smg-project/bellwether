@@ -108,6 +108,93 @@ LICENSE_KINDS = {
     "LicenseRef-Matplotlib": "permissive",  # not on the SPDX list: Matplotlib's own license agreement
     "MIT": "permissive",
 }
+# Rows whose gold patch carries code that its own file, or the patch itself, puts under terms other than the
+# repository's license: another license, or another holder's license file. The copied license files cover the
+# repository's terms only, so these rows are left out. Found by reading, for every row, each file the patch touches at
+# the base commit and every line of the patch for license and copyright statements, leaving out each repository's own
+# headers, and reviewing what is left by hand (scripts/swebench_licenses.py --terms prints it). A file whose header
+# names another copyright holder under the repository's own license does not count.
+OTHER_TERMS = {
+    **dict.fromkeys(
+        ("astropy__astropy-6938", "astropy__astropy-7218", "astropy__astropy-8707", "astropy__astropy-13417"),
+        "astropy/io/fits/ is under PyFITS's license, licenses/PYFITS.rst",
+    ),
+    **dict.fromkeys(
+        ("astropy__astropy-14508", "astropy__astropy-14528", "astropy__astropy-14578", "astropy__astropy-14598"),
+        "astropy/io/fits/ is under PyFITS's license, licenses/PYFITS.rst",
+    ),
+    **dict.fromkeys(
+        ("astropy__astropy-14163", "astropy__astropy-14213", "astropy__astropy-14484"),
+        "astropy/units/quantity_helper/function_helpers.py holds code from NumPy, under licenses/NUMPY_LICENSE.rst",
+    ),
+    "astropy__astropy-13158": "astropy/modeling/functional_models.py holds code from cpfX, under its own BSD license",
+    **dict.fromkeys(
+        ("django__django-11374", "django__django-11638", "django__django-11848", "django__django-13915"),
+        "django/utils/http.py holds code from Python, under the PSF license, LICENSE.python",
+    ),
+    "django__django-13410": "django/core/files/locks.py holds code from a Python Cookbook recipe and Roundup",
+    "matplotlib__matplotlib-23198": "lib/matplotlib/backends/qt_editor/figureoptions.py is under the MIT License",
+    "matplotlib__matplotlib-26341": "lib/matplotlib/sankey.py states its own license, BSD",
+    "mwaskom__seaborn-2766": (
+        "the patch adds seaborn/external/version.py from packaging, under Apache-2.0 or BSD-2-Clause"
+    ),
+    **dict.fromkeys(
+        ("mwaskom__seaborn-2996", "mwaskom__seaborn-3216"),
+        "seaborn/_compat.py holds code from matplotlib, under matplotlib's license",
+    ),
+    "psf__requests-2466": "requests/packages/__init__.py is from pip, under the MIT License",
+    "psf__requests-2678": "requests/packages/urllib3/ is urllib3, under the MIT License",
+    **dict.fromkeys(
+        ("pydata__xarray-3631", "pydata__xarray-4339", "pydata__xarray-4758", "pydata__xarray-5233"),
+        "the patch touches code from pandas, under pandas' license and holders",
+    ),
+    **dict.fromkeys(
+        ("pydata__xarray-6135", "pydata__xarray-7019", "pydata__xarray-7444"),
+        "the patch touches code from pandas, under pandas' license and holders",
+    ),
+    **dict.fromkeys(
+        ("pydata__xarray-5682", "pydata__xarray-7052", "pydata__xarray-7179"),
+        "xarray/plot/utils.py holds code from seaborn, under licenses/SEABORN_LICENSE",
+    ),
+    "scikit-learn__scikit-learn-10427": (
+        "the patch adds sklearn/externals/_pilutil.py from SciPy, under SciPy's license"
+    ),
+    "scikit-learn__scikit-learn-14067": (
+        "the patch adds sklearn/externals/_scipy_linalg.py from SciPy, under SciPy's license"
+    ),
+    **dict.fromkeys(
+        ("scikit-learn__scikit-learn-12938", "scikit-learn__scikit-learn-13584"),
+        "sklearn/utils/_pprint.py is from Python, under the PSF license",
+    ),
+    "scikit-learn__scikit-learn-7760": "sklearn/utils/_unittest_backport.py is from Python, under the PSF license",
+    **dict.fromkeys(
+        ("scikit-learn__scikit-learn-12486", "scikit-learn__scikit-learn-13467", "scikit-learn__scikit-learn-14898"),
+        "sklearn/metrics/scorer.py states its own license, Simplified BSD",
+    ),
+    **dict.fromkeys(
+        (
+            "sphinx-doc__sphinx-7234",
+            "sphinx-doc__sphinx-7557",
+            "sphinx-doc__sphinx-7757",
+            "sphinx-doc__sphinx-7831",
+            "sphinx-doc__sphinx-8007",
+            "sphinx-doc__sphinx-8278",
+            "sphinx-doc__sphinx-8362",
+            "sphinx-doc__sphinx-9261",
+            "sphinx-doc__sphinx-9281",
+            "sphinx-doc__sphinx-9461",
+            "sphinx-doc__sphinx-9654",
+            "sphinx-doc__sphinx-9797",
+            "sphinx-doc__sphinx-9931",
+            "sphinx-doc__sphinx-9997",
+        ),
+        "sphinx/util/inspect.py holds code from Python, under the PSF license",
+    ),
+    **dict.fromkeys(
+        ("sphinx-doc__sphinx-7356", "sphinx-doc__sphinx-7374"),
+        "sphinx/util/nodes.py holds code from docutils, placed in the public domain",
+    ),
+}
 # A render line holds only the issue text and its hints, comments by GitHub users under no license that is established;
 # SPDX's word for that.
 NO_LICENSE = "NOASSERTION"
@@ -285,7 +372,8 @@ def build_sets(
 
     ``licenses`` gives the license of each row's code by its repository and base commit (``licenses_from``); a row
     whose base commit it does not name stops the import. A row whose code is copyleft goes to the ``-copyleft`` sets.
-    A row whose problem statement or patch is empty gets no cases, and is appended to ``skipped`` with its reason.
+    A row whose problem statement or patch is empty, or whose patch carries code under other terms (``OTHER_TERMS``),
+    gets no cases, and is appended to ``skipped`` with its reason.
     A row whose instance an earlier source already gave (SWE-bench's test split holds all of Verified) gets no cases of
     its own, and its id is appended to ``repeated``; it must equal the earlier row in every column the import reads,
     or the import stops.
@@ -320,6 +408,10 @@ def build_sets(
             if empty is not None:
                 if skipped is not None:
                     skipped.append((row_id, f"the {empty} is empty"))
+                continue
+            if row_id in OTHER_TERMS:
+                if skipped is not None:
+                    skipped.append((row_id, OTHER_TERMS[row_id]))
                 continue
             code = licenses.get((row["repo"], row["base_commit"]))
             if code is None:
