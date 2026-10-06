@@ -137,19 +137,16 @@ CALL = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL)
 def split_calls(text: str) -> tuple[str, list[dict]]:
     """The content of an assistant turn and its calls, one ``{"name", "arguments"}`` object per ``<tool_call>``.
 
-    A turn without a block is all content, byte for byte. In a turn with blocks the content is the text before the
-    first block, as it is (in every pinned turn of calls it is empty); between and after the blocks there may be only
-    whitespace, since a message renders its content before its calls.
+    The content is the text before the first block, as it is: the whole turn when it has no block, empty in every
+    pinned turn of calls. Between and after the blocks there may be only whitespace, since a message renders its
+    content before its calls.
     """
     pieces = CALL.split(text)  # text, block, text, block, ..., text
     if any(tag in piece for piece in pieces[0::2] for tag in ("<tool_call>", "</tool_call>")):
         raise Unmappable("a <tool_call> tag without its pair")
-    bodies = pieces[1::2]
-    if not bodies:
-        return text, []
     if any(piece.strip() for piece in pieces[2::2]):
         raise Unmappable("text after a <tool_call> block")
-    return pieces[0], [_call(body) for body in bodies]
+    return pieces[0], [_call(body) for body in pieces[1::2]]
 
 
 def _call(body: str) -> dict:

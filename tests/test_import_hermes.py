@@ -285,6 +285,37 @@ def test_a_tool_that_is_not_an_openai_function_tool_is_unmappable():
         hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
 
 
+CLOCK = {"name": "get_time", "description": "Time in a city.", "parameters": {"type": "object", "properties": {}}}
+
+
+def test_each_tool_that_is_not_an_openai_function_tool_is_unmappable():
+    for tool in (
+        "get_time",  # not an object
+        {"type": "code_interpreter", "function": CLOCK},  # not a function tool
+        {"type": "function", "function": "get_time"},  # a function that is not an object
+        {"type": "function"},  # no function
+        {"type": "function", "function": {**CLOCK, "name": 7}},  # a name that is not a string
+        {"type": "function", "function": {"description": "Time in a city."}},  # no name
+    ):
+        tools = json.dumps([WEATHER, tool])
+        turns = [("system", GLAIVE.replace(TOOLS, tools)), ("human", "Hi"), ("gpt", "Hello!")]
+        with pytest.raises(hermes.Unmappable, match="a tool that is not an OpenAI function tool"):
+            hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
+
+
+def test_rows_that_differ_only_by_their_tools_give_cases_of_their_own():
+    # glaive_func_calling pairs one chat with several tool lists, and a case's tools are part of its request: such
+    # cases are distinct, and stay, though their messages are the same.
+    clock = json.dumps([{"type": "function", "function": CLOCK}])
+    hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
+    hello_clock = row(("system", GLAIVE.replace(TOOLS, clock)), ("human", "Hi"), ("gpt", "Hello!"), tools=clock)
+    repeated: list = []
+    sets = hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}, stride=1, repeated=repeated)
+    assert repeated == []
+    names = ["hermes-glaive-func-calling-0-2", "hermes-glaive-func-calling-1-2"]
+    assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == names
+
+
 def test_a_row_whose_tools_declare_one_name_twice_is_unmappable():
     # 44 glaive_func_calling rows taken do, 42 of them with two different definitions: a call to that name could be
     # held to either, and no engine is asked to choose.
@@ -389,7 +420,10 @@ def test_written_sets_check_clean_and_a_changed_or_stale_hermes_file_is_reported
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "hermes-old"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
-    hermes.write_sets(sets, corpus, APACHE)
+    written = hermes.write_sets(sets, corpus, APACHE)
+    kinds = ("parse", "render")
+    copy = corpus / "licenses" / "hermes-LICENSE"
+    assert written == [*(corpus / kind / "hermes-glaive-func-calling.jsonl" for kind in kinds), copy]
     assert not (corpus / "render" / "hermes-old.jsonl").exists()
     for name in ("common", "bfcl-simple-python"):
         assert (corpus / "render" / f"{name}.jsonl").read_text() == "{}\n"
@@ -446,7 +480,7 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
     served = serve(
         tmp_path,
         monkeypatch,
-        func_calling_singleturn=[ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome"), ORPHAN, ORPHAN],
+        func_calling_singleturn=[ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome"), *[ORPHAN] * 6],
         func_calling=[ORPHAN, ask("Lima"), ask("Quito")],
         glaive_func_calling=[hello, hello, hey],
     )
@@ -457,9 +491,12 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
     assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 2 cases" in out
     assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 1 cases" in out
     assert f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases" in out
-    assert "func_calling_singleturn: 4 of 7 rows, from row 0 in steps of 2" in out
+    assert "func_calling_singleturn: 6 of 11 rows, from row 0 in steps of 2" in out
     assert "func_calling: 1 of 3 rows, from row 1 in steps of 2" in out
-    assert "no cases for 2 row(s) of func_calling_singleturn (2, 6): a response without a call" in out
+    # Every row is named, however many share a reason.
+    assert (
+        "no cases for 4 row(s) of func_calling_singleturn (2, 6, 8, 10): a response without a call" in out.splitlines()
+    )
     assert "no case hermes-glaive-func-calling-2-1: it repeats hermes-glaive-func-calling-0-1" in out
     assert main(["import", "hermes", "--corpus", str(corpus), "--check"]) == 0
     assert f"{corpus}: the Hermes sets equal a fresh import of hf:datasets/" in capsys.readouterr().out
