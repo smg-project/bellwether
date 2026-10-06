@@ -13,6 +13,7 @@
     "request": {"type": "object", "description": "render: an OpenAI chat completion request body"},
     "tools": {"type": "array", "description": "parse: the tool definitions the output was produced with"},
     "output_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "parse, detokenize: the engine output token ids"},
+    "output_pieces": {"type": "array", "items": {"type": "string"}, "description": "parse: the text each output token contributes under the reference tokenizer's incremental decode; one per id, joined they are the reference text"},
     "text": {"type": "string", "description": "tokenize: the input text"},
     "malformed": {"type": "boolean", "default": false, "description": "parse: output has no well-formed parse; verdict is policy, not regression"},
     "chunk_plans": {

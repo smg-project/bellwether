@@ -116,6 +116,7 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
         "request": case.request,
         "tools": list(case.request.get("tools") or []),
         "output_ids": output.output_ids,
+        "output_pieces": output.output_pieces,
         "malformed": False,
         "chunk_plans": chunk_plans(len(output.output_ids)),
         "reference": {

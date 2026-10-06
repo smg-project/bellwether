@@ -344,6 +344,18 @@ def test_roundtrip_records_the_turn_between_the_prompt_and_the_end_of_turn(tiny_
     assert (plain.text, plain.finish_reason) == ("Hello", "stop")
 
 
+def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
+    # The tiny tokenizer has no merge for a byte outside ASCII, so é is two byte tokens and the globe
+    # four; a token that does not complete a character contributes nothing, the one that does
+    # carries the whole character. A marker token contributes its marker.
+    assert out.output_pieces[0] == "<think>"
+    assert out.output_pieces[-7:] == ["", "é", " ", "", "", "", "🌍"]
+    assert len(out.output_pieces) == len(out.output_ids)
+    assert "".join(out.output_pieces) == "<think>\nr\n</think>\n\nCafé 🌍"
+
+
 def test_roundtrip_reports_a_turn_the_template_cannot_extend(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     request = {"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}}
@@ -384,12 +396,28 @@ def test_record_parse_writes_the_output_its_chunk_plans_and_the_message(tmp_path
     assert line["output_ids"] and len(line["output_ids"]) == sum(line["chunk_plans"]["size-2"])
     assert line["chunk_plans"]["whole"] is None
     reference = line["reference"]
+    assert len(line["output_pieces"]) == len(line["output_ids"])
+    assert "".join(line["output_pieces"]) == reference["text"]
     assert reference["source"] == "roundtrip"
     assert reference["message"] == {"role": "assistant", "content": "", "tool_calls": [weather_call()]}
     assert reference["finish_reason"] == "tool_calls"
     assert reference["text"].startswith("\n<tool_call>\n")
     assert reference["provenance"]["revision"] == "local"
     assert "not recorded tiny-chat/parse/lossy: ValueError: the template does not extend" in capsys.readouterr().err
+
+
+def test_record_parse_reports_an_output_whose_tokens_do_not_give_back_its_text(tmp_path, tiny_model, capsys):
+    # The incremental decode holds back text that ends in U+FFFD, waiting for the bytes that would
+    # complete a character; at the end of an output none come, so the pieces fall short of the text.
+    cases = [
+        {"name": "held", "request": {"messages": [user("Hi")]}, "message": {"content": "odd \ufffd"}},
+        {"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}},
+    ]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 1
+    assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/parse/plain"]
+    err = capsys.readouterr().err
+    assert "not recorded tiny-chat/parse/held: ValueError: the output's tokens do not give back its text" in err
 
 
 def test_record_parse_needs_the_message(tmp_path, tiny_model, capsys):
@@ -457,3 +485,6 @@ def test_committed_fixtures_are_canonical_sorted_and_valid(path):
         assert case["id"].startswith(f"{manifest.slug}/{path.parent.name}/")
         assert case["model"] == manifest.model
         assert case["reference"]["provenance"]["revision"] == manifest.revision
+        if case["kind"] == "parse":
+            assert len(case["output_pieces"]) == len(case["output_ids"])
+            assert "".join(case["output_pieces"]) == case["reference"]["text"]
