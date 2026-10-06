@@ -14,6 +14,7 @@ from datetime import date
 from .hub import Details, Hub, HubUnavailable
 from .registry import Entry
 from .rules import (
+    NO_CHECKPOINT,
     POOLING_HEADS,
     TIER1,
     admits_details,
@@ -79,6 +80,19 @@ def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
     return named
 
 
+def without_checkpoint(entries: Iterable[Entry]) -> dict[str, _Named]:
+    """Generative entries that name no checkpoint a row could be keyed by, under the entry's own name.
+
+    vLLM's entry is named by its architecture, an SGLang docs row by its model family; either is the
+    row's key, so the entry is in the list though no checkpoint stands for it.
+    """
+    named: dict[str, _Named] = {}
+    for entry in entries:
+        if entry.generative and not any(is_hub_id(model) for model in entry.checkpoints):
+            named.setdefault(entry.name, _Named()).add([entry.engine], entry.multimodal, example=False)
+    return named
+
+
 def unnamed(entries: Iterable[Entry]) -> list[str]:
     """Generative entries that name no checkpoint, or name something that is not one: a run's notes."""
     notes = []
@@ -97,8 +111,10 @@ def unnamed(entries: Iterable[Entry]) -> list[str]:
 
 def registry_only_rows(entries: Iterable[Entry], built: date) -> list[Row]:
     """The registries' checkpoints alone: no sha, date or downloads, so no row can be shown to be tier 2."""
+    entries = list(entries)
     named = registry_checkpoints(entries)
-    return ordered(_row(model, None, n.sources, n.multimodal, built, checked=False) for model, n in named.items())
+    rows = [_row(model, None, n.sources, n.multimodal, built, checked=False) for model, n in named.items()]
+    return ordered([*rows, *_rows_without_checkpoint(entries)])
 
 
 def hub_rows(
@@ -139,7 +155,7 @@ def hub_rows(
             rows[details.id] = _row(details.id, details, {"hub"}, is_multimodal, built, checked=True)
             added += 1
         log(f"{org}: {len(listing)} listed, {added} added")
-    return ordered(rows.values())
+    return ordered([*rows.values(), *_rows_without_checkpoint(entries)])
 
 
 def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, _Found]:
@@ -199,6 +215,16 @@ def _row(
         modality="multimodal" if multimodal else "text",
         sources=tuple(sorted(sources)),
     )
+
+
+def _rows_without_checkpoint(entries: Iterable[Entry]) -> list[Row]:
+    """A row for each entry that names no checkpoint; the Hub has nothing to say about a name that is none."""
+    return [
+        Row(
+            name, None, 3, NO_CHECKPOINT, None, None, "multimodal" if n.multimodal else "text", tuple(sorted(n.sources))
+        )
+        for name, n in without_checkpoint(entries).items()
+    ]
 
 
 def missing_from_tier1(rows: Iterable[Row]) -> list[str]:

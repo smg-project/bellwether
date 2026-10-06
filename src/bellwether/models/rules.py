@@ -60,6 +60,7 @@ TIER1 = (
 
 UNCHECKED = "unchecked"  # --registry-only: the Hub was not asked
 NOT_ON_HUB = "not-on-hub"  # a registry names it, the Hub has no such model
+NO_CHECKPOINT = "no-checkpoint-named"  # a registry entry names none; its row is keyed by the entry's name
 GATED = "gated"  # the files need an accepted license and a token
 NO_CHAT_TEMPLATE = "no-chat-template"  # the hf-template oracle has nothing to render with
 # The template is only in the processor's files, which the oracle (AutoTokenizer) does not read yet.

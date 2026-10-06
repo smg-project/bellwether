@@ -15,6 +15,7 @@ BUILT = date(2026, 10, 6)
 TEXT = "_TEXT_GENERATION_EXAMPLE_MODELS"
 MULTIMODAL = "_MULTIMODAL_EXAMPLE_MODELS"
 PAGE = "docs/docs/supported-models/generative_models.mdx"
+MULTIMODAL_PAGE = "docs/docs/supported-models/multimodal_language_models.mdx"
 
 
 def excerpt_entries() -> list[Entry]:
@@ -28,14 +29,14 @@ def excerpt_entries() -> list[Entry]:
 def test_registry_only_lists_every_generative_checkpoint_once_without_asking_the_hub() -> None:
     rows = registry_only_rows(excerpt_entries(), BUILT)
     models = [row.model for row in rows]
-    assert len(models) == len(set(models)) == 25
+    assert len(models) == len(set(models)) == 28  # 25 checkpoints, and 3 entries that name none
     assert not {"lmsys/gpt-oss-20b-bf16", "openai/gpt-oss-20b", "openai/gpt-oss-120b"} & set(models)
     assert not {"jinaai/jina-reranker-m0", "Qwen/Qwen3-ForcedAligner-0.6B", "MrLight/dse-qwen2-2b-mrl-v1"} & set(models)
     assert "Qwen/Qwen3-4B" not in models  # a speculative-decoding target, not a generative entry
-    assert {row.status for row in rows} == {"unchecked"}
+    assert {row.status for row in rows} == {"unchecked", "no-checkpoint-named"}
     assert {(row.revision, row.created, row.downloads) for row in rows} == {(None, None, None)}
     assert models[:2] == ["deepseek-ai/DeepSeek-V4.1-Flash", "zai-org/GLM-5.3-Flash"]
-    assert [row.tier for row in rows] == [1, 1] + [3] * 23
+    assert [row.tier for row in rows] == [1, 1] + [3] * 26
     assert models[2:] == sorted(models[2:])  # without downloads, the id orders a tier
 
 
@@ -44,7 +45,7 @@ def test_a_checkpoint_any_registry_calls_multimodal_is_multimodal() -> None:
     assert rows["zai-org/GLM-5.3-Flash"].modality == "multimodal"  # vLLM names it in both tables
     assert rows["Qwen/Qwen3-ASR-1.7B"].modality == "multimodal"
     assert rows["inclusionAI/LLaDA2.0-flash"].modality == "text"
-    assert sum(row.modality == "multimodal" for row in rows.values()) == 9
+    assert sum(row.modality == "multimodal" for row in rows.values()) == 11  # JetVLM and FunAudioChat among them
 
 
 def test_one_checkpoint_named_by_both_engines_is_one_row_with_both_sources() -> None:
@@ -274,6 +275,30 @@ def test_a_hub_model_whose_template_only_the_processor_reads_is_kept_with_a_stat
         "Qwen/Qwen3-VL-4B": "processor-chat-template",
         "Qwen/Qwen3-VL-2B": "gated",
     }
+
+
+def test_a_registry_entry_that_names_no_checkpoint_is_a_row_under_its_name() -> None:
+    entries = [
+        Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",)),
+        Entry("vllm", "Qwen4ExpForCausalLM", TEXT, True, False, ("",)),
+        Entry("vllm", "FunAudioChatForConditionalGeneration", MULTIMODAL, True, True, ("funaudiochat",)),
+        Entry("sglang", "JetVLM", MULTIMODAL_PAGE, True, True, ()),
+        Entry("sglang", "JetVLM", MULTIMODAL_PAGE, True, True, ()),  # the page has two such rows
+        Entry("vllm", "JinaVLForRanking", MULTIMODAL, False, True, ("",)),  # not generative: no row
+    ]
+    expected = [
+        Row(
+            "FunAudioChatForConditionalGeneration", None, 3, "no-checkpoint-named", None, None, "multimodal", ("vllm",)
+        ),
+        Row("JetVLM", None, 3, "no-checkpoint-named", None, None, "multimodal", ("sglang",)),
+        Row("Qwen4ExpForCausalLM", None, 3, "no-checkpoint-named", None, None, "text", ("vllm",)),
+    ]
+    offline = registry_only_rows(entries, BUILT)
+    assert [row for row in offline if row.status == "no-checkpoint-named"] == expected
+    hub = FakeHub({}, {"Qwen/Qwen3-8B": details("Qwen/Qwen3-8B", date(2025, 4, 27), 900, ("Qwen3ForCausalLM",))})
+    online = hub_rows(entries, hub, BUILT)
+    assert [row for row in online if row.status == "no-checkpoint-named"] == expected
+    assert hub.asked == ["Qwen/Qwen3-8B"]
 
 
 def test_a_registry_checkpoint_the_hub_could_not_be_asked_about_keeps_its_row_with_the_error() -> None:

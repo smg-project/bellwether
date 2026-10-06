@@ -52,13 +52,13 @@ def test_registry_only_writes_the_list_and_says_what_is_in_it(cache: Path, tmp_p
     out = tmp_path / "lists" / "models.jsonl"
     assert main(["models", "--registry-only", "--out", str(out), "--cache", str(cache)]) == 0
     rows = [json.loads(line) for line in out.read_text().splitlines()]
-    assert len(rows) == 25
+    assert len(rows) == 28
     assert rows[0]["model"] == "deepseek-ai/DeepSeek-V4.1-Flash"
-    assert {row["status"] for row in rows} == {"unchecked"}
+    assert {row["status"] for row in rows} == {"unchecked", "no-checkpoint-named"}
     printed = capsys.readouterr()
-    assert f"25 rows in {out}" in printed.out
-    assert "tier 1: 2, tier 2: 0, tier 3: 23" in printed.out
-    assert "text: 16, multimodal: 9" in printed.out
+    assert f"28 rows in {out}" in printed.out
+    assert "tier 1: 2, tier 2: 0, tier 3: 26" in printed.out
+    assert "text: 17, multimodal: 11" in printed.out
     assert "vllm FunAudioChatForConditionalGeneration: 'funaudiochat' is not a Hugging Face id" in printed.err
     assert "tier 1 names missing from the list: MiniMaxAI/MiniMax-M3, tencent/Hy4-preview" in printed.err
 
