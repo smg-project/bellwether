@@ -1,4 +1,5 @@
-"""BFCL's single-turn categories as corpus sets, as smg's weekly run sends them.
+"""BFCL's categories as corpus sets, as smg's weekly run sends them: each single-turn row, and the first turn of each
+multi_turn row.
 
 The data comes from the ``bfcl-eval`` wheel that smg's weekly run pins, read as a zip: nothing from it is
 installed and none of its code runs. The weekly run uses BFCL's function-calling mode through
@@ -6,13 +7,20 @@ installed and none of its code runs. The weekly run uses BFCL's function-calling
 that handler does: BFCL's language hint and Java/JavaScript rewrite (``_func_doc_language_specific_pre_processing``
 in ``bfcl_eval/utils.py``), then ``convert_to_tool`` for OpenAI chat completions (``bfcl_eval/model_handler/utils.py``).
 The wheel has no LICENSE file, so the import copies the gorilla repository's, fetched by the commit the wheel was built
-from. This module, like the set writer and the fetcher it shares with the other importers (``corpus_sets``,
-``github``), imports nothing beyond the standard library.
+from.
+
+A multi_turn row names its classes instead of carrying functions, and its first request is the first step of
+``inference_multi_turn_FC`` (``bfcl_eval/model_handler/base_handler.py:95``): no system prompt of the handler's own
+(line 169), the tools of the functions the first turn offers (line 170, ``first_turn_functions``), and the first turn's
+messages (line 192). Every later request carries the results of the earlier calls, which only BFCL's simulators
+produce, so later turns are not imported. This module, like the set writer and the fetcher it shares with the other
+importers (``corpus_sets``, ``github``), imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import json
 import re
@@ -44,8 +52,14 @@ LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0a
 # Where the import writes the pinned LICENSE, under the corpus root.
 LICENSE_COPY = "licenses/bfcl-LICENSE"
 DATA = "bfcl_eval/data"
+# The multi_turn classes' function docs, and the module that maps each class to its doc file and to its source.
+FUNC_DOC = f"{DATA}/multi_turn_func_doc"
+BACKEND_CONFIG = "bfcl_eval/constants/executable_backend_config.py"
+FILE_MAPPING = "MULTI_TURN_FUNC_DOC_FILE_MAPPING"
+CLASS_MAPPING = "CLASS_FILE_PATH_MAPPING"
 TEMPERATURE = 0.001
-# The single-turn categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order.
+# The categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order: 13 single-turn, then
+# the four multi_turn ones, of which the first turn is imported.
 CATEGORIES = (
     "simple_python",
     "simple_java",
@@ -60,6 +74,10 @@ CATEGORIES = (
     "live_parallel_multiple",
     "live_irrelevance",
     "live_relevance",
+    "multi_turn_base",
+    "multi_turn_miss_func",
+    "multi_turn_miss_param",
+    "multi_turn_long_context",
 )
 
 # bfcl_eval/constants/type_mappings.py, GORILLA_TO_OPENAPI
@@ -97,6 +115,10 @@ HINTS = {
     "javascript": " Note that the provided function is in JavaScript syntax.",
     "python": " Note that the provided function is in Python 3 syntax.",
 }
+
+
+def multi_turn(category: str) -> bool:
+    return "multi_turn" in category
 
 
 def language(category: str) -> str:
@@ -175,6 +197,7 @@ def _cast(properties: dict) -> dict:
 
 OMIT = object()
 NOT_STRINGS = "carries a value that is not a string, which the category's checker refuses (#26)"
+NO_FIRST_CALL = "the first turn has no ground-truth call, so there is no message to parse"
 
 
 class Unanswerable(ValueError):
@@ -259,6 +282,168 @@ def message_for(answer: dict, functions: list[dict]) -> dict:
     return {"content": "", "tool_calls": calls}
 
 
+def first_turn_message(answer: dict, functions: list[dict], defs: dict[str, list[str]]) -> dict:
+    """The assistant message a parser must return for a multi_turn row's first turn: its ground-truth calls, in order.
+
+    BFCL writes each ground-truth call as Python source, ``cd(folder='document')``, and its executor runs it on the
+    class. Positional values take the parameters of the method's ``def`` in order (``defs``: each method's, from
+    ``read_func_defs``), which the function doc may list otherwise. Keyword values keep their names, and each value is
+    read with ``ast.literal_eval``. A call this cannot read stops the import, naming the row and the call: one that is
+    not a call to a named function, passes keywords by unpacking, gives a value that is not a literal, or passes values
+    by position to a function with no ``def``. Each call is held to the rules ``message_for`` applies: a function the
+    first turn offers, parameters it declares, each given once, and every required one given; a call that breaks one
+    raises ``Unanswerable``.
+    """
+    declared = {function["name"]: function["parameters"] for function in functions}
+    calls = []
+    for text in answer["ground_truth"][0]:
+        name, arguments = _read_call(answer["id"], text, declared, defs)
+        call = {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}
+        calls.append({"type": "function", "function": call})
+    return {"content": "", "tool_calls": calls}
+
+
+def _read_call(row: str, text: str, declared: dict[str, dict], defs: dict[str, list[str]]) -> tuple[str, dict]:
+    """One call of the row's ground truth: the function's name, and its arguments by parameter name."""
+    cannot = f"{row}: cannot read {text!r}:"
+    try:
+        node = ast.parse(text, mode="eval").body
+    except (SyntaxError, ValueError):
+        node = None
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+        raise ValueError(f"{cannot} it is not a call to a named function")
+    if any(keyword.arg is None for keyword in node.keywords):
+        raise ValueError(f"{cannot} it passes keywords by unpacking")
+    values = [_literal(value, cannot) for value in node.args]
+    keywords = [(keyword.arg, _literal(keyword.value, cannot)) for keyword in node.keywords]
+    name = node.func.id
+    if name not in declared:
+        raise Unanswerable(f"the ground truth calls {name}, which the first turn does not offer")
+    if values and name not in defs:
+        raise ValueError(f"{cannot} BFCL's source has no def of {name} to bind its positional values to")
+    positional = defs.get(name, [])
+    if len(values) > len(positional):
+        passed = len(values)
+        raise Unanswerable(
+            f"the def of {name} takes {len(positional)} parameters, and the ground truth passes {passed} by position"
+        )
+    properties = declared[name].get("properties", {})
+    arguments = {}
+    for param, value in [*zip(positional, values, strict=False), *keywords]:
+        if param not in properties:
+            raise Unanswerable(f"{name} has no parameter {param!r}, which the ground truth requires")
+        if param in arguments:
+            raise Unanswerable(f"{name} gets {param} both by position and by name")
+        arguments[param] = value
+    missing = [param for param in declared[name].get("required", []) if param not in arguments]
+    if missing:
+        raise Unanswerable(f"{name} requires {', '.join(missing)}, which the ground truth gives no value")
+    return name, arguments
+
+
+def _literal(node: ast.expr, cannot: str):
+    """A value in a call, read with ``ast.literal_eval``; ``cannot`` starts the message when it is not a literal."""
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, TypeError):
+        raise ValueError(f"{cannot} {ast.unparse(node)} is not a literal value") from None
+
+
+def func_doc_files(wheel: zipfile.ZipFile) -> dict[str, str]:
+    """``MULTI_TURN_FUNC_DOC_FILE_MAPPING``, each multi_turn class's function doc file, read from the module's source.
+
+    The value is parsed with ``ast`` and read with ``ast.literal_eval``, so the module is never imported or run.
+    """
+    for node in ast.parse(wheel.read(BACKEND_CONFIG).decode("utf-8")).body:
+        if isinstance(node, ast.Assign) and [getattr(target, "id", None) for target in node.targets] == [FILE_MAPPING]:
+            return ast.literal_eval(node.value)
+    raise ValueError(f"{BACKEND_CONFIG} assigns no {FILE_MAPPING}")
+
+
+def read_func_docs(wheel: zipfile.ZipFile) -> dict[str, list[dict]]:
+    """Each multi_turn class's function docs, in file order."""
+    return {name: _jsonl(wheel, f"{FUNC_DOC}/{file}") for name, file in func_doc_files(wheel).items()}
+
+
+def class_files(wheel: zipfile.ZipFile) -> dict[str, str]:
+    """``CLASS_FILE_PATH_MAPPING``, the module BFCL's executor loads each multi_turn class from, as its source file.
+
+    The map's values are f-strings of ``BACKEND_PATH_PREFIX``, a string the module assigns before them. Each is joined
+    from the parsed source, so the module is never imported or run.
+    """
+    strings: dict[str, str] = {}
+    for node in ast.parse(wheel.read(BACKEND_CONFIG).decode("utf-8")).body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        if node.targets[0].id == CLASS_MAPPING and isinstance(node.value, ast.Dict):
+            pairs = zip(node.value.keys, node.value.values, strict=True)
+            return {ast.literal_eval(key): _source_file(value, strings) for key, value in pairs}
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            strings[node.targets[0].id] = node.value.value
+    raise ValueError(f"{BACKEND_CONFIG} assigns no {CLASS_MAPPING}")
+
+
+def _source_file(node: ast.expr, strings: dict[str, str]) -> str:
+    """The source file of a module named by a string, or by an f-string whose fields each name one of ``strings``."""
+    module = ""
+    for part in node.values if isinstance(node, ast.JoinedStr) else [node]:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            module += part.value
+        elif (
+            isinstance(part, ast.FormattedValue)
+            and isinstance(part.value, ast.Name)
+            and part.value.id in strings
+            and part.conversion == -1
+            and part.format_spec is None
+        ):
+            module += strings[part.value.id]
+        else:
+            raise ValueError(f"{BACKEND_CONFIG}: {ast.unparse(node)} is not a module name made of its strings")
+    return module.replace(".", "/") + ".py"
+
+
+def read_func_defs(wheel: zipfile.ZipFile) -> dict[str, dict[str, list[str]]]:
+    """Each multi_turn class's methods, with the parameters each takes by position: its ``def``'s, after ``self``.
+
+    BFCL's executor runs a ground-truth call on an instance of the class (``execute_multi_turn_func_call``,
+    ``bfcl_eval/eval_checker/multi_turn_eval/multi_turn_utils.py:13``), so a value passed by position takes the
+    ``def``'s parameter, and a function doc may list them in another order (``TravelAPI.purchase_insurance`` swaps
+    ``booking_id`` and ``insurance_cost``). Each class's source is parsed with ``ast``, never imported or run. Only the
+    class's own ``def``s whose first parameter is ``self`` are listed: for any other, where a value goes is not known.
+    """
+    defs = {}
+    for name, member in class_files(wheel).items():
+        tree = ast.parse(wheel.read(member).decode("utf-8"))
+        classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name]
+        methods = [node for node in classes[-1].body if isinstance(node, ast.FunctionDef)] if classes else []
+        params = {method.name: [arg.arg for arg in method.args.args] for method in methods}
+        defs[name] = {method: names[1:] for method, names in params.items() if names[:1] == ["self"]}
+    return defs
+
+
+def first_turn_functions(row: dict, docs: dict[str, list[dict]]) -> list[dict]:
+    """The functions a multi_turn row offers at its first turn, as BFCL builds them.
+
+    BFCL gives a row the function docs of its ``involved_classes``, in that order, and takes out the first function of
+    each name ``missed_function`` holds back (``populate_test_cases_with_predefined_functions``,
+    ``bfcl_eval/utils.py:772``). The handler adds those back only at their own turn, with a fixed user message in place
+    of the turn's (``inference_multi_turn_FC``, ``bfcl_eval/model_handler/base_handler.py:176``). A row that has a
+    function added back at the first turn would change the first request, so it stops the import.
+    """
+    functions = [doc for name in row["involved_classes"] for doc in docs[name]]
+    for turn, names in row.get("missed_function", {}).items():
+        if turn == "0":
+            raise ValueError(
+                f"{row['id']}: BFCL adds {', '.join(names)} back at the first turn, with a fixed user message in place"
+                " of the turn's, which this importer does not build"
+            )
+        for held in names:
+            index = next((i for i, doc in enumerate(functions) if doc["name"] == held), None)
+            if index is not None:
+                functions.pop(index)
+    return functions
+
+
 def question_file(category: str) -> str:
     return f"{DATA}/BFCL_v4_{category}.json"
 
@@ -286,8 +471,18 @@ def request_for(row: dict, category: str) -> dict:
     """The body the weekly run sends for one row, without ``model``, in the order its client builds it."""
     if len(row["question"]) != 1:
         raise ValueError(f"{row['id']}: a single-turn row with {len(row['question'])} turns")
+    return first_request(row, row["function"], category)
+
+
+def first_request(row: dict, functions: list[dict], category: str) -> dict:
+    """The first request for a row: its first turn's messages and the functions it offers there.
+
+    ``OpenAICompletionsHandler`` starts every row with no message of its own (``_pre_query_processing_FC``,
+    ``bfcl_eval/model_handler/api_inference/openai_completion.py:96``), adds the first turn's messages as they are
+    (``add_first_turn_message_FC``, line 132) and sends ``tools`` only when there are any (``_query_FC``, line 79).
+    """
     request = {"messages": row["question"][0], "temperature": TEMPERATURE, "store": False}
-    tools = to_tools(prepare_functions(row["function"], category))
+    tools = to_tools(prepare_functions(functions, category))
     if tools:
         request["tools"] = tools
     return request
@@ -316,12 +511,15 @@ def build_sets(
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
 
-    A Java or JavaScript row gets its parse case only when every value it carries is a string (``string_valued``), and
-    a row for which no call the rule builds passes BFCL's checker gets none (``Unanswerable``); each such row is
-    appended to ``skipped`` with its reason.
+    A multi_turn row gives the request and the ground-truth calls of its first turn. A Java or JavaScript row gets its
+    parse case only when every value it carries is a string (``string_valued``), a multi_turn row only when its first
+    turn has a ground-truth call, and a row for which no call the rule builds passes BFCL's checker gets none
+    (``Unanswerable``); each such row is appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}
+    docs: dict[str, list[dict]] | None = None
+    defs: dict[str, dict[str, list[str]]] = {}
     for category in categories or CATEGORIES:
         answers = read_answers(wheel, category)
         render, parse = [], []
@@ -330,17 +528,32 @@ def build_sets(
             if name in seen:
                 raise ValueError(f"rows {seen[name]!r} and {row['id']!r} both become the case name {name}")
             seen[name] = row["id"]
-            request = request_for(row, category)
             notes = f"BFCL {category} {row['id']}"
+            if multi_turn(category):
+                if docs is None:
+                    docs, defs = read_func_docs(wheel), read_func_defs(wheel)
+                functions = first_turn_functions(row, docs)
+                # BFCL's executor gives a method name two of the row's classes have to the later class.
+                methods = {method: params for cls in row["involved_classes"] for method, params in defs[cls].items()}
+                request = first_request(row, functions, category)
+                notes += ", first turn"
+            else:
+                functions = row["function"]
+                request = request_for(row, category)
             render.append({"name": name, "request": request, "notes": notes, "origin": origin(category, row["id"])})
             answer = answers.get(row["id"])
             if answer is None:
                 continue
-            if language(category) != "python" and not string_valued(answer):
+            if multi_turn(category) and not answer["ground_truth"][0]:
+                why = NO_FIRST_CALL
+            elif language(category) != "python" and not string_valued(answer):
                 why = NOT_STRINGS
             else:
                 try:
-                    message = message_for(answer, row["function"])
+                    if multi_turn(category):
+                        message = first_turn_message(answer, functions, methods)
+                    else:
+                        message = message_for(answer, functions)
                     why = None
                 except Unanswerable as err:
                     why = str(err)
