@@ -24,6 +24,8 @@ SOURCE = f"github:{OWNER}/{REPO}@{COMMIT}"
 LICENSE = "MIT"
 LICENSE_FILE = "LICENSE"
 LICENSE_SHA256 = "86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b"
+# Where the import writes the pinned LICENSE, under the corpus root: MIT asks that its notice go with every copy.
+LICENSE_COPY = "licenses/gsm8k-LICENSE"
 DATA = "grade_school_math/data"
 # Each split's file, by the sha256 of its bytes, in the order the sets are built.
 SHA256 = {
@@ -143,14 +145,14 @@ def build_sets(
     return sets
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``gsm8k-*`` files no split writes any more."""
-    return corpus_sets.write(sets, corpus_dir, "gsm8k-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the pinned LICENSE, and remove ``gsm8k-*`` set files no split writes any more."""
+    return corpus_sets.write(sets, corpus_dir, "gsm8k-", {LICENSE_COPY: license_text})
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "gsm8k-", "GSM8K split")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the LICENSE copy, that differs from a fresh import; empty when none does."""
+    return corpus_sets.check(sets, corpus_dir, "gsm8k-", "GSM8K split", {LICENSE_COPY: license_text})
 
 
 def fetch(path: str, sha256: str, cache: Path) -> bytes:
@@ -159,29 +161,36 @@ def fetch(path: str, sha256: str, cache: Path) -> bytes:
 
 
 def report_skipped(skipped: list[tuple[str, str]]) -> None:
-    """Print each reason once, with how many rows it left out and the first three of them, as the BFCL import does."""
+    """Print each reason once, with how many rows it left out and every one of them, as the BFCL import does."""
     rows_by_reason: dict[str, list[str]] = {}
     for row, why in skipped:
         rows_by_reason.setdefault(why, []).append(row)
     for why, rows in rows_by_reason.items():
-        shown = ", ".join(rows[:3]) + (", ..." if len(rows) > 3 else "")
-        print(f"no case for {len(rows)} row(s) ({shown}): {why}")
+        print(f"no case for {len(rows)} row(s) ({', '.join(rows)}): {why}")
 
 
 def run(args: argparse.Namespace) -> int:
-    check_license(fetch(LICENSE_FILE, LICENSE_SHA256, args.cache))
+    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache)
+    check_license(license_text)
     files = {split: fetch(data_file(split), sha256, args.cache) for split, sha256 in SHA256.items()}
     skipped: list[tuple[str, str]] = []
     sets = build_sets(files, skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the GSM8K sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    for name, first in repeats:
+        print(f"no case {name}: it repeats {first}")
+    for (kind, name), lines in sorted(kept.items()):
+        left_out = len(sets[(kind, name)]) - len(lines)
+        repeated = f", {left_out} left out as repeats" if left_out else ""
+        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
+    total = sum(len(lines) for lines in kept.values())
+    print(f"{args.corpus}: {total} cases in the {len(kept)} GSM8K sets, {len(repeats)} left out as repeats")
     report_skipped(skipped)
-    write_sets(sets, args.corpus)
+    write_sets(kept, args.corpus, license_text)
     return 0

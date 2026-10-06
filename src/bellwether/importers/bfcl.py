@@ -374,19 +374,26 @@ def run(args: argparse.Namespace) -> int:
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
         check_license(wheel)
         sets = build_sets(wheel, skipped=skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(kept, args.corpus)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the BFCL sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    for name, first in repeats:
+        print(f"no case {name}: it repeats {first}")
+    for (kind, name), lines in sorted(kept.items()):
+        left_out = len(sets[(kind, name)]) - len(lines)
+        repeated = f", {left_out} left out as repeats" if left_out else ""
+        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
+    total = sum(len(lines) for lines in kept.values())
+    print(f"{args.corpus}: {total} cases in the {len(kept)} BFCL sets, {len(repeats)} left out as repeats")
     rows_by_reason: dict[str, list[str]] = {}
     for row_id, why in skipped:
         rows_by_reason.setdefault(why, []).append(row_id)
     for why, row_ids in rows_by_reason.items():
         print(f"no parse case for {len(row_ids)} row(s) ({', '.join(row_ids)}): {why}")
-    write_sets(sets, args.corpus)
+    write_sets(kept, args.corpus)
     return 0

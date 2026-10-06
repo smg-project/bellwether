@@ -180,13 +180,21 @@ def test_rows_that_cannot_become_a_case_are_left_out_of_every_set_of_their_split
     ]
 
 
+def test_each_reason_is_printed_once_naming_every_row_it_left_out(capsys):
+    gsm8k.report_skipped([(f"train row {row}", "the question is empty") for row in range(1, 5)])
+    assert capsys.readouterr().out == (
+        "no case for 4 row(s) (train row 1, train row 2, train row 3, train row 4): the question is empty\n"
+    )
+
+
 def test_written_sets_are_raw_unicode_and_a_rewrite_is_byte_identical(tmp_path):
     corpus = tmp_path / "corpus"
     (corpus / "parse").mkdir(parents=True)
     (corpus / "parse" / "common.jsonl").write_text("{}\n")
     (corpus / "parse" / "gsm8k-old.jsonl").write_text("{}\n")
-    written = gsm8k.write_sets(gsm8k.build_sets({"test": jsonl([ROW])}), corpus)
+    written = gsm8k.write_sets(gsm8k.build_sets({"test": jsonl([ROW])}), corpus, MIT)
     assert sorted(path.relative_to(corpus).as_posix() for path in written) == [
+        "licenses/gsm8k-LICENSE",
         "parse/gsm8k-test-content.jsonl",
         "parse/gsm8k-test-reasoning.jsonl",
         "render/gsm8k-test.jsonl",
@@ -196,19 +204,19 @@ def test_written_sets_are_raw_unicode_and_a_rewrite_is_byte_identical(tmp_path):
     first = {path: path.read_bytes() for path in written}
     text = first[corpus / "render" / "gsm8k-test.jsonl"].decode("utf-8")
     assert "Janet’s" in text and text.endswith("\n")
-    gsm8k.write_sets(gsm8k.build_sets({"test": jsonl([ROW])}), corpus)
+    gsm8k.write_sets(gsm8k.build_sets({"test": jsonl([ROW])}), corpus, MIT)
     assert {path: path.read_bytes() for path in written} == first
 
 
 def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp_path):
     sets, corpus = gsm8k.build_sets({"test": jsonl([ROW])}), tmp_path / "corpus"
-    gsm8k.write_sets(sets, corpus)
-    assert gsm8k.check_sets(sets, corpus) == []
+    gsm8k.write_sets(sets, corpus, MIT)
+    assert gsm8k.check_sets(sets, corpus, MIT) == []
     (corpus / "parse" / "gsm8k-test-content.jsonl").write_text("{}\n")
     (corpus / "render" / "gsm8k-test.jsonl").unlink()
     (corpus / "render" / "gsm8k-stale.jsonl").write_text("{}\n")
     (corpus / "render" / "bfcl-other.jsonl").write_text("{}\n")
-    assert gsm8k.check_sets(sets, corpus) == [
+    assert gsm8k.check_sets(sets, corpus, MIT) == [
         f"{corpus / 'parse' / 'gsm8k-test-content.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'gsm8k-test.jsonl'}: missing",
         f"{corpus / 'render' / 'gsm8k-stale.jsonl'}: no GSM8K split writes it",
@@ -217,14 +225,16 @@ def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp
 
 def test_check_names_a_set_file_that_is_not_utf_8_instead_of_stopping(tmp_path):
     sets, corpus = gsm8k.build_sets({"test": jsonl([ROW])}), tmp_path / "corpus"
-    gsm8k.write_sets(sets, corpus)
+    gsm8k.write_sets(sets, corpus, MIT)
     (corpus / "render" / "gsm8k-test.jsonl").write_bytes(b"\xff\n")
-    assert gsm8k.check_sets(sets, corpus) == [f"{corpus / 'render' / 'gsm8k-test.jsonl'}: differs from a fresh import"]
+    assert gsm8k.check_sets(sets, corpus, MIT) == [
+        f"{corpus / 'render' / 'gsm8k-test.jsonl'}: differs from a fresh import"
+    ]
 
 
 def test_a_question_holding_unicode_line_breaks_reads_back_from_the_written_corpus(tmp_path):
     row = dict(ROW, question="Clive opens a box of balls.  \u2028It holds 6 blue balls.  \u2028How many?")
-    gsm8k.write_sets(gsm8k.build_sets({"train": jsonl([row])}), tmp_path)
+    gsm8k.write_sets(gsm8k.build_sets({"train": jsonl([row])}), tmp_path, MIT)
     for kind, name in [("render", "gsm8k-train"), ("parse", "gsm8k-train-reasoning"), ("parse", "gsm8k-train-content")]:
         [case] = read_cases(tmp_path / kind / f"{name}.jsonl")
         assert case.request == {"messages": [{"role": "user", "content": row["question"]}]}
@@ -261,6 +271,49 @@ def test_the_command_writes_then_checks_and_names_the_rows_it_leaves_out(tmp_pat
     assert f"{corpus / 'parse' / 'gsm8k-train-reasoning.jsonl'}: 1 cases" in out
     assert "no case for 1 row(s) (train row 1): the question is empty" in out
     assert f"{corpus}: the GSM8K sets equal a fresh import of {gsm8k.SOURCE}" in out
+
+
+OTHER = {"question": "Two apples and two more?", "answer": "2 + 2 = <<2+2=4>>4\n#### 4"}
+
+
+def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_they_repeat(
+    tmp_path, monkeypatch, capsys
+):
+    serve(tmp_path, monkeypatch, {"LICENSE": MIT, TRAIN: jsonl([ROW, ROW]), TEST: jsonl([OTHER])})
+    corpus = tmp_path / "corpus"
+    argv = ["import", "gsm8k", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    assert main([*argv, "--check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    for name in ["gsm8k-train", "gsm8k-train-reasoning", "gsm8k-train-content"]:
+        assert f"no case {name}-1: it repeats {name}-0" in out
+    assert f"{corpus / 'render' / 'gsm8k-train.jsonl'}: 1 cases, 1 left out as repeats" in out
+    assert f"{corpus / 'render' / 'gsm8k-test.jsonl'}: 1 cases" in out
+    assert f"{corpus}: 6 cases in the 6 GSM8K sets, 3 left out as repeats" in out
+    assert [case.name for case in read_cases(corpus / "render" / "gsm8k-train.jsonl")] == ["gsm8k-train-0"]
+
+
+def test_the_command_writes_the_pinned_license_next_to_the_sets(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, {"LICENSE": MIT, TRAIN: jsonl([ROW]), TEST: jsonl([OTHER])})
+    corpus = tmp_path / "corpus"
+    assert main(["import", "gsm8k", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
+    assert (corpus / "licenses" / "gsm8k-LICENSE").read_bytes() == MIT
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    serve(tmp_path, monkeypatch, {"LICENSE": MIT, TRAIN: jsonl([ROW]), TEST: jsonl([OTHER])})
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "gsm8k-LICENSE"
+    argv = ["import", "gsm8k", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    copy.unlink(missing_ok=True)
+    assert main([*argv, "--check"]) == 1
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_bytes(MIT + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(MIT)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
 
 
 def test_the_command_refuses_a_license_that_is_not_mit_and_writes_nothing(tmp_path, monkeypatch):
