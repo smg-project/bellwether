@@ -263,6 +263,8 @@ def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
         "source": "hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119e52c647216fce285fd801f16b6fd745b",
         "sha256": "936b195ed11b2b9be2e60cf9cb274dfc2f31d07745cbd6144658da988ce295a9",
         "file": "data/train-00013-of-00014.parquet",
+        "tools_sha256": "d0f46e87e8d6b6d4eef8c01d6add2674ecaaff1260e08df5a4c2b162824c593c",
+        "tools_file": "tools.json",
         "row": 0,
         "turn": 4,
         "instance_id": "owner__repo-0",

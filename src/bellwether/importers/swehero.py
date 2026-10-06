@@ -197,12 +197,15 @@ def no_turn(messages: list[dict], tools: list[dict]) -> str:
 
 
 def origin(number: int, row: dict, turn: int) -> dict:
-    """Where a case came from: the shard, its row and the turn in it, and both licenses that bind the text."""
+    """Where a case came from: the shard, its row and the turn in it, ``tools.json`` (the request's tools), and both
+    licenses that bind the text, the repository's as the dataset labels it."""
     return {
         "dataset": "swehero",
         "source": SOURCE,
         "sha256": FILES[SHARD_FILE],
         "file": SHARD_FILE,
+        "tools_sha256": FILES[TOOLS_FILE],
+        "tools_file": TOOLS_FILE,
         "row": number,
         "turn": turn,
         "instance_id": row["instance_id"],
