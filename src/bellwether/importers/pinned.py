@@ -2,13 +2,13 @@
 
 The fetchers keep their files under ``CACHE`` (``bellwether import --cache``), each in its own layout: ``pypi`` by file
 name, ``github`` under ``github/<owner>/<repo>/<commit>/``. A file's bytes are checked against the sha256 pinned in the
-importer, and a download is written whole or not at all. This module imports nothing beyond the standard library.
+importer, and a download is written whole or not at all (``storage.write_whole``). This module imports nothing beyond
+the standard library.
 """
 
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 from pathlib import Path
 
@@ -31,12 +31,3 @@ def check(where: str | Path, digest: str, sha256: str) -> None:
     """Refuse bytes whose sha256 is ``digest`` unless it is the pinned ``sha256``, naming ``where`` the bytes are."""
     if digest != sha256:
         raise ValueError(f"{where}: sha256 {digest} is not the pinned {sha256}")
-
-
-def write(path: Path, data: bytes) -> Path:
-    """Write ``data`` to ``path`` through ``<name>.partial``, renamed into place: a write cut short leaves no file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    partial = path.with_name(path.name + ".partial")
-    partial.write_bytes(data)
-    os.replace(partial, path)
-    return path

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import httpx
 
+from bellwether import storage
+
 from . import pinned
 
 
@@ -22,4 +24,4 @@ def fetch(project: str, version: str, filename: str, sha256: str, cache: Path = 
     download = httpx.get(urls[filename], timeout=300, follow_redirects=True)
     download.raise_for_status()
     pinned.check(filename, pinned.sha256_of(download.content), sha256)
-    return pinned.write(path, download.content)
+    return storage.write_whole(path, download.content)

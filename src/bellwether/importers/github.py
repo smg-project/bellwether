@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.request import urlopen
 
+from bellwether import storage
+
 from . import pinned
 
 
@@ -27,4 +29,4 @@ def fetch(owner: str, repo: str, commit: str, path: str, sha256: str, cache: Pat
     with urlopen(url, timeout=300) as response:
         data = response.read()
     pinned.check(url, pinned.sha256_of(data), sha256)
-    return pinned.write(target, data)
+    return storage.write_whole(target, data)

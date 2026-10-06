@@ -308,3 +308,15 @@ def test_check_names_a_set_file_no_part_of_the_import_writes_in_either_form(tmp_
         f"{tmp_path / 'render' / 'x-gone.jsonl'}: no x part writes it",
         f"{tmp_path / 'render' / 'x-gone.jsonl.zst'}: no x part writes it",
     ]
+
+
+def test_check_names_a_compressed_set_zstd_cannot_read_and_write_replaces_it(tmp_path, monkeypatch):
+    sets = an_import()
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(sets) - 1)
+    corpus_sets.write(sets, tmp_path, "x-")
+    path = tmp_path / "render" / "x-a.jsonl.zst"
+    path.write_bytes(path.read_bytes()[: path.stat().st_size // 2])
+    [problem] = check(sets, tmp_path)
+    assert problem.startswith(f"{path} cannot be decompressed: ")
+    corpus_sets.write(sets, tmp_path, "x-")
+    assert check(sets, tmp_path) == []

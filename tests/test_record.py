@@ -1226,6 +1226,15 @@ def test_rewriting_an_unchanged_compressed_set_keeps_its_bytes(tmp_path):
     assert path.read_bytes() != other_bytes
 
 
+def test_a_compressed_fixture_set_cut_short_is_replaced_by_the_next_write(tmp_path):
+    # A record run cut short leaves a frame zstd cannot read; the next run must rewrite it, not stop on it.
+    path = tmp_path / "set.jsonl.zst"
+    write_fixture_file(path, render_cases("a", "b"))
+    path.write_bytes(path.read_bytes()[: path.stat().st_size // 2])
+    write_fixture_file(path, render_cases("a", "b"))
+    assert list(read_fixture_file(path)) == ["m/render/a", "m/render/b"]
+
+
 def test_record_keeps_the_old_form_when_the_new_file_cannot_be_written(tmp_path, tiny_model, monkeypatch):
     status, out_dir = record(
         tmp_path, tiny_model, ("bench-x", [{"name": "bench-x-0", "request": {"messages": [user("X")]}}])

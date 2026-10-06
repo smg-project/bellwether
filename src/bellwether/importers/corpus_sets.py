@@ -180,7 +180,7 @@ def check(
             continue
         try:
             stored = storage.plain_bytes(path)
-        except ValueError as err:  # a Git LFS pointer: the content is not here to compare
+        except ValueError as err:  # a Git LFS pointer, or a frame zstd cannot decompress: nothing to compare
             problems.append(str(err))
             continue
         if stored != content:

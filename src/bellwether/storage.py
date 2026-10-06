@@ -1,7 +1,8 @@
 """Set files in their two storage forms: plain JSON Lines, and JSON Lines compressed with zstd and kept in Git LFS.
 
 A set is plain (``<set>.jsonl``) or compressed (``<set>.jsonl.zst``); both hold the same lines, and every reader takes
-either. A file Git LFS has not fetched holds its pointer instead, and reading it names the command that fetches it.
+either. A file Git LFS has not fetched holds its pointer instead, and reading it names the command that fetches it. A
+set is written whole or not at all (``write_whole``), as the importers' pinned files are.
 
 It is a top-level module, as ``jsonl`` is, so that both the recorder and the importers can import it: importing anything
 under ``bellwether.record`` runs its ``__init__``, which loads the oracles and their third-party dependencies, and the
@@ -10,6 +11,7 @@ importers import nothing beyond the standard library. Nor does this module until
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -65,8 +67,11 @@ def lfs_pull_command(paths: Sequence[Path], root: Path | None) -> str:
 
 
 def plain_bytes(path: Path) -> bytes:
-    """A set file's content as plain JSON Lines, whichever form it is stored in; a Git LFS pointer is refused with the
-    command that fetches it."""
+    """A set file's content as plain JSON Lines, whichever form it is stored in.
+
+    A Git LFS pointer is refused with the command that fetches it, and a compressed file zstd cannot read, such as one a
+    write left cut short, by its path.
+    """
     data = path.read_bytes()
     if data.startswith(LFS_POINTER_PREFIX):
         command = lfs_pull_command([path], repository_root(path))
@@ -74,7 +79,10 @@ def plain_bytes(path: Path) -> bytes:
     if is_compressed(path):
         import zstandard
 
-        data = zstandard.ZstdDecompressor().decompress(data)
+        try:
+            data = zstandard.ZstdDecompressor().decompress(data)
+        except zstandard.ZstdError as err:
+            raise ValueError(f"{path} cannot be decompressed: {err}") from err
     return data
 
 
@@ -86,13 +94,32 @@ def plain_text(path: Path) -> str:
 def write(path: Path, data: bytes) -> None:
     """Write a set's plain content to ``path`` in the form the name says: as it is, or compressed for ``.jsonl.zst``.
 
-    A compressed file that already holds ``data`` keeps its bytes, so a compressor upgrade makes no new LFS object.
+    The file is replaced whole (``write_whole``), so a write cut short leaves the old one. A compressed file that
+    already holds ``data`` keeps its bytes, so a compressor upgrade makes no new LFS object; one that cannot be read, a
+    Git LFS pointer or a frame zstd cannot decompress, is replaced.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
     if is_compressed(path):
-        if path.is_file() and not is_lfs_pointer(path) and plain_bytes(path) == data:
-            return
+        try:
+            if path.is_file() and plain_bytes(path) == data:
+                return
+        except ValueError:
+            pass  # a Git LFS pointer, or a frame zstd cannot decompress: replaced below
         import zstandard
 
         data = zstandard.ZstdCompressor(level=ZSTD_LEVEL).compress(data)
-    path.write_bytes(data)
+    write_whole(path, data)
+
+
+def write_whole(path: Path, data: bytes) -> Path:
+    """Write ``data`` to ``path`` through ``<name>.partial``, renamed into place once it is written whole.
+
+    A write cut short leaves the file at ``path`` as it was, and no partial file beside it.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".partial")
+    try:
+        partial.write_bytes(data)
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
+    return path
