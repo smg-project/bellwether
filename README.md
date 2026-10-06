@@ -49,12 +49,12 @@ is an issue, and nothing in bellwether is configured to make them agree. A line'
 Hugging Face's result and vLLM's is a `witness`. SGLang and engine runs on a GPU are witnesses too,
 as evidence without authority. `docs/benchmark-sets.md` has the rules.
 
-Every case gets a verdict: `match`, `engine_defect` (SMG agrees with the sources of truth, a
-witnessing engine does not), `engines_split`, `policy` (malformed output, documented fallback
-expected), or `regression` (SMG disagrees with them). A `disputed` case counts for none of these.
-Only `regression`, an `engine_defect` without a waiver, and a stale waiver fail the gate. Waivers
-live in `waivers/engine_defects.toml`, carry evidence and an upstream link, and expire when the
-engine catches up.
+Every undisputed case gets a verdict: `match`, `engine_defect` (SMG agrees with the sources of
+truth, a witnessing engine does not), `engines_split`, `policy` (malformed output, documented
+fallback expected), or `regression` (SMG disagrees with them). A `disputed` case gets none; it waits
+for its disagreement's issue. Only `regression`, an `engine_defect` without a waiver, and a stale
+waiver fail the gate. Waivers live in `waivers/engine_defects.toml`, carry evidence and an upstream
+link, and expire when the engine catches up.
 
 ## Vocabulary
 

@@ -374,3 +374,8 @@ Each step is its own pull request.
    parser needs to know the state the output starts in: Qwen 3.8's generation prompt leaves the
    think block open, so its output begins `\n</think>`. Symphony may not depend on a tokenizer, so
    it cannot render the prompt itself; the round trip already renders it.
+6. Per-token pieces for each render case's prompt ids (`input_pieces`), a case-schema addition. The
+   recorded pieces cover output ids only, 8.6 million in the first full-width run; prompt ids would
+   put the incremental decoder over 181 million. The reference must be Hugging Face's own
+   incremental decode of those ids: joining the decoded pieces does not give back `reference.text`
+   for a tokenizer whose normalizer changes the text before encoding.
