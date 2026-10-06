@@ -93,13 +93,13 @@ uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
-hand-written case under `corpus/render/` through the checkpoint's own chat template at the pinned
-revision (`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`. An
-imported set (`corpus/README.md`) is left out, and named on stdout, until the storage form of
-`docs/benchmark-sets.md` lands; `--set NAME` records only the named sets. Per case the file holds the
-request, the prompt token ids, the rendered text and the oracle versions. A re-run replaces each
-reference, keeps the witnesses already recorded for an unchanged request, and removes cases and sets
-the corpus no longer has. A case the template cannot render is reported on
+case under `corpus/render/` through the checkpoint's own chat template at the pinned revision
+(`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`, or
+`<set>.jsonl.zst` in Git LFS for an imported set (`corpus/README.md`), with each set's counts and
+plain-content sha256 in `fixtures/qwen3-8b/sets.toml`. `--set NAME` records only the named sets. Per
+case the file holds the request, the prompt token ids, the rendered text and the oracle versions. A
+re-run replaces each reference, keeps the witnesses already recorded for an unchanged request, and
+removes cases and sets the corpus no longer has. A case the template cannot render is reported on
 stderr and left out, and the command exits 1. Engine witnesses (`--oracle vllm|sglang`) run on Linux
 inside the engine's image and are the second half of M2.
 

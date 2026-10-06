@@ -13,9 +13,10 @@ import sys
 from bellwether import __version__
 from bellwether.manifest import find_manifest
 
+from . import sets as set_tables
 from .chunks import chunk_plans
 from .corpus import Case, load_corpus
-from .fixtures import read_fixture_file, write_fixture_file
+from .fixtures import COMPRESSED_SUFFIX, plain_text, read_fixture_file, write_fixture_file
 from .reference import SOURCE as RENDER_SOURCE
 from .reference import HfTemplateOracle
 from .roundtrip import SOURCE as PARSE_SOURCE
@@ -49,14 +50,6 @@ def run(args: argparse.Namespace) -> int:
         return 1
     if wanted:
         sets = {name: cases for name, cases in sets.items() if name in wanted}
-    else:
-        # Imported sets are tens of MB per model as plain JSON Lines; they are recorded once the storage form
-        # (docs/benchmark-sets.md, Storage) lands. Until then only `--set` records one.
-        imported = sorted(name for name, cases in sets.items() if any(case.origin is not None for case in cases))
-        if imported:
-            sets = {name: cases for name, cases in sets.items() if name not in imported}
-            noun = "set" if len(imported) == 1 else "sets"
-            print(f"{len(imported)} imported {noun} left out until the storage form lands: {', '.join(imported)}")
     oracle = (
         HfTemplateOracle(manifest.model, manifest.revision)
         if args.kind == "render"
@@ -64,9 +57,16 @@ def run(args: argparse.Namespace) -> int:
     )
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
+    kind_dir = args.fixtures / manifest.slug / args.kind
+    tables_path = args.fixtures / manifest.slug / set_tables.FILE
+    tables = set_tables.read(tables_path)
     for set_name, cases in sets.items():
-        out = args.fixtures / manifest.slug / args.kind / f"{set_name}.jsonl"
-        previous = read_fixture_file(out) if out.is_file() else {}
+        # A set imported from a public dataset is a benchmark set, stored compressed in Git LFS; the rest are plain.
+        form = "zstd" if any(case.origin for case in cases) else "plain"
+        out = kind_dir / f"{set_name}{COMPRESSED_SUFFIX if form == 'zstd' else '.jsonl'}"
+        other = kind_dir / f"{set_name}{'.jsonl' if form == 'zstd' else COMPRESSED_SUFFIX}"
+        previous = read_fixture_file(out) if out.is_file() else read_fixture_file(other) if other.is_file() else {}
+        rejected = 0
         # The file is rebuilt from the cases rendered in this run: a case the corpus no longer has,
         # or that the oracle now rejects, leaves the file. Witnesses are carried over by id, but
         # only while the request they were recorded for is unchanged.
@@ -78,6 +78,7 @@ def run(args: argparse.Namespace) -> int:
                 line = _record(args.kind, oracle, case, provenance)
             except Exception as err:  # the reference cannot answer this case: report it, record nothing
                 not_recorded.append((case_id, f"{type(err).__name__}: {err}"))
+                rejected += 1
                 continue
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
             old = previous.get(case_id)
@@ -91,8 +92,12 @@ def run(args: argparse.Namespace) -> int:
         removed = len(set(previous) - set(lines))
         if lines:
             write_fixture_file(out, lines)
-        elif out.is_file():
-            out.unlink()
+            tables[(args.kind, set_name)] = set_tables.entry(form, plain_text(out), len(lines), rejected)
+        else:
+            out.unlink(missing_ok=True)
+            tables.pop((args.kind, set_name), None)
+        # Only once the new file is written, so a failed write keeps the set in its old form.
+        other.unlink(missing_ok=True)
         summary = [f"{len(lines)} cases recorded"]
         if witnesses_kept:
             summary.append(f"{witnesses_kept} with witnesses kept")
@@ -102,12 +107,14 @@ def run(args: argparse.Namespace) -> int:
             summary.append(f"{removed} old cases removed")
         print(f"{out}: {', '.join(summary)}")
     # The fixture directory mirrors the corpus: a set file the corpus no longer has goes too.
-    kind_dir = args.fixtures / manifest.slug / args.kind
     if kind_dir.is_dir() and not wanted:
-        for stale in sorted(p for p in kind_dir.iterdir() if p.is_file() and p.suffix == ".jsonl"):
-            if stale.stem not in in_corpus:
+        for stale in sorted(p for p in kind_dir.iterdir() if p.is_file()):
+            name = stale.name.removesuffix(COMPRESSED_SUFFIX).removesuffix(".jsonl")
+            if name != stale.name and name not in in_corpus:
                 stale.unlink()
+                tables.pop((args.kind, name), None)
                 print(f"{stale}: removed, the corpus has no set of that name")
+    set_tables.write(tables_path, tables)
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0

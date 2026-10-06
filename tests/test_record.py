@@ -1,15 +1,31 @@
+import hashlib
 import json
 import os
 import pathlib
+import re
+import shutil
+import subprocess
 
 import pytest
+import zstandard
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
+from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
+from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
+from bellwether.record.fixtures import (
+    canonical_line,
+    is_lfs_pointer,
+    lfs_pull_command,
+    plain_text,
+    read_fixture_file,
+    schema_path,
+    validator,
+    write_fixture_file,
+)
 from bellwether.record.reference import HfTemplateOracle
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
 
@@ -628,10 +644,28 @@ def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path)
             write_fixture_file(tmp_path / "y.jsonl", {"tiny-chat/parse/a": partial})
 
 
-@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/*/*.jsonl")), ids=lambda p: str(p.relative_to(ROOT)))
+COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
+
+
+@pytest.mark.parametrize("path", COMMITTED_SETS, ids=lambda p: str(p.relative_to(ROOT)))
 def test_committed_fixtures_are_canonical_sorted_and_valid(path):
+    check_committed_set(path, ROOT)
+
+
+def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
+    """One committed set against its manifest, its ``sets.toml`` table and the schema; skipped while a pointer."""
+    if is_lfs_pointer(path):
+        pytest.skip(f"Git LFS has not fetched this set; fetch it with: {lfs_pull_command([path], root)}")
     manifest = load_manifest(path.parent.parent / "manifest.toml")
-    lines = path.read_text().splitlines()
+    plain = plain_text(path)
+    name = path.name.removesuffix(".zst").removesuffix(".jsonl")
+    table = set_tables.read(path.parent.parent / set_tables.FILE).get((path.parent.name, name))
+    assert table is not None, f"{path}: sets.toml has no table for this set"
+    form = "zstd" if path.name.endswith(".zst") else "plain"
+    expected = set_tables.entry(form, plain, table["cases"], table["rejected"])
+    assert table == expected, f"{path}: its sets.toml table does not match the file"
+    lines = plain.splitlines()
+    assert len(lines) == table["cases"]
     cases = [json.loads(line) for line in lines]
     assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
     for raw, case in zip(lines, cases, strict=True):
@@ -669,19 +703,6 @@ def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, 
     assert (out_dir / "extra.jsonl").read_text() == extra_before
 
 
-def test_record_without_set_leaves_imported_sets_to_the_storage_form(tmp_path, tiny_model, capsys):
-    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
-    status, out_dir = record(
-        tmp_path,
-        tiny_model,
-        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
-        ("bfcl-x", [imported]),
-    )
-    assert status == 0
-    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
-    assert "1 imported set left out until the storage form lands: bfcl-x" in capsys.readouterr().out
-
-
 def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny_model):
     imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
     record(
@@ -692,11 +713,12 @@ def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny
     )
     assert main(record_argv(tmp_path, tiny_model, "--set", "bfcl-x")) == 0
     out_dir = tmp_path / "fixtures" / "tiny-chat" / "render"
-    recorded = (out_dir / "bfcl-x.jsonl").read_text()
+    recorded = plain_text(out_dir / "bfcl-x.jsonl.zst")
 
     assert main(record_argv(tmp_path, tiny_model)) == 0
 
-    assert (out_dir / "bfcl-x.jsonl").read_text() == recorded
+    assert plain_text(out_dir / "bfcl-x.jsonl.zst") == recorded
+    assert not (out_dir / "bfcl-x.jsonl").exists()
 
 
 def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model, capsys):
@@ -719,3 +741,399 @@ def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_mode
     )
     assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
     assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'
+
+
+def render_cases(*names: str) -> dict[str, dict]:
+    cases = {}
+    for name in names:
+        case_id = f"m/render/{name}"
+        cases[case_id] = {
+            "id": case_id,
+            "kind": "render",
+            "model": "m",
+            "reference": {"source": "hf-template", "text": "Café ☕"},
+        }
+    return cases
+
+
+def test_a_compressed_fixture_file_holds_the_same_lines_as_the_plain_one(tmp_path):
+    cases = render_cases("b", "a")
+    write_fixture_file(tmp_path / "set.jsonl", cases)
+    write_fixture_file(tmp_path / "set.jsonl.zst", cases)
+    plain = (tmp_path / "set.jsonl").read_bytes()
+    assert (tmp_path / "set.jsonl.zst").read_bytes()[:4] == bytes.fromhex("28b52ffd")  # the zstd frame magic
+    assert plain_text(tmp_path / "set.jsonl.zst").encode("utf-8") == plain
+    assert plain_text(tmp_path / "set.jsonl") == plain.decode("utf-8")
+    assert read_fixture_file(tmp_path / "set.jsonl.zst") == read_fixture_file(tmp_path / "set.jsonl")
+    assert list(read_fixture_file(tmp_path / "set.jsonl.zst")) == ["m/render/a", "m/render/b"]
+
+
+def imported(name: str, text: str) -> dict:
+    return {"name": name, "request": {"messages": [user(text)]}, "origin": {"dataset": "bench"}}
+
+
+def sets_tables(tmp_path) -> dict:
+    import tomllib
+
+    return tomllib.loads((tmp_path / "fixtures" / "tiny-chat" / "sets.toml").read_text())
+
+
+def test_record_writes_an_imported_set_compressed_and_a_hand_written_set_plain(tmp_path, tiny_model):
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-x", [imported("bench-x-0", "X"), imported("bench-x-1", "Y")]),
+    )
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["bench-x.jsonl.zst", "common.jsonl"]
+    tables = sets_tables(tmp_path)
+    for name, form, cases in (("common", "plain", 1), ("bench-x", "zstd", 2)):
+        file = out_dir / (f"{name}.jsonl" if form == "plain" else f"{name}.jsonl.zst")
+        plain = plain_text(file).encode("utf-8")
+        assert tables["render"][name] == {
+            "form": form,
+            "cases": cases,
+            "rejected": 0,
+            "plain_bytes": len(plain),
+            "plain_sha256": hashlib.sha256(plain).hexdigest(),
+        }
+
+
+def test_a_set_that_changes_form_leaves_one_file(tmp_path, tiny_model):
+    status, out_dir = record(tmp_path, tiny_model, ("x", [{"name": "x-0", "request": {"messages": [user("X")]}}]))
+    assert status == 0 and (out_dir / "x.jsonl").exists()
+    status, _ = record(tmp_path, tiny_model, ("x", [imported("x-0", "X")]))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["x.jsonl.zst"]
+    assert sets_tables(tmp_path)["render"]["x"]["form"] == "zstd"
+
+
+def test_a_set_that_changes_back_to_plain_leaves_one_file_with_its_witnesses(tmp_path, tiny_model):
+    status, out_dir = record(tmp_path, tiny_model, ("x", [imported("x-0", "X")]))
+    assert status == 0 and (out_dir / "x.jsonl.zst").exists()
+    recorded = read_fixture_file(out_dir / "x.jsonl.zst")
+    recorded["tiny-chat/render/x-0"]["witnesses"] = {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    write_fixture_file(out_dir / "x.jsonl.zst", recorded)
+    status, _ = record(tmp_path, tiny_model, ("x", [{"name": "x-0", "request": {"messages": [user("X")]}}]))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["x.jsonl"]
+    line = read_fixture_file(out_dir / "x.jsonl")["tiny-chat/render/x-0"]
+    assert line.get("witnesses") == {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    assert sets_tables(tmp_path)["render"]["x"]["form"] == "plain"
+
+
+def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, tiny_model):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    before = sets_tables(tmp_path)["render"]["extra"]
+    bad = {
+        "name": "c",
+        "request": {"messages": [user("C")], "add_generation_prompt": True, "continue_final_message": True},
+    }
+    write_jsonl(
+        tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}, bad]
+    )
+    assert main(record_argv(tmp_path, tiny_model, "--set", "common")) == 1
+    tables = sets_tables(tmp_path)["render"]
+    assert tables["extra"] == before
+    assert (tables["common"]["cases"], tables["common"]["rejected"]) == (1, 1)
+
+
+# What Git LFS 3.7.1 leaves in place of a file it has not fetched; this one stands for the 13 bytes "compressed-x\n".
+LFS_POINTER = (
+    "version https://git-lfs.github.com/spec/v1\n"
+    "oid sha256:af16c249d1a79d093931e0317035d67af8c1f47632feca7b2216bc4787d7983e\n"
+    "size 13\n"
+)
+
+
+def test_unpack_writes_one_plain_tree_of_both_forms_and_the_manifests(tmp_path, tiny_model):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-x", [imported("bench-x-0", "X")]),
+    )
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    for name in ("common", "bench-x"):
+        source = next((fixtures / "tiny-chat" / "render").glob(f"{name}.jsonl*"))
+        assert (out / "tiny-chat" / "render" / f"{name}.jsonl").read_text() == plain_text(source)
+    for name in ("manifest.toml", "sets.toml"):
+        assert (out / "tiny-chat" / name).read_bytes() == (fixtures / "tiny-chat" / name).read_bytes()
+
+
+def test_a_git_lfs_pointer_is_named_not_decompressed(tmp_path):
+    pointer = tmp_path / "set.jsonl.zst"
+    pointer.write_text(LFS_POINTER)
+    with pytest.raises(ValueError, match="Git LFS pointer"):
+        plain_text(pointer)
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/sets.toml")), ids=lambda p: str(p.relative_to(ROOT)))
+def test_every_sets_toml_table_has_its_set(path):
+    for kind, name in set_tables.read(path):
+        files = [path.parent / kind / f"{name}.jsonl", path.parent / kind / f"{name}.jsonl.zst"]
+        assert sum(f.is_file() for f in files) == 1, f"{path}: [{kind}.{name}] needs exactly one set file"
+
+
+def git(cwd: pathlib.Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, stdout=subprocess.DEVNULL)
+
+
+def runs(*argv: str) -> bool:
+    try:
+        return subprocess.run(argv, capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+needs_git = pytest.mark.skipif(not runs("git", "--version"), reason="needs git")
+
+
+@pytest.fixture
+def git_sandbox(tmp_path, monkeypatch) -> pathlib.Path:
+    """``tmp_path``, with git reading a config of its own and no repository inherited from the environment."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    return tmp_path
+
+
+# Git LFS matches --include against the path from the repository root, and .lfsconfig's fetchexclude wins over it
+# unless --exclude '' clears it: an absolute path, one relative to a subdirectory, or no --exclude fetches nothing.
+FETCH_BENCH_X = "git lfs pull --include 'fixtures/m/render/bench-x.jsonl.zst' --exclude ''"
+
+
+@needs_git
+def test_a_pointer_error_names_the_command_that_fetches_it_from_the_repository_root(git_sandbox, monkeypatch):
+    git(git_sandbox, "init", "-q", "clone")
+    pointer = git_sandbox / "clone" / "fixtures" / "m" / "render" / "bench-x.jsonl.zst"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(LFS_POINTER)
+    monkeypatch.chdir(pointer.parent.parent)
+    for given in (pointer, pathlib.Path("render/bench-x.jsonl.zst")):
+        with pytest.raises(ValueError, match=re.escape(FETCH_BENCH_X)):
+            plain_text(given)
+
+
+def test_the_committed_fixture_check_skips_a_set_git_lfs_has_not_fetched(tmp_path):
+    pointer = tmp_path / "fixtures" / "m" / "render" / "bench-x.jsonl.zst"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(LFS_POINTER)
+    with pytest.raises(pytest.skip.Exception, match=re.escape(FETCH_BENCH_X)):
+        check_committed_set(pointer, tmp_path)
+
+
+needs_git_lfs = pytest.mark.skipif(not runs("git", "lfs", "version"), reason="needs git and git-lfs")
+
+
+@pytest.fixture
+def lfs_clone(git_sandbox, monkeypatch) -> pathlib.Path:
+    """A default clone of a repository (``source``, beside it) that keeps a benchmark set in Git LFS under this
+    repository's .gitattributes and .lfsconfig, pushed to a local remote: the clone holds the set's pointer."""
+    for role in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{role}_NAME", "bellwether")
+        monkeypatch.setenv(f"GIT_{role}_EMAIL", "bellwether@example.com")
+    source, remote, clone = git_sandbox / "source", git_sandbox / "remote.git", git_sandbox / "clone"
+    git(git_sandbox, "init", "-q", "--bare", "-b", "main", str(remote))
+    git(git_sandbox, "init", "-q", "-b", "main", str(source))
+    git(source, "lfs", "install")  # the LFS filters, in the sandbox's config, and the hook that pushes LFS objects
+    for name in (".gitattributes", ".lfsconfig"):
+        (source / name).write_bytes((ROOT / name).read_bytes())
+    write_manifest(source / "fixtures", "m", "acme/M")
+    write_fixture_file(source / "fixtures" / "m" / "render" / "common.jsonl", render_cases("a"))
+    write_fixture_file(source / "fixtures" / "m" / "render" / "bench-x.jsonl.zst", render_cases("x-0", "x-1"))
+    git(source, "add", "-A")
+    git(source, "commit", "-q", "-m", "fixtures")
+    git(source, "push", "-q", remote.as_uri(), "main")
+    git(git_sandbox, "clone", "-q", remote.as_uri(), str(clone))
+    return clone
+
+
+@needs_git_lfs
+def test_unpack_fetches_the_sets_a_default_clone_holds_as_pointers(lfs_clone, monkeypatch):
+    assert is_lfs_pointer(lfs_clone / "fixtures" / "m" / "render" / "bench-x.jsonl.zst")
+    monkeypatch.chdir(lfs_clone / "fixtures")
+    out = lfs_clone.parent / "plain"
+    assert main(["unpack", "--fixtures", ".", "--out", str(out)]) == 0
+    source = lfs_clone.parent / "source" / "fixtures" / "m" / "render"
+    assert (out / "m" / "render" / "bench-x.jsonl").read_text() == plain_text(source / "bench-x.jsonl.zst")
+    assert (out / "m" / "render" / "common.jsonl").read_text() == (source / "common.jsonl").read_text()
+
+
+@needs_git
+def test_unpack_names_the_sets_it_could_not_fetch_and_writes_nothing(git_sandbox, tiny_model, monkeypatch, capsys):
+    git(git_sandbox, "init", "-q")
+    common = [{"name": "a", "request": {"messages": [user("A")]}}]
+    record(git_sandbox, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))
+    pointer = git_sandbox / "fixtures" / "tiny-chat" / "render" / "bench-x.jsonl.zst"
+    pointer.write_text(LFS_POINTER)
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)  # a pull that fetches nothing: no git-lfs, no network
+    out = git_sandbox / "plain"
+    assert main(["unpack", "--fixtures", str(git_sandbox / "fixtures"), "--out", str(out)]) == 1
+    assert asked == [[pointer]]
+    err = capsys.readouterr().err
+    assert str(pointer) in err
+    assert "git lfs pull --include 'fixtures/tiny-chat/render/bench-x.jsonl.zst' --exclude ''" in err
+    assert not out.exists()
+
+
+def test_is_lfs_pointer_tells_a_pointer_from_a_set_in_either_form(tmp_path):
+    (tmp_path / "pointer.jsonl.zst").write_text(LFS_POINTER)
+    for name in ("set.jsonl", "set.jsonl.zst"):
+        write_fixture_file(tmp_path / name, render_cases("a"))
+    assert is_lfs_pointer(tmp_path / "pointer.jsonl.zst")
+    assert not is_lfs_pointer(tmp_path / "set.jsonl")
+    assert not is_lfs_pointer(tmp_path / "set.jsonl.zst")
+
+
+def test_unpack_writes_a_model_that_has_only_hand_written_sets(tmp_path, tiny_model, monkeypatch):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    assert asked == []  # nothing to fetch; an empty --include would fetch every set
+    written = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
+    assert written == ["tiny-chat/manifest.toml", "tiny-chat/render/common.jsonl", "tiny-chat/sets.toml"]
+    assert (out / "tiny-chat" / "render" / "common.jsonl").read_bytes() == (
+        fixtures / "tiny-chat" / "render" / "common.jsonl"
+    ).read_bytes()
+
+
+def test_unpack_model_writes_and_fetches_that_model_only(tmp_path, tiny_model, monkeypatch):
+    common = [{"name": "a", "request": {"messages": [user("A")]}}]
+    record(tmp_path, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))
+    write_manifest(tmp_path / "fixtures", "other", "acme/Other")
+    write_fixture_file(tmp_path / "fixtures" / "other" / "render" / "common.jsonl", render_cases("a"))
+    (tmp_path / "fixtures" / "other" / "render" / "bench-y.jsonl.zst").write_text(LFS_POINTER)
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    out = tmp_path / "plain"
+    argv = ["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out), "--model", str(tiny_model)]
+    assert main(argv) == 0
+    assert asked == []
+    assert sorted(p.name for p in out.iterdir()) == ["tiny-chat"]
+    assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == ["bench-x.jsonl", "common.jsonl"]
+
+
+def test_unpack_again_drops_a_set_the_fixtures_no_longer_have(tmp_path, tiny_model, monkeypatch):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    (tmp_path / "corpus" / "render" / "extra.jsonl").unlink()
+    assert main(record_argv(tmp_path, tiny_model)) == 0
+
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+
+    assert not (out / "tiny-chat" / "render" / "extra.jsonl").exists()
+    assert (out / "tiny-chat" / "render" / "common.jsonl").is_file()
+
+
+def test_unpack_refuses_to_write_over_the_fixtures_it_reads(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    fixtures = tmp_path / "fixtures"
+    before = (fixtures / "tiny-chat" / "render" / "common.jsonl").read_bytes()
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(fixtures)]) == 1
+    assert "--out" in capsys.readouterr().err
+    assert (fixtures / "tiny-chat" / "render" / "common.jsonl").read_bytes() == before
+
+
+def test_unpack_model_names_the_known_models_when_none_matches(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out), "--model", "acme/None"]) == 1
+    assert "acme/None" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_fetch_pulls_in_batches_that_stay_under_the_argument_limit(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr("bellwether.unpack.repository_root", lambda path: tmp_path)
+    monkeypatch.setattr("bellwether.unpack.subprocess.run", lambda argv, cwd: calls.append(argv))
+    paths = [tmp_path / "fixtures" / "m" / "render" / f"set-{i:05d}-{'x' * 40}.jsonl.zst" for i in range(3000)]
+    unpack_module.fetch(paths)
+    includes = [argv[argv.index("--include") + 1] for argv in calls]
+    assert len(calls) > 1
+    assert all(len(include.encode()) < 100_000 for include in includes)
+    assert sorted(p for include in includes for p in include.split(",")) == sorted(
+        p.relative_to(tmp_path).as_posix() for p in paths
+    )
+
+
+def test_rewriting_an_unchanged_compressed_set_keeps_its_bytes(tmp_path):
+    # A zstandard upgrade may compress the same content to other bytes; that must not make a new LFS object.
+    path = tmp_path / "set.jsonl.zst"
+    lines = render_cases("a", "b")
+    write_fixture_file(path, lines)
+    other_bytes = zstandard.ZstdCompressor(level=3).compress(plain_text(path).encode("utf-8"))
+    path.write_bytes(other_bytes)
+
+    write_fixture_file(path, lines)
+
+    assert path.read_bytes() == other_bytes
+    write_fixture_file(path, render_cases("a"))
+    assert path.read_bytes() != other_bytes
+
+
+def test_record_keeps_the_old_form_when_the_new_file_cannot_be_written(tmp_path, tiny_model, monkeypatch):
+    status, out_dir = record(
+        tmp_path, tiny_model, ("bench-x", [{"name": "bench-x-0", "request": {"messages": [user("X")]}}])
+    )
+    assert status == 0 and (out_dir / "bench-x.jsonl").is_file()
+    write_jsonl(tmp_path / "corpus" / "render" / "bench-x.jsonl", [imported("bench-x-0", "X")])
+
+    def refuse(path, cases):
+        raise ValueError("schema")
+
+    monkeypatch.setattr("bellwether.record.write_fixture_file", refuse)
+    with pytest.raises(ValueError, match="schema"):
+        main(record_argv(tmp_path, tiny_model))
+    assert (out_dir / "bench-x.jsonl").is_file()
+
+
+def test_unpack_everything_again_drops_a_model_the_fixtures_no_longer_have(tmp_path, tiny_model, monkeypatch):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    write_manifest(fixtures, "other", "acme/Other")
+    write_fixture_file(fixtures / "other" / "render" / "common.jsonl", render_cases("a"))
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    assert (out / "other" / "render" / "common.jsonl").is_file()
+    shutil.rmtree(fixtures / "other")
+    (out / "notes").mkdir()
+    (out / "notes" / "todo.txt").write_text("keep")
+
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+
+    assert not (out / "other").exists()
+    assert (out / "tiny-chat" / "render" / "common.jsonl").is_file()
+    assert (out / "notes" / "todo.txt").read_text() == "keep"
+
+
+def test_unpack_refuses_to_replace_a_directory_it_did_not_write(tmp_path, tiny_model, monkeypatch, capsys):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "other"
+    (out / "tiny-chat").mkdir(parents=True)
+    (out / "tiny-chat" / "notes.txt").write_text("notes")
+
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out)]) == 1
+
+    assert "did not write" in capsys.readouterr().err
+    assert (out / "tiny-chat" / "notes.txt").read_text() == "notes"
+    assert not (out / "tiny-chat" / "render").exists()

@@ -12,34 +12,33 @@ from collections import Counter
 from pathlib import Path
 
 from bellwether.manifest import KINDS, load_manifest
-from bellwether.record.corpus import read_cases
+from bellwether.record import sets as set_tables
 
 HAND_WRITTEN = "hand-written"
 
 
-def sources(corpus: Path) -> dict[tuple[str, str], str]:
-    """``(kind, case name)`` -> the dataset the case came from, for every corpus line that carries an origin."""
+def set_sources(corpus: Path) -> dict[tuple[str, str], str]:
+    """``(kind, set)`` -> the dataset a corpus set was imported from, read from the set's first line."""
     found: dict[tuple[str, str], str] = {}
     for kind in KINDS:
         if (corpus / kind).is_dir():
             for path in sorted((corpus / kind).rglob("*.jsonl")):
-                for case in read_cases(path):
-                    if case.origin:
-                        found[(kind, case.name)] = case.origin["dataset"]
+                with path.open(encoding="utf-8") as handle:
+                    first = next((line for line in handle if line.strip()), None)
+                origin = json.loads(first).get("origin") if first else None
+                if isinstance(origin, dict):
+                    found[(kind, path.stem)] = origin["dataset"]
     return found
 
 
 def counts(fixtures: Path, corpus: Path) -> list[dict]:
-    origin_of = sources(corpus)
+    """Cases per model, kind and source, from each model's ``sets.toml``: no fixture set is read."""
+    source_of = set_sources(corpus)
     tally: Counter[tuple[str, str, str]] = Counter()
     for manifest_path in sorted(fixtures.glob("*/manifest.toml")):
         model = load_manifest(manifest_path).model
-        for kind in KINDS:
-            for path in sorted((manifest_path.parent / kind).glob("*.jsonl")):
-                for raw in path.read_text(encoding="utf-8").splitlines():
-                    if raw.strip():
-                        name = json.loads(raw)["id"].rsplit("/", 1)[1]
-                        tally[(model, kind, origin_of.get((kind, name), HAND_WRITTEN))] += 1
+        for (kind, name), table in set_tables.read(manifest_path.parent / set_tables.FILE).items():
+            tally[(model, kind, source_of.get((kind, name), HAND_WRITTEN))] += table["cases"]
     return [{"model": m, "kind": k, "source": s, "cases": n} for (m, k, s), n in sorted(tally.items())]
 
 

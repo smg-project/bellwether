@@ -1,0 +1,5 @@
+[lfs]
+	# A clone fetches no benchmark set. bellwether unpack fetches the ones it writes; to fetch one yourself, run
+	#   git lfs pull --include 'fixtures/<slug>/<kind>/<set>.jsonl.zst' --exclude ''
+	# with the path from the repository root. Without --exclude '', this fetchexclude wins and nothing is fetched.
+	fetchexclude = fixtures/**/*.jsonl.zst

@@ -13,9 +13,15 @@ def test_count_groups_fixture_cases_by_model_kind_and_source(tmp_path, capsys):
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     (fixtures / "m1").mkdir(parents=True)
     (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
-    write_lines(fixtures / "m1" / "render" / "common.jsonl", [{"id": "m1/render/a"}, {"id": "m1/render/b"}])
-    write_lines(fixtures / "m1" / "render" / "bfcl-x.jsonl", [{"id": "m1/render/bfcl-x-0"}])
-    write_lines(fixtures / "m1" / "parse" / "bfcl-x.jsonl", [{"id": "m1/parse/bfcl-x-0"}])
+    table = 'form = "{}"\ncases = {}\nrejected = 0\nplain_bytes = 1\nplain_sha256 = "x"\n'
+    (fixtures / "m1" / "sets.toml").write_text(
+        "[render.common]\n"
+        + table.format("plain", 2)
+        + "[render.bfcl-x]\n"
+        + table.format("zstd", 1)
+        + "[parse.bfcl-x]\n"
+        + table.format("zstd", 1)
+    )
     request = {"messages": []}
     write_lines(
         corpus / "render" / "common.jsonl", [{"name": "a", "request": request}, {"name": "b", "request": request}]

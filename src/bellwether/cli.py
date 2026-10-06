@@ -1,4 +1,4 @@
-"""Command line entry point: ``bellwether gaps | record | import | count | verify | report``.
+"""Command line entry point: ``bellwether gaps | record | import | count | unpack | verify | report``.
 
 ``gaps`` (M1) and ``record --kind render --oracle reference`` (M2) are implemented. The other
 subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs exit
@@ -17,6 +17,7 @@ from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
 from bellwether.importers import run as import_run
 from bellwether.record import run as record_run
+from bellwether.unpack import run as unpack_run
 
 NOT_IMPLEMENTED = 2
 
@@ -84,6 +85,12 @@ def build_parser() -> argparse.ArgumentParser:
     count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     count.add_argument("--format", choices=["markdown", "json"], default="markdown")
     count.set_defaults(func=count_run)
+
+    unpack = sub.add_parser("unpack", help="write every fixture set as plain JSON Lines into one tree, for consumers")
+    unpack.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    unpack.add_argument("--out", type=Path, default=Path("fixtures-plain"), help="where the plain tree goes")
+    unpack.add_argument("--model", help="only this Hugging Face model id")
+    unpack.set_defaults(func=unpack_run)
 
     verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")
     verify.add_argument("--smg", required=True, help="SMG base URL, e.g. http://127.0.0.1:30000")
