@@ -10,8 +10,9 @@ checks that the license is still the one it was reviewed for.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
+
+from . import pinned
 
 CARD = "README.md"
 
@@ -21,10 +22,7 @@ def fetch(repo: str, revision: str, filename: str, sha256: str) -> Path:
     import huggingface_hub
 
     path = Path(huggingface_hub.hf_hub_download(repo, filename, repo_type="dataset", revision=revision))
-    with path.open("rb") as handle:
-        digest = hashlib.file_digest(handle, "sha256").hexdigest()
-    if digest != sha256:
-        raise ValueError(f"{repo}@{revision} {filename}: sha256 {digest} is not the pinned {sha256}")
+    pinned.check(f"{repo}@{revision} {filename}", pinned.sha256_of_file(path), sha256)
     return path
 
 
