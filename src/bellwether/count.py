@@ -69,6 +69,10 @@ def _line(cells: Iterable[object]) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
-    rows = counts(args.fixtures, args.corpus)
+    try:
+        rows = counts(args.fixtures, args.corpus)
+    except (OSError, ValueError) as err:
+        print(f"bellwether count: {err}", file=sys.stderr)
+        return 1
     sys.stdout.write(json.dumps(rows, indent=1) + "\n" if args.format == "json" else render_markdown(rows))
     return 0

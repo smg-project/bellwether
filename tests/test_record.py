@@ -1728,6 +1728,60 @@ def test_record_refuses_a_manifest_that_lists_no_oracle_inputs(tmp_path, tiny_mo
     assert f"{path} lists no oracle inputs; `bellwether manifests` writes them" in capsys.readouterr().err
 
 
+def test_record_refuses_two_manifests_that_name_each_other_as_their_group(tmp_path, tiny_model, capsys):
+    # A hand-edited group must not send the operator from one checkpoint to the other and back.
+    fixtures = tmp_path / "fixtures"
+    inputs = oracle_inputs(str(tiny_model), "local")
+    first = write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=inputs, group="tiny-chat-mini")
+    second = write_manifest(fixtures, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, group="tiny-chat")
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+
+    err = capsys.readouterr().err
+    assert f"{first}: group tiny-chat-mini names {second}, which names a group of its own, tiny-chat" in err
+    assert "record the group instead" not in err
+
+
+def test_record_refuses_a_group_that_names_no_manifest(tmp_path, tiny_model, capsys):
+    path = write_manifest(
+        tmp_path / "fixtures",
+        "tiny-chat",
+        str(tiny_model),
+        inputs=oracle_inputs(str(tiny_model), "local"),
+        group="gone",
+    )
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"{path}: group gone names no manifest" in capsys.readouterr().err
+
+
+def test_record_names_a_malformed_manifest_of_the_group_instead_of_a_traceback(tmp_path, tiny_model, capsys):
+    # The group's primary sorts before the member here, and its `authority` is a number where a table belongs.
+    fixtures = tmp_path / "fixtures"
+    primary = write_manifest(fixtures, "tiny-chat", "acme/Tiny-Chat")
+    primary.write_text(f'model = "acme/Tiny-Chat"\nrevision = "{HUB_REVISION}"\nauthority = 1\n')
+    write_manifest(fixtures, "tiny-chat-mini", str(tiny_model), group="tiny-chat")
+
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"bellwether record: {primary}: [authority] must be a table of kinds" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("authority = 1", "[authority] must be a table of kinds"),
+        ('smg = "qwen"', "[smg] must be a table of parser names"),
+        ("engines = []", "[engines] must be a table of engines"),
+    ],
+)
+def test_manifest_rejects_a_value_where_a_table_belongs(tmp_path, line, message):
+    path = tmp_path / "tiny-chat" / "manifest.toml"
+    path.parent.mkdir()
+    path.write_text(f'model = "acme/Tiny-Chat"\nrevision = "{HUB_REVISION}"\n{line}\n')
+    with pytest.raises(ValueError, match=re.escape(f"{path}: {message}")):
+        load_manifest(path)
+
+
 def render_cases(*names: str) -> dict[str, dict]:
     cases = {}
     for name in names:

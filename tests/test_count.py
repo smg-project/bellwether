@@ -139,3 +139,22 @@ def test_count_names_a_set_git_lfs_has_not_fetched_with_the_command_that_fetches
     pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 13\n")
     with pytest.raises(ValueError, match="big-x.jsonl.zst is a Git LFS pointer; fetch it first: git lfs pull"):
         set_sources(tmp_path / "corpus")
+
+
+def test_count_refuses_a_member_whose_group_names_no_manifest(tmp_path, capsys):
+    fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
+    write_manifest(fixtures, "m1-small", "org/M1-Small", 2, group="m1")
+    assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus)]) == 1
+    assert f"bellwether count: {fixtures / 'm1-small' / 'manifest.toml'}: group m1 names no manifest" in (
+        capsys.readouterr().err
+    )
+
+
+def test_a_member_of_a_group_that_recorded_nothing_has_a_row_with_no_cases(tmp_path):
+    fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
+    write_manifest(fixtures, "m1", "org/M1", 1)
+    write_manifest(fixtures, "m1-small", "org/M1-Small", 2, group="m1")
+    assert counts(fixtures, corpus) == [
+        {"model": "org/M1", "group": "m1", "tier": 1, "kind": None, "source": None, "cases": 0},
+        {"model": "org/M1-Small", "group": "m1", "tier": 2, "kind": None, "source": None, "cases": 0},
+    ]

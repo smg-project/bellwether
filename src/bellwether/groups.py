@@ -106,7 +106,7 @@ def _is_date(text: str) -> bool:
 
 
 def existing_manifests(fixtures: Path) -> dict[str, Manifest]:
-    return {manifest.model: manifest for manifest in load_manifests(fixtures)}
+    return {manifest.model: manifest for manifest in load_manifests(fixtures, check_groups=False)}
 
 
 def check_listed(checkpoints: list[Checkpoint], existing: dict[str, Manifest]) -> None:

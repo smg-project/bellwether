@@ -42,7 +42,11 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return NOT_IMPLEMENTED
-    manifest = find_manifest(args.fixtures, args.model)
+    try:
+        manifest = find_manifest(args.fixtures, args.model)
+    except (OSError, ValueError) as err:
+        print(f"bellwether record: {err}", file=sys.stderr)
+        return 1
     refusal = _refusal(manifest, args.fixtures)
     if refusal is not None:
         print(f"bellwether record: {refusal}", file=sys.stderr)
@@ -149,11 +153,11 @@ def run(args: argparse.Namespace) -> int:
 def _refusal(manifest: Manifest, fixtures: Path) -> str | None:
     """Why the checkpoint is not recorded, or None when it may be."""
     if manifest.group is not None:
-        primary = fixtures / manifest.group / "manifest.toml"
-        instead = f"bellwether record --model {load_manifest(primary).model}" if primary.is_file() else str(primary)
+        # find_manifest has checked that the group names its primary
+        primary = load_manifest(fixtures / manifest.group / "manifest.toml")
         return (
             f"{manifest.model} is a member of checkpoint group {manifest.group}, which is recorded once for all its "
-            f"members; record the group instead: {instead}"
+            f"members; record the group instead: bellwether record --model {primary.model}"
         )
     if not manifest.inputs:
         return f"{manifest.path} lists no oracle inputs; `bellwether manifests` writes them"

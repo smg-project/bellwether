@@ -75,6 +75,11 @@ def load_manifest(path: Path) -> Manifest:
             "commit hash, since a branch or tag can move"
         )
     authority = data.get("authority", {})
+    if not isinstance(authority, dict):
+        raise ValueError(f"{path}: [authority] must be a table of kinds")
+    for key, what in (("smg", "parser names"), ("engines", "engines")):
+        if not isinstance(data.get(key, {}), dict):
+            raise ValueError(f"{path}: [{key}] must be a table of {what}")
     for kind, sources in authority.items():
         if kind not in KINDS:
             raise ValueError(f"{path}: unknown kind `{kind}` under [authority]")
@@ -119,16 +124,31 @@ def _tier(path: Path, tier: object) -> int | None:
     return tier
 
 
-def load_manifests(fixtures_dir: Path) -> list[Manifest]:
+def load_manifests(fixtures_dir: Path, *, check_groups: bool = True) -> list[Manifest]:
     """Every manifest under ``fixtures_dir``, sorted by path, the one place the commands read them all. Two manifests
-    of one model are refused, since which one counts would be left to the order of their directories."""
+    of one model are refused, since which one counts would be left to the order of their directories. So is a
+    ``group`` that does not name its group's primary, a manifest that names no group itself: a hand-edited group that
+    names no manifest leaves ``record`` nothing to point to, and two manifests that name each other would send it back
+    and forth. ``bellwether manifests``, which rewrites every ``group``, reads them with ``check_groups=False``."""
     found: dict[str, Manifest] = {}
     for path in sorted(fixtures_dir.glob("*/manifest.toml")):
         manifest = load_manifest(path)
         if manifest.model in found:
             raise ValueError(f"{found[manifest.model].path} and {path} are both manifests of {manifest.model}")
         found[manifest.model] = manifest
-    return list(found.values())
+    manifests = list(found.values())
+    if check_groups:
+        slugs = {manifest.slug: manifest for manifest in manifests}
+        for manifest in (manifest for manifest in manifests if manifest.group is not None):
+            primary = slugs.get(manifest.group)
+            if primary is None:
+                raise ValueError(f"{manifest.path}: group {manifest.group} names no manifest")
+            if primary.group is not None:
+                raise ValueError(
+                    f"{manifest.path}: group {manifest.group} names {primary.path}, which names a group of its own, "
+                    f"{primary.group}; a group's primary names none"
+                )
+    return manifests
 
 
 def find_manifest(fixtures_dir: Path, model: str) -> Manifest:
