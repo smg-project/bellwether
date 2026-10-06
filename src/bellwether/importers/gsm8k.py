@@ -156,15 +156,6 @@ def fetch(path: str, sha256: str, cache: Path) -> bytes:
     return github.fetch(OWNER, REPO, COMMIT, path, sha256, cache=cache).read_bytes()
 
 
-def report_skipped(skipped: list[tuple[str, str]]) -> None:
-    """Print each reason once, with how many rows it left out and every one of them, as the BFCL import does."""
-    rows_by_reason: dict[str, list[str]] = {}
-    for row, why in skipped:
-        rows_by_reason.setdefault(why, []).append(row)
-    for why, rows in rows_by_reason.items():
-        print(f"no case for {len(rows)} row(s) ({', '.join(rows)}): {why}")
-
-
 def run(args: argparse.Namespace) -> int:
     license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache)
     check_license(license_text)
@@ -179,14 +170,7 @@ def run(args: argparse.Namespace) -> int:
         if not problems:
             print(f"{args.corpus}: the GSM8K sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for name, first in repeats:
-        print(f"no case {name}: it repeats {first}")
-    for (kind, name), lines in sorted(kept.items()):
-        left_out = len(sets[(kind, name)]) - len(lines)
-        repeated = f", {left_out} left out as repeats" if left_out else ""
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
-    total = sum(len(lines) for lines in kept.values())
-    print(f"{args.corpus}: {total} cases in the {len(kept)} GSM8K sets, {len(repeats)} left out as repeats")
-    report_skipped(skipped)
+    corpus_sets.report("GSM8K", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped)
     write_sets(kept, args.corpus, license_text)
     return 0

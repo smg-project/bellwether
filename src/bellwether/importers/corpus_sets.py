@@ -2,8 +2,9 @@
 
 A set file holds one JSON line per case, in the order the importer built them, each ending in "\\n". ``json.dumps``
 keeps each line's keys in the order the importer built them and writes non-ASCII text raw (``ensure_ascii=False``),
-so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes. This
-module imports nothing beyond the standard library.
+so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes.
+``report`` and ``report_skipped`` print what an import keeps and leaves out, in the same words for every importer.
+This module imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
@@ -52,6 +53,41 @@ def leave_out_repeats(
                 first[compared] = line["name"]
                 kept[(kind, name)].append(line)
     return kept, repeats
+
+
+def report(
+    dataset: str,
+    sets: dict[tuple[str, str], list[dict]],
+    kept: dict[tuple[str, str], list[dict]],
+    repeats: list[tuple[str, str]],
+    corpus_dir: Path,
+) -> None:
+    """Print what an import leaves out as repeats, and what it keeps.
+
+    First each case ``leave_out_repeats`` left out, with the case it repeats; then each kept set's file, by kind and
+    name, with its count of cases and of repeats left out; then the total for ``dataset``'s sets.
+    """
+    for name, first in repeats:
+        print(f"no case {name}: it repeats {first}")
+    for (kind, name), lines in sorted(kept.items()):
+        left_out = len(sets[(kind, name)]) - len(lines)
+        repeated = f", {left_out} left out as repeats" if left_out else ""
+        print(f"{corpus_dir / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
+    total = sum(len(lines) for lines in kept.values())
+    print(f"{corpus_dir}: {total} cases in the {len(kept)} {dataset} sets, {len(repeats)} left out as repeats")
+
+
+def report_skipped(skipped: list[tuple[str, str]], lost: str = "case") -> None:
+    """Print each reason once, with how many rows it left out and every one of them.
+
+    ``lost`` is what such a row does not get: ``case`` when it gets none (GSM8K), ``parse case`` when it keeps its
+    render case (BFCL).
+    """
+    rows_by_reason: dict[str, list[str]] = {}
+    for row, why in skipped:
+        rows_by_reason.setdefault(why, []).append(row)
+    for why, rows in rows_by_reason.items():
+        print(f"no {lost} for {len(rows)} row(s) ({', '.join(rows)}): {why}")
 
 
 def write(

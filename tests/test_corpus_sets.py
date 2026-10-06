@@ -94,3 +94,32 @@ def test_when_nothing_repeats_the_sets_come_back_whole_and_the_list_is_empty():
     }
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     assert kept == sets and list(kept) == list(sets) and repeats == []
+
+
+def test_the_report_names_each_repeat_then_each_set_by_kind_and_name_with_its_count_then_the_total(tmp_path, capsys):
+    sets = {
+        ("render", "zeta"): [render("a", ask("Hi")), render("b", ask("Hi"))],
+        ("render", "alpha"): [render("c", ask("Hi")), render("d", ask("Bye"))],
+        ("parse", "zeta"): [parse("e", ask("Hi"), {"content": "Hello"})],
+    }
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    corpus_sets.report("Test", sets, kept, repeats, tmp_path)
+    assert capsys.readouterr().out.splitlines() == [
+        "no case b: it repeats a",
+        "no case c: it repeats a",
+        f"{tmp_path / 'parse' / 'zeta.jsonl'}: 1 cases",
+        f"{tmp_path / 'render' / 'alpha.jsonl'}: 1 cases, 1 left out as repeats",
+        f"{tmp_path / 'render' / 'zeta.jsonl'}: 1 cases, 1 left out as repeats",
+        f"{tmp_path}: 3 cases in the 3 Test sets, 2 left out as repeats",
+    ]
+
+
+def test_each_reason_is_printed_once_naming_every_row_it_left_out_and_what_the_rows_do_not_get(capsys):
+    skipped = [(f"row {row}", "no final answer" if row == 2 else "empty") for row in range(1, 6)]
+    corpus_sets.report_skipped(skipped)
+    corpus_sets.report_skipped([("simple_java_1", "not strings")], "parse case")
+    assert capsys.readouterr().out.splitlines() == [
+        "no case for 4 row(s) (row 1, row 3, row 4, row 5): empty",
+        "no case for 1 row(s) (row 2): no final answer",
+        "no parse case for 1 row(s) (simple_java_1): not strings",
+    ]

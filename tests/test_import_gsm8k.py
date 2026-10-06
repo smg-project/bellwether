@@ -191,13 +191,6 @@ def test_rows_that_cannot_become_a_case_are_left_out_of_every_set_of_their_split
     ]
 
 
-def test_each_reason_is_printed_once_naming_every_row_it_left_out(capsys):
-    gsm8k.report_skipped([(f"train row {row}", "the question is empty") for row in range(1, 5)])
-    assert capsys.readouterr().out == (
-        "no case for 4 row(s) (train row 1, train row 2, train row 3, train row 4): the question is empty\n"
-    )
-
-
 def test_written_sets_are_raw_unicode_and_a_rewrite_is_byte_identical(tmp_path):
     corpus = tmp_path / "corpus"
     (corpus / "parse").mkdir(parents=True)

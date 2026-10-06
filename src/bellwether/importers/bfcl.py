@@ -384,18 +384,7 @@ def run(args: argparse.Namespace) -> int:
         if not problems:
             print(f"{args.corpus}: the BFCL sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for name, first in repeats:
-        print(f"no case {name}: it repeats {first}")
-    for (kind, name), lines in sorted(kept.items()):
-        left_out = len(sets[(kind, name)]) - len(lines)
-        repeated = f", {left_out} left out as repeats" if left_out else ""
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
-    total = sum(len(lines) for lines in kept.values())
-    print(f"{args.corpus}: {total} cases in the {len(kept)} BFCL sets, {len(repeats)} left out as repeats")
-    rows_by_reason: dict[str, list[str]] = {}
-    for row_id, why in skipped:
-        rows_by_reason.setdefault(why, []).append(row_id)
-    for why, row_ids in rows_by_reason.items():
-        print(f"no parse case for {len(row_ids)} row(s) ({', '.join(row_ids)}): {why}")
+    corpus_sets.report("BFCL", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped, "parse case")
     write_sets(kept, args.corpus)
     return 0
