@@ -109,7 +109,7 @@ def test_the_answer_splits_into_the_solution_as_written_and_the_final_answer():
 
 
 def test_a_final_answer_with_whitespace_around_it_is_unusable_rather_than_stripped():
-    # Stripped, it would change the reasoning set's content and not the content set's, and no line would say so.
+    # Stripped, it would change the reasoning-content set's content and not the content set's, and no line would say so.
     for answer in ["1 + 1 = <<1+1=2>>2\n#### 2 ", "1 + 1 = <<1+1=2>>2\n####  2", "1 + 1 = <<1+1=2>>2\n#### 2\r"]:
         with pytest.raises(gsm8k.Unusable, match="the final answer after '#### ' starts or ends with whitespace"):
             gsm8k.split_answer(answer)
@@ -144,10 +144,10 @@ def test_a_render_case_is_the_question_as_one_user_turn_with_its_origin():
 
 def test_the_parse_cases_hold_the_solution_as_reasoning_or_the_whole_answer_as_content():
     sets = gsm8k.build_sets({"test": jsonl([ROW])})
-    [reasoning] = sets[("parse", "gsm8k-test-reasoning")]
+    [reasoning] = sets[("parse", "gsm8k-test-reasoning-content")]
     [content] = sets[("parse", "gsm8k-test-content")]
     assert reasoning == {
-        "name": "gsm8k-test-reasoning-0",
+        "name": "gsm8k-test-reasoning-content-0",
         "request": REQUEST,
         "message": {"reasoning_content": SOLUTION, "content": "18"},
         "notes": "GSM8K test row 0",
@@ -171,17 +171,17 @@ def test_rows_that_cannot_become_a_case_are_left_out_of_every_set_of_their_split
     sets = gsm8k.build_sets({"train": jsonl([ROW, no_final, no_question, ROW]), "test": jsonl([ROW])}, skipped=skipped)
     assert list(sets) == [
         ("render", "gsm8k-train"),
-        ("parse", "gsm8k-train-reasoning"),
+        ("parse", "gsm8k-train-reasoning-content"),
         ("parse", "gsm8k-train-content"),
         ("render", "gsm8k-test"),
-        ("parse", "gsm8k-test-reasoning"),
+        ("parse", "gsm8k-test-reasoning-content"),
         ("parse", "gsm8k-test-content"),
     ]
     assert [line["name"] for line in sets[("parse", "gsm8k-train-content")]] == [
         "gsm8k-train-content-0",
         "gsm8k-train-content-3",
     ]
-    for key in [("render", "gsm8k-train"), ("parse", "gsm8k-train-reasoning")]:
+    for key in [("render", "gsm8k-train"), ("parse", "gsm8k-train-reasoning-content")]:
         assert [line["origin"]["row"] for line in sets[key]] == [0, 3]
     assert sets[("render", "gsm8k-train")][0]["origin"]["file"] == "grade_school_math/data/train.jsonl"
     assert sets[("render", "gsm8k-train")][0]["origin"]["sha256"] == gsm8k.SHA256["train"]
@@ -200,7 +200,7 @@ def test_written_sets_are_raw_unicode_and_a_rewrite_is_byte_identical(tmp_path):
     assert sorted(path.relative_to(corpus).as_posix() for path in written) == [
         "licenses/gsm8k-LICENSE",
         "parse/gsm8k-test-content.jsonl",
-        "parse/gsm8k-test-reasoning.jsonl",
+        "parse/gsm8k-test-reasoning-content.jsonl",
         "render/gsm8k-test.jsonl",
     ]
     assert not (corpus / "parse" / "gsm8k-old.jsonl").exists()
@@ -239,7 +239,8 @@ def test_check_names_a_set_file_that_is_not_utf_8_instead_of_stopping(tmp_path):
 def test_a_question_holding_unicode_line_breaks_reads_back_from_the_written_corpus(tmp_path):
     row = dict(ROW, question="Clive opens a box of balls.  \u2028It holds 6 blue balls.  \u2028How many?")
     gsm8k.write_sets(gsm8k.build_sets({"train": jsonl([row])}), tmp_path, MIT)
-    for kind, name in [("render", "gsm8k-train"), ("parse", "gsm8k-train-reasoning"), ("parse", "gsm8k-train-content")]:
+    keys = [("render", "gsm8k-train"), ("parse", "gsm8k-train-reasoning-content"), ("parse", "gsm8k-train-content")]
+    for kind, name in keys:
         [case] = read_cases(tmp_path / kind / f"{name}.jsonl")
         assert case.request == {"messages": [{"role": "user", "content": row["question"]}]}
 
@@ -272,7 +273,7 @@ def test_the_command_writes_then_checks_and_names_the_rows_it_leaves_out(tmp_pat
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'gsm8k-train-reasoning.jsonl'}: 1 cases" in out
+    assert f"{corpus / 'parse' / 'gsm8k-train-reasoning-content.jsonl'}: 1 cases" in out
     assert "no case for 1 row(s) (train row 1): the question is empty" in out
     assert f"{corpus}: the GSM8K sets equal a fresh import of {gsm8k.SOURCE}" in out
 
@@ -289,7 +290,7 @@ def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_th
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out.splitlines()
-    for name in ["gsm8k-train", "gsm8k-train-reasoning", "gsm8k-train-content"]:
+    for name in ["gsm8k-train", "gsm8k-train-reasoning-content", "gsm8k-train-content"]:
         assert f"no case {name}-1: it repeats {name}-0" in out
     assert f"{corpus / 'render' / 'gsm8k-train.jsonl'}: 1 cases, 1 left out as repeats" in out
     assert f"{corpus / 'render' / 'gsm8k-test.jsonl'}: 1 cases" in out

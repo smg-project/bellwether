@@ -33,7 +33,9 @@ SHA256 = {
     "test": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14",
 }
 FINAL = "#### "
-SHAPES = ("reasoning", "content")  # the parse sets per split, by the shape of their message
+# The parse sets per split, each named by its message's parts in order, in the words every importer uses for them:
+# reasoning, content and calls.
+SHAPES = ("reasoning-content", "content")
 
 
 class Unusable(ValueError):
@@ -60,7 +62,7 @@ def split_answer(answer: str) -> tuple[str, str]:
 
     Both are kept as written: the solution with its calculator annotations, without the newline that ends it, and the
     final answer as the rest of the last line. A final answer that starts or ends with whitespace is ``Unusable``:
-    stripped, it would change the reasoning set's content and not the content set's, and no line would say so.
+    stripped, it would change the reasoning-content set's content and not the content set's, and no line would say so.
     """
     solution, _, last = answer.rpartition("\n")
     if not last.startswith(FINAL):
@@ -82,12 +84,12 @@ def set_name(split: str, shape: str = "") -> str:
 def messages_for(answer: str) -> dict[str, dict]:
     """The assistant message of each parse set, in the shapes the hand-written parse cases use.
 
-    ``reasoning`` is the output of a model that thinks: the worked solution as ``reasoning_content``, then the final
-    answer as ``content``. ``content`` is the output of one that does not: the whole answer, ``#### `` line included,
-    as ``content``, with no ``reasoning_content`` key.
+    ``reasoning-content`` is the output of a model that thinks: the worked solution as ``reasoning_content``, then the
+    final answer as ``content``. ``content`` is the output of one that does not: the whole answer, ``#### `` line
+    included, as ``content``, with no ``reasoning_content`` key.
     """
     solution, final = split_answer(answer)
-    return {"reasoning": {"reasoning_content": solution, "content": final}, "content": {"content": answer}}
+    return {"reasoning-content": {"reasoning_content": solution, "content": final}, "content": {"content": answer}}
 
 
 def origin(split: str, row: int) -> dict:
