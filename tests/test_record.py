@@ -456,6 +456,13 @@ def test_corpus_rejects_an_origin_that_is_not_an_object(tmp_path):
         read_cases(path)
 
 
+def test_corpus_rejects_an_origin_that_names_no_dataset(tmp_path):
+    path = tmp_path / "set.jsonl"
+    write_jsonl(path, [{"name": "a", "request": {"messages": []}, "origin": {"row": "x"}}])
+    with pytest.raises(ValueError, match=r"set\.jsonl:1: `origin` must name its `dataset`"):
+        read_cases(path)
+
+
 def test_record_other_kinds_and_oracles_are_not_implemented(tmp_path, tiny_model, capsys):
     argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "sglang", "--fixtures", str(tmp_path)]
     assert main(argv) == 2

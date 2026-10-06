@@ -51,6 +51,8 @@ def read_cases(path: Path) -> list[Case]:
         origin = data.get("origin")
         if origin is not None and not isinstance(origin, dict):
             raise ValueError(f"{path}:{number}: `origin` must be an object")
+        if origin is not None and not (isinstance(origin.get("dataset"), str) and origin["dataset"]):
+            raise ValueError(f"{path}:{number}: `origin` must name its `dataset`")
         names.add(name)
         cases.append(Case(name, data["request"], str(data.get("notes", "")), message, origin, path))
     return cases
