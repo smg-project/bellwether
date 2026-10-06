@@ -16,6 +16,11 @@ authority, which nothing here invokes.
 The output follows the generation prompt, so a request that asks for no generation prompt or for
 the final message to be continued cannot be recorded this way and is rejected.
 
+The template gets each tool call's arguments as an object, decoded from the corpus's JSON string, which is what
+vLLM (``vllm/entrypoints/chat_utils.py``) and SGLang (``parse_tool_call_arguments``) give it. A template that cannot
+take an object (DeepSeek's concatenate the string) fails the case: that is a finding about the template and the
+engines, reported, never worked around. The reference message keeps the JSON string.
+
 Next to the ids the oracle records the text each token contributes under the tokenizer's incremental
 decode (``DecodeStream``), the pieces a replay feeds with each id: a token that does not complete a
 character contributes nothing, and the token that completes it carries the whole character. Joined,
@@ -24,6 +29,8 @@ the pieces must give back the output text; a case where they do not is reported 
 
 from __future__ import annotations
 
+import copy
+import json
 from dataclasses import dataclass
 
 from tokenizers.decoders import DecodeStream
@@ -60,8 +67,9 @@ class RoundtripOracle:
         messages = request["messages"]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
+        turn = {"role": "assistant", **with_object_arguments(message)}
         rendered = self.tokenizer.apply_chat_template(
-            [*messages, {"role": "assistant", **message}], tokenize=False, add_generation_prompt=False, **kwargs
+            [*messages, turn], tokenize=False, add_generation_prompt=False, **kwargs
         )
         if not rendered.startswith(prompt):
             raise ValueError(
@@ -85,3 +93,20 @@ class RoundtripOracle:
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
+
+
+def with_object_arguments(message: dict) -> dict:
+    """A copy of the message whose calls carry their arguments as objects, as the engines give them to templates."""
+    if not message.get("tool_calls"):
+        return message
+    message = copy.deepcopy(message)
+    for call in message["tool_calls"]:
+        arguments = call["function"].get("arguments")
+        try:
+            value = json.loads(arguments)
+        except (TypeError, json.JSONDecodeError):
+            value = None
+        if not isinstance(value, dict):
+            raise ValueError(f"a call's arguments must be a JSON object, to give the template an object: {arguments!r}")
+        call["function"]["arguments"] = value
+    return message

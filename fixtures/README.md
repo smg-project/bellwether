@@ -50,7 +50,8 @@ from it.
 ## Parse lines
 
 `record --kind parse --oracle reference` records the round trip: the corpus states the assistant
-message, the template renders it as the final assistant turn, and the text between the generation
+message (each call's arguments are given to the template as an object, as vLLM and SGLang give them; a template that
+cannot take an object fails the case, which is reported as a finding), the template renders it as the final assistant turn, and the text between the generation
 prompt and the end-of-turn token is the output. A line carries `request` (what a replay sends to SMG),
 `tools`, `output_ids` (the output's tokens, the end-of-turn token excluded), `output_pieces` (the text
 each of those tokens contributes under the tokenizer's incremental decode, tokenizers' `DecodeStream`:
