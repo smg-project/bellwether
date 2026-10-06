@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from bellwether.models.build import Row, hub_rows, missing_from_tier1, registry_only_rows, to_jsonl, unnamed
-from bellwether.models.hub import Details, Listed
+from bellwether.models.hub import Details, HubUnavailable, Listed
 from bellwether.models.registry import Entry, read_sglang, read_vllm
 
 DATA = Path(__file__).parent / "data" / "models"
@@ -79,19 +79,28 @@ def listed(model: str, created: date, pipeline_tag: str = "text-generation") -> 
 
 
 class FakeHub:
-    """The Hub as two dicts; it records what was asked so the tests can see which calls were saved."""
+    """The Hub as two dicts; it records what was asked so the tests can see which calls were saved.
 
-    def __init__(self, listings: dict[str, list[Listed]], models: dict[str, Details]) -> None:
-        self.listings, self.models = listings, models
+    ``unavailable`` maps a model or an organization to the error the Hub answers for it.
+    """
+
+    def __init__(
+        self, listings: dict[str, list[Listed]], models: dict[str, Details], unavailable: dict[str, str] | None = None
+    ) -> None:
+        self.listings, self.models, self.unavailable = listings, models, unavailable or {}
         self.listed: list[str] = []
         self.asked: list[str] = []
 
     def list_models(self, org: str) -> list[Listed]:
         self.listed.append(org)
+        if org in self.unavailable:
+            raise HubUnavailable(org, self.unavailable[org])
         return self.listings.get(org, [])
 
     def model(self, model_id: str) -> Details | None:
         self.asked.append(model_id)
+        if model_id in self.unavailable:
+            raise HubUnavailable(model_id, self.unavailable[model_id])
         return self.models.get(model_id)
 
 
@@ -265,6 +274,32 @@ def test_a_hub_model_whose_template_only_the_processor_reads_is_kept_with_a_stat
         "Qwen/Qwen3-VL-4B": "processor-chat-template",
         "Qwen/Qwen3-VL-2B": "gated",
     }
+
+
+def test_a_registry_checkpoint_the_hub_could_not_be_asked_about_keeps_its_row_with_the_error() -> None:
+    entries = [Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",))]
+    hub = FakeHub({}, {}, unavailable={"Qwen/Qwen3-8B": "hub-error-503"})
+    [row] = hub_rows(entries, hub, BUILT)
+    assert row == Row("Qwen/Qwen3-8B", None, 3, "hub-error-503", None, None, "text", ("vllm",))
+
+
+def test_a_listed_checkpoint_or_organization_the_hub_fails_on_is_logged_and_the_run_goes_on() -> None:
+    entries = [
+        Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",)),
+        Entry("vllm", "XverseMoeForCausalLM", TEXT, True, False, ("xverse/XVERSE-MoE-A36B",)),
+    ]
+    qwen3 = details("Qwen/Qwen3-8B", date(2025, 4, 27), 900, ("Qwen3ForCausalLM",))
+    xverse = details("xverse/XVERSE-MoE-A36B", date(2024, 4, 1), 10, ("XverseMoeForCausalLM",))
+    later = details("Qwen/Qwen3-14B", date(2025, 4, 28), 800, ("Qwen3ForCausalLM",))
+    listings = {"Qwen": [listed("Qwen/Qwen3-14B", date(2025, 4, 28)), listed("Qwen/Qwen3-32B", date(2025, 4, 28))]}
+    models = {"Qwen/Qwen3-8B": qwen3, "xverse/XVERSE-MoE-A36B": xverse, "Qwen/Qwen3-14B": later}
+    hub = FakeHub(listings, models, unavailable={"Qwen/Qwen3-32B": "hub-error-502", "xverse": "hub-error-500"})
+    log: list[str] = []
+    rows = hub_rows(entries, hub, BUILT, log.append)
+    assert [row.model for row in rows] == ["Qwen/Qwen3-8B", "Qwen/Qwen3-14B", "xverse/XVERSE-MoE-A36B"]
+    assert "Qwen/Qwen3-32B: left out, hub-error-502" in log
+    assert "xverse: not listed, hub-error-500" in log
+    assert hub.listed == ["Qwen", "xverse"]
 
 
 def test_the_list_is_canonical_json_lines() -> None:

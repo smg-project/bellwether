@@ -162,7 +162,9 @@ except gpt-oss (the rule is in `docs/benchmark-sets.md`, "Which models"). It rea
   and classification models, and checkpoints created before 2025 that no registry names. A token
   (`HF_TOKEN`) raises the Hub's rate limits; none is needed, and a rate-limited call waits and is
   made again. A model whose tokenizer or processor config cannot be read (gated, an error from the
-  Hub, a file that is not JSON) is kept, with a status that says so.
+  Hub, a file that is not JSON) is kept, with a status that says so. When the Hub gives no answer
+  about a model at all, a checkpoint a registry names keeps its row with the error as its status, and
+  a model or an organization only a listing would have added is left out and named on stderr.
 
 It writes one JSON line per checkpoint, ordered by tier and then within the tier:
 

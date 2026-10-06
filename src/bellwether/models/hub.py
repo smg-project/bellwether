@@ -63,11 +63,21 @@ class Details:
     processor_only: bool = False  # only the processor's files hold the template, which the oracle does not read yet
 
 
+class HubUnavailable(Exception):
+    """The Hub gave no answer about a model or an organization; ``status`` names the error, as a row's status."""
+
+    def __init__(self, what: str, status: str) -> None:
+        super().__init__(f"{what}: {status}")
+        self.status = status
+
+
 class Hub(Protocol):
-    def list_models(self, org: str) -> list[Listed]: ...
+    def list_models(self, org: str) -> list[Listed]:
+        """The organization's models; ``HubUnavailable`` when the Hub gives no listing."""
+        ...
 
     def model(self, model_id: str) -> Details | None:
-        """The model's details, or ``None`` when the Hub has no such model."""
+        """The model's details, ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer."""
         ...
 
 
@@ -92,16 +102,27 @@ class HfHub:
         self.api, self.download, self.sleep = api, download, sleep
 
     def list_models(self, org: str) -> list[Listed]:
-        models = self._patiently(lambda: list(self.api.list_models(author=org, expand=LISTING_FIELDS)))
+        """The organization's models; ``HubUnavailable`` when the Hub gives no listing."""
+        import httpx
+        from huggingface_hub.errors import HfHubHTTPError
+
+        try:
+            models = self._patiently(lambda: list(self.api.list_models(author=org, expand=LISTING_FIELDS)))
+        except (HfHubHTTPError, httpx.HTTPError) as err:
+            raise HubUnavailable(org, _hub_error(err)) from err
         return [Listed(m.id, _day(m.created_at), m.downloads or 0, tuple(m.tags or ()), m.pipeline_tag) for m in models]
 
     def model(self, model_id: str) -> Details | None:
-        from huggingface_hub.errors import RepositoryNotFoundError
+        """The model's details, ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer."""
+        import httpx
+        from huggingface_hub.errors import HfHubHTTPError, RepositoryNotFoundError
 
         try:
             info = self._patiently(lambda: self.api.model_info(model_id))
         except RepositoryNotFoundError:
             return None
+        except (HfHubHTTPError, httpx.HTTPError) as err:
+            raise HubUnavailable(model_id, _hub_error(err)) from err
         config = info.config or {}
         files = {sibling.rfilename for sibling in info.siblings or ()}
         template, processor_only = self._tokenizer_template(info, config, files), False

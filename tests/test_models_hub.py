@@ -17,7 +17,7 @@ from huggingface_hub.errors import (
     RepositoryNotFoundError,
 )
 
-from bellwether.models.hub import Details, HfHub, Listed
+from bellwether.models.hub import Details, HfHub, HubUnavailable, Listed
 from bellwether.models.rules import status_of
 
 REQUEST = httpx.Request("GET", "https://huggingface.co/api/models/example")
@@ -315,8 +315,28 @@ def test_the_hub_is_asked_again_after_a_rate_limit() -> None:
     assert len(api.calls) == 3
 
 
-def test_other_hub_errors_are_not_retried() -> None:
+def test_other_hub_errors_are_not_retried_and_a_failed_listing_names_its_error() -> None:
     api = StubApi(failures=[http_error(HfHubHTTPError, 500)])
-    with pytest.raises(HfHubHTTPError):
+    with pytest.raises(HubUnavailable) as raised:
         client(api).list_models("Qwen")
+    assert raised.value.status == "hub-error-500"
     assert len(api.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("failures", "status"),
+    [
+        ([http_error(HfHubHTTPError, 503)], "hub-error-503"),
+        ([httpx.ConnectError("connection refused", request=REQUEST)], "hub-error-connect-error"),
+        ([http_error(HfHubHTTPError, 429)] * 8, "hub-error-429"),  # still limited after the seven waits
+    ],
+)
+def test_a_details_request_the_hub_fails_is_unavailable_with_its_error_named(
+    failures: list[Exception], status: str
+) -> None:
+    api = StubApi(models={"Qwen/Qwen3-8B": info()}, failures=failures)
+    hub = HfHub(api=api, download=no_download, sleep=lambda seconds: None)
+    with pytest.raises(HubUnavailable) as raised:
+        hub.model("Qwen/Qwen3-8B")
+    assert raised.value.status == status
+    assert len(api.calls) == len(failures)

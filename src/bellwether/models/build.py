@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date
 
-from .hub import Details, Hub
+from .hub import Details, Hub, HubUnavailable
 from .registry import Entry
 from .rules import (
     POOLING_HEADS,
@@ -58,6 +58,15 @@ class _Named:
         self.example = self.example or example
 
 
+@dataclass
+class _Found:
+    """A registry checkpoint as the Hub answered for it, under the Hub's own id."""
+
+    details: Details | None  # None: the Hub has no such model, or gave no answer (``unavailable``)
+    named: _Named = field(default_factory=_Named)
+    unavailable: str | None = None  # the hub-error status, when the Hub gave no answer
+
+
 def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
     """Every checkpoint a generative entry names; gpt-oss and names that are no checkpoint are left out."""
     named: dict[str, _Named] = {}
@@ -97,21 +106,33 @@ def hub_rows(
 ) -> list[Row]:
     """The registries' checkpoints as the Hub has them, then each of their organizations' chat checkpoints."""
     found = _resolve(registry_checkpoints(entries), hub)
-    log(f"registries: {len(found)} checkpoints, {sum(d is None for d, _ in found.values())} not on the Hub")
+    missing = sum(f.details is None and f.unavailable is None for f in found.values())
+    unanswered = [model for model, f in found.items() if f.unavailable is not None]
+    log(f"registries: {len(found)} checkpoints, {missing} not on the Hub")
+    if unanswered:
+        log(f"registries: no answer from the Hub for {', '.join(unanswered)}; their rows say why")
     text, multimodal = _registered(entries, found)
     rows = {
-        model: _row(model, details, named.sources, named.multimodal, built, checked=True)
-        for model, (details, named) in found.items()
+        model: _row(model, f.details, f.named.sources, f.named.multimodal, built, checked=True, status=f.unavailable)
+        for model, f in found.items()
     }
     # The organizations that publish a registered architecture: those of the engines' examples. vLLM's
     # extras add tiny, random and quantized test models from namespaces that publish none.
-    for org in sorted({model.split("/")[0] for model, (_, named) in found.items() if named.example}):
-        listing = hub.list_models(org)
+    for org in sorted({model.split("/")[0] for model, f in found.items() if f.named.example}):
+        try:
+            listing = hub.list_models(org)
+        except HubUnavailable as err:
+            log(f"{org}: not listed, {err.status}")
+            continue
         added = 0
         for listed in listing:
             if listed.id in rows or not admits_listing(listed):
                 continue
-            details = hub.model(listed.id)
+            try:
+                details = hub.model(listed.id)
+            except HubUnavailable as err:
+                log(f"{listed.id}: left out, {err.status}")
+                continue
             if details is None or details.id in rows or not admits_details(details, text | multimodal):
                 continue
             is_multimodal = any(arch in multimodal for arch in details.architectures)
@@ -121,19 +142,25 @@ def hub_rows(
     return ordered(rows.values())
 
 
-def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, tuple[Details | None, _Named]]:
-    """Each registry checkpoint under the Hub's own id; two names that reach one repository merge."""
-    found: dict[str, tuple[Details | None, _Named]] = {}
+def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, _Found]:
+    """Each registry checkpoint under the Hub's own id; two names that reach one repository merge.
+
+    A checkpoint the Hub gives no answer for keeps its row, under the registry's name, with the error.
+    """
+    found: dict[str, _Found] = {}
     for model in sorted(named):
-        details = hub.model(model)
+        try:
+            details, unavailable = hub.model(model), None
+        except HubUnavailable as err:
+            details, unavailable = None, err.status
         if details is not None and is_gpt_oss(details.id, details.architectures):
             continue
-        _, merged = found.setdefault(details.id if details else model, (details, _Named()))
-        merged.add(named[model].sources, named[model].multimodal, named[model].example)
+        merged = found.setdefault(details.id if details else model, _Found(details, unavailable=unavailable))
+        merged.named.add(named[model].sources, named[model].multimodal, named[model].example)
     return found
 
 
-def _registered(entries: list[Entry], found: dict[str, tuple[Details | None, _Named]]) -> tuple[set[str], set[str]]:
+def _registered(entries: list[Entry], found: dict[str, _Found]) -> tuple[set[str], set[str]]:
     """Text and multimodal architectures: vLLM's generative tables, and what registry checkpoints' configs name.
 
     SGLang's docs name checkpoints, not architectures, so the configs of those checkpoints are what
@@ -144,22 +171,29 @@ def _registered(entries: list[Entry], found: dict[str, tuple[Details | None, _Na
     for entry in entries:
         if entry.engine == "vllm" and entry.generative:
             (multimodal if entry.multimodal else text).add(entry.name)
-    for details, named in found.values():
-        if details is not None:
-            architectures = {arch for arch in details.architectures if not arch.endswith(POOLING_HEADS)}
-            (multimodal if named.multimodal else text).update(architectures)
+    for f in found.values():
+        if f.details is not None:
+            architectures = {arch for arch in f.details.architectures if not arch.endswith(POOLING_HEADS)}
+            (multimodal if f.named.multimodal else text).update(architectures)
     return text, multimodal
 
 
 def _row(
-    model: str, details: Details | None, sources: Iterable[str], multimodal: bool, built: date, checked: bool
+    model: str,
+    details: Details | None,
+    sources: Iterable[str],
+    multimodal: bool,
+    built: date,
+    checked: bool,
+    status: str | None = None,
 ) -> Row:
+    """One checkpoint's row; ``status``, when given, is the Hub's error in place of what its details say."""
     created = details.created if details else None
     return Row(
         model=model,
         revision=details.sha if details else None,
         tier=tier_of(model, created, built, is_current_chat(details)),
-        status=status_of(details, checked),
+        status=status or status_of(details, checked),
         created=created,
         downloads=details.downloads if details else None,
         modality="multimodal" if multimodal else "text",
