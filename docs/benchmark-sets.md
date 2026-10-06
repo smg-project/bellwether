@@ -158,6 +158,19 @@ rows have a ground truth, and 76 Java and JavaScript rows and 5 rows no built ca
 render-only. Six `live_irrelevance` rows repeat an earlier case and are left out (one rule for
 repeats, in `corpus_sets`).
 
+The weekly run's multi_turn categories base, miss_func and miss_param are imported for their
+first turn, as `bfcl-multi-turn-<category>`. The request is the first one the handler sends for a
+row: the turn's messages and no system message, with the functions of the row's classes as
+tools, less those `missed_function` holds back for a later turn. The functions come from the
+class-to-file map in the wheel's source, parsed with `ast`, and go through the same language hint
+and `convert_to_tool`. The parse message is the turn's gold calls in order: each call string is
+parsed with `ast`, positional arguments take the function doc's parameter order, and each call is
+held to the same checker rules. That gives 600 render cases and 425 parse cases; the 175 miss_func
+and miss_param rows whose first turn has no gold call stay render-only. Later turns wait for a
+decision: each of their requests carries the results of the earlier calls, which only BFCL's
+simulators produce. long_context comes with them, where it differs: it changes only the results
+the simulator returns, so its first requests repeat base's (195 of 200 are the same).
+
 ## Recording
 
 `record` stays the recorder. Every case is recorded from two sources of truth, neither of which
