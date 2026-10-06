@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 CACHE = Path.home() / ".cache" / "bellwether" / "datasets"
-# A full commit id, as GitHub writes it. A branch, a tag or a short id is not one.
+# A full commit id, as GitHub and the Hugging Face Hub write it. A branch, a tag or a short id is not one.
 COMMIT_ID = re.compile(r"[0-9a-f]{40}")
 
 

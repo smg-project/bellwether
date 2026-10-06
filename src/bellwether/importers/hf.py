@@ -25,7 +25,14 @@ CARD = "README.md"
 
 def fetch(repo: str, revision: str, filename: str, sha256: str, cache: Path = pinned.CACHE) -> Path:
     """The path of ``filename`` in the dataset ``repo`` at commit ``revision``, kept under ``cache``, checked against
-    ``sha256``."""
+    ``sha256``.
+
+    ``revision`` must be a full commit id, 40 lowercase hex digits, as ``github.fetch`` asks: a branch or a tag can
+    move, and would send a request on every run to learn where it points. Any other is refused before the cache or the
+    network is read.
+    """
+    if not pinned.COMMIT_ID.fullmatch(revision):
+        raise ValueError(f"{repo}: {revision!r} is not a commit id (40 lowercase hex digits); pin a commit")
     import huggingface_hub
 
     # token=False: the files are public, and an importer that needs no token reads none; with the default, the call

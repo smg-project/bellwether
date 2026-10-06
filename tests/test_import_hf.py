@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 import httpx
 import huggingface_hub
@@ -108,6 +109,14 @@ def test_fetch_keeps_the_file_under_its_cache_and_reads_it_back_without_a_reques
     hub.requests.clear()
     assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == path
     assert [request for request in hub.requests if request.url.path.endswith(FILE)] == []
+
+
+@pytest.mark.parametrize("revision", ["main", "v1.0", "a" * 39, "a" * 41, "A" * 40, "g" * 40])
+def test_fetch_refuses_a_revision_that_is_not_a_commit_id_before_any_request(tmp_path, hub, revision):
+    hub.files[FILE] = b"rows"
+    with pytest.raises(ValueError, match=re.escape(f"{REPO}: {revision!r} is not a commit id (40 lowercase hex")):
+        hf.fetch(REPO, revision, FILE, sha(b"rows"), cache=tmp_path / "cache")
+    assert hub.requests == [] and not (tmp_path / "cache").exists()
 
 
 CARD = "---\nconfigs:\n  - config_name: default\n    license: mit\nlicense: apache-2.0\n---\n\n# A dataset\n"
