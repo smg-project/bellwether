@@ -148,6 +148,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="verify only this model's fixtures (repeat for more); default: every manifest",
     )
     verify.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="verify only this render set (repeat for more); default: every set of the selected models",
+    )
+    verify.add_argument(
         "--chunk-plan",
         action="append",
         default=None,

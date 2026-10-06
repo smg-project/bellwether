@@ -76,9 +76,10 @@ catches up.
 
 ## Status
 
-`gaps` (M1, 2026-10-05), `record` for render and parse with the reference oracle (M2, M4) and `verify`
-on render cases against a running SMG (the first half of M3) are implemented. The other subcommands,
-oracles and kinds exist and exit with status 2 until their milestone lands:
+`gaps` (M1, 2026-10-05), `record` for render and parse with the reference oracle (M2, M4), `import`,
+`count`, `unpack`, and `verify` on render cases against a running SMG (the first half of M3) are
+implemented. `report`, `record` with an engine oracle or for tokenize and detokenize, and `verify` for
+the other kinds exist and exit with status 2 until their milestone lands:
 
 | Milestone | Deliverable |
 |---|---|
@@ -222,9 +223,10 @@ request, and nothing in them is passed over: a set Git LFS has not fetched stops
 command that fetches it, and so does a set `sets.toml` lists that the checkout lacks, a set that is not
 zstd or is cut short, a line that is not a case with a request and reference ids, and a case id in two
 of a model's sets. A model named with `--model` must have render cases; any other model without them is
-named in the report. That first read keeps only the case ids; the cases are then sent, judged and
-written one at a time, so a run's memory does not grow with its number of cases, and the JSON report and
-the JUnit XML are put together when the run finishes.
+named in the report. `--set NAME` verifies only the named render sets, and each must be some selected
+model's. That first read keeps only the case ids; the cases are then sent, judged and written one at a
+time, so a run's memory does not grow with its number of cases, and the JSON report and the JUnit XML
+are put together when the run finishes.
 
 | Verdict | Meaning |
 |---|---|
@@ -241,7 +243,8 @@ lines written during the run, those that joined a case and those that did not (a
 for no case), so a line no case takes is never dropped unseen. `missing` and `measurement_failed` are
 about the setup, so no known difference excuses them. Before the first case, `verify` asks SMG's
 `/v1/models` for the models it serves; a model with cases that SMG does not list stops the run, as does
-an answer other than SMG's list (a 404 there usually means `--smg` ends in `/v1`).
+an answer other than SMG's list (a 404 there usually means `--smg` ends in `/v1`). The report and the
+messages give `--smg` without a user and password, should the URL carry them.
 
 `--known PATH` lists SMG's known differences, one TOML table per fixture id stating the outcome SMG is
 known to give, why, and the issue that tracks it; bellwether ships no such list:
@@ -257,15 +260,16 @@ issue = "https://github.com/smg-project/smg/issues/NNN"
 A listed case passes while it has exactly that outcome and fails on any other: a match, so the entry
 goes as soon as SMG is fixed; another verdict or code; or an outcome about the setup. A listed id that
 can name no case fails the run: one that is not a fixture id, one whose slug no manifest has, or a
-render id of a verified model that the run did not find. Ids of models or kinds the run does not verify
-are counted and listed in the report, so the list cannot go stale. The exit status is 0 when every case
-passes, 1 when one does not, and 2 when the run gives no verdict (no such model, a manifest or a set
-verify cannot read, a capture file verify cannot open, no answer from SMG, a model it does not serve) or
-stops before its last case. After the first request, a case left without a verdict (no answer from SMG,
-a capture line verify cannot read, a set that cannot be read again) stops the sending: the cases
-answered so far are judged and reported, and the report names the case the run stopped at and every case
-it did not send. A case is judged against its reference alone for now: telling an `engine_defect` or
-`engines_split` from a `regression` needs the engine witnesses, which come once they are recorded.
+render id of a verified model that a run of every set did not find. Ids of models, sets or kinds the run
+does not verify are counted and listed in the report, so the list cannot go stale. The exit status is 0
+when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such model, a
+manifest or a set verify cannot read, a capture file verify cannot open, no answer from SMG, a model it
+does not serve) or stops before its last case. After the first request, a case left without a verdict
+(no answer from SMG, a capture line verify cannot read, a set that cannot be read again) stops the
+sending: the cases answered so far are judged and reported, and the report names the case the run
+stopped at and every case it did not send. A case is judged against its reference alone for now: telling
+an `engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once
+they are recorded.
 
 ## Layout
 

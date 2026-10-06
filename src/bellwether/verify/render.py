@@ -22,6 +22,7 @@ import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -98,15 +99,26 @@ def client() -> httpx.Client:
     return httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False)
 
 
+def shown(url: str) -> str:
+    """``url`` as the report and the messages show it: without a user and password, which are credentials."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
+
+
 def served_models(http: httpx.Client, url: str) -> set[str]:
     """The model ids SMG lists at ``/v1/models``, asked before the first case.
 
     SMG lists each worker's model id there, not its aliases, and answers 503 when it has no worker. Anything but a
     200 with a list of ids stops the run: a model SMG does not serve would fail every case as a failed measurement.
     """
-    target = f"{url.rstrip('/')}/v1/models"
+    target = f"{shown(url).rstrip('/')}/v1/models"
     try:
-        response = http.get(target)
+        response = http.get(f"{url.rstrip('/')}/v1/models")
     except (httpx.HTTPError, httpx.InvalidURL) as err:
         raise CannotVerify(f"no answer from {target}: {type(err).__name__}: {err}") from err
     if response.status_code != 200:
@@ -131,7 +143,7 @@ def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manife
     try:
         status, body, location = send(http, url, request_body(case, manifest.model))
     except (httpx.HTTPError, httpx.InvalidURL) as err:
-        raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
+        raise CannotVerify(f"no answer from {shown(url)} for {case['id']}: {type(err).__name__}: {err}") from err
     joined = []
     for at, line in capture.lines():
         request_id = line.get("request_id") if isinstance(line, dict) else None

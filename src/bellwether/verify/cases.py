@@ -31,12 +31,14 @@ HEAD = max(len(LFS_POINTER_PREFIX), 18)  # enough for a Git LFS pointer's first 
 SUFFIXES = {"plain": ".jsonl", "zstd": COMPRESSED_SUFFIX}  # sets.toml's form -> the set file's suffix
 
 
-def render_sets(manifest: Manifest) -> list[tuple[str, Path]]:
-    """``(set, file)`` for each of the model's render sets, in either form.
+def render_sets(manifest: Manifest, names: list[str] | None = None) -> list[tuple[str, Path]]:
+    """``(set, file)`` for each of the model's render sets, in either form, or for the named ones only.
 
-    Every render set the model's ``sets.toml`` lists must be in the checkout, in the form it gives.
+    Every render set the model's ``sets.toml`` lists, of those selected, must be in the checkout, in the form it gives.
     """
     found = [(name, path) for kind, name, path in set_files(manifest) if kind == "render"]
+    if names is not None:
+        found = [(name, path) for name, path in found if name in names]
     listing = manifest.path.parent / set_tables.FILE
     try:
         tables = tomllib.loads(listing.read_text(encoding="utf-8")).get("render", {}) if listing.is_file() else {}
@@ -45,6 +47,8 @@ def render_sets(manifest: Manifest) -> list[tuple[str, Path]]:
     if not isinstance(tables, dict):
         raise CannotVerify(f"{listing}: [render] is not a table of sets")
     for name, table in sorted(tables.items()):
+        if names is not None and name not in names:
+            continue
         suffix = SUFFIXES.get(table.get("form")) if isinstance(table, dict) else None
         if suffix is None:
             raise CannotVerify(f"{listing}: render.{name} has no form of plain or zstd")

@@ -43,7 +43,7 @@ def run(args: argparse.Namespace) -> int:
         return CANNOT_RUN
     try:
         manifests = select_manifests(args.fixtures, args.models)
-        sets, without_cases = check_sets(manifests, named=bool(args.models))
+        sets, without_cases = check_sets(manifests, named=bool(args.models), set_names=args.sets)
         if not sets:
             models = ", ".join(manifest.model for manifest in manifests)
             raise CannotVerify(f"no render fixtures under {args.fixtures} for {models}")
@@ -58,9 +58,12 @@ def run(args: argparse.Namespace) -> int:
                 if model not in served:
                     raise CannotVerify(f"SMG serves no model {model}; it serves {', '.join(sorted(served)) or 'none'}")
             listed = send(sets, http, args.smg, capture, known, writer)
-            without_case, outside_run = report.known_without_case(known, args.fixtures, manifests, listed)
+            every_set = args.sets is None
+            without_case, outside_run = report.known_without_case(known, args.fixtures, manifests, listed, every_set)
             written = writer.finish(
-                provenance=report.provenance(url=args.smg, capture=args.capture, known=args.known, manifests=manifests),
+                provenance=report.provenance(
+                    url=render.shown(args.smg), capture=args.capture, known=args.known, manifests=manifests
+                ),
                 capture=capture.counts(),
                 known_without_case=without_case,
                 known_outside_run=outside_run,
@@ -126,17 +129,27 @@ def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]
     return manifests
 
 
-def check_sets(manifests: list[Manifest], *, named: bool) -> tuple[list[tuple[Manifest, str, Path]], list[str]]:
+def check_sets(
+    manifests: list[Manifest], *, named: bool, set_names: list[str] | None = None
+) -> tuple[list[tuple[Manifest, str, Path]], list[str]]:
     """``(manifest, set, file)`` for each render set with a case, every one read whole; and the models with none.
 
     A set is read in either form, plain or compressed (see ``cases``), and only the case ids are kept. A case id is a
-    model's once: the join and the known differences go by it. A model named with ``--model`` must have a case; any
-    other model without one is named in the report.
+    model's once: the join and the known differences go by it. ``set_names`` selects sets by name, each of which some
+    model must have. A model named with ``--model`` must have a case; any other model without one is named in the
+    report.
     """
+    files = [(manifest, render_sets(manifest, set_names)) for manifest in manifests]
+    if set_names is not None:
+        found = {name for _, model_sets in files for name, _ in model_sets}
+        for name in dict.fromkeys(set_names):
+            if name not in found:
+                models = ", ".join(manifest.model for manifest in manifests)
+                raise CannotVerify(f"no render set {name} for {models}")
     sets, without = [], []
-    for manifest in manifests:
+    for manifest, model_sets in files:
         seen: dict[str, str] = {}  # case id -> its set
-        for name, path in render_sets(manifest):
+        for name, path in model_sets:
             before = len(seen)
             for number, case in read_cases(path):
                 if case["id"] in seen:

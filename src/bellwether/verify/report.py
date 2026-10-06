@@ -89,21 +89,23 @@ def judge(result: dict, known: dict[str, dict]) -> None:
 
 
 def known_without_case(
-    known: dict[str, dict], fixtures: Path, manifests: list[Manifest], listed: set[str]
+    known: dict[str, dict], fixtures: Path, manifests: list[Manifest], listed: set[str], every_set: bool = True
 ) -> tuple[list[str], list[str]]:
     """The listed ids that name no case, and those for cases this run does not verify.
 
     ``listed`` holds the listed ids among the run's cases. Any other id names no case when it is not a fixture id,
     when no manifest under ``fixtures`` has its slug (a misspelt slug, a model whose manifest is gone), or when it is
-    a render id of a verified model, which the corpus dropped or renamed. The rest, render ids of models not
-    verified in this run and ids of other kinds, are counted and listed but not judged.
+    a render id of a verified model, which the corpus dropped or renamed, in a run of every set. The rest, render ids
+    of models not verified in this run or of sets it did not select, and ids of other kinds, are counted and listed
+    but not judged.
     """
     slugs = {path.parent.name for path in fixtures.glob("*/manifest.toml")}
     verified = {manifest.slug for manifest in manifests}
     without, outside = [], []
     for case_id in sorted(set(known) - listed):
         found = FIXTURE_ID.fullmatch(case_id)
-        if found is None or found["slug"] not in slugs or (found["slug"] in verified and found["kind"] == "render"):
+        verified_render = found is not None and found["slug"] in verified and found["kind"] == "render"
+        if found is None or found["slug"] not in slugs or (verified_render and every_set):
             without.append(case_id)
         else:
             outside.append(case_id)

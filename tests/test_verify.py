@@ -177,7 +177,8 @@ CASES = {
     "tools": (
         {
             "messages": [{"role": "user", "content": "Weather?"}],
-            "tools": [{"type": "function", "function": {}}],
+            # Keys out of sorted order at every depth: a template renders them in the order it is given.
+            "tools": [{"type": "function", "function": {"name": "w", "parameters": {"zip": {}, "city": {}}}}],
             "max_completion_tokens": 5,
         },
         [10, 12, 13],
@@ -216,7 +217,8 @@ def test_each_render_case_goes_to_smg_and_its_capture_line_matches(tmp_path, gat
     for case_id, case in cases.items():
         assert sent[case_id]["path"] == "/v1/chat/completions"
         body, request = sent[case_id]["body"], case["request"]
-        assert list(body.items())[: len(request)] == list(request.items()), "the request as recorded, in its key order"
+        recorded = json.dumps(dict(list(body.items())[: len(request)]))
+        assert recorded == json.dumps(request), "the request as recorded, in its key order at every depth"
         added = {"model": "org/M1", "rid": case_id, "stream": False}
         if not {"max_tokens", "max_completion_tokens"} & set(request):
             added["max_tokens"] = 1  # the request's own limit, under either name, is left alone
@@ -662,6 +664,53 @@ def test_model_selects_the_manifests_to_verify(tmp_path, gateway):
     assert [manifest["model"] for manifest in json.loads(report.read_text())["provenance"]["manifests"]] == ["org/M2"]
 
 
+def test_set_selects_the_render_sets_to_verify(tmp_path, gateway, capsys):
+    fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
+    plain = write_model(fixtures, "m1", "org/M1", {"hello": CASES["hello"]})
+    bench = {"m1/render/bench-a": {**plain["m1/render/hello"], "id": "m1/render/bench-a", "request": BYE}}
+    write_fixture_file(fixtures / "m1" / "render" / "bench.jsonl.zst", bench)
+    gateway.serve({**plain, **bench})
+    # A case of a set the run does not select may still be there: its entry is counted, not judged.
+    write_known(known, {"m1/render/hello": {"verdict": "regression", "reason": "in the set not selected"}})
+
+    assert verify(gateway, fixtures, "--set", "bench", "--known", str(known), "--report", str(report)) == 0
+
+    assert [received["body"]["rid"] for received in gateway.received] == ["m1/render/bench-a"]
+    written = json.loads(report.read_text())
+    assert (written["known_without_case"], written["known_outside_run"]) == ([], ["m1/render/hello"])
+    assert "render: 1 cases (1 match" in capsys.readouterr().out
+
+
+def test_the_smg_url_is_shown_without_its_user_and_password(tmp_path, gateway, capsys):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    gateway.drops.add("m1/render/tools")
+    url = gateway.url.replace("http://", "http://ops:s3cret@")
+
+    assert (
+        main(
+            [
+                "verify",
+                "--smg",
+                url,
+                "--capture",
+                str(gateway.capture),
+                "--fixtures",
+                str(fixtures),
+                "--report",
+                str(report),
+            ]
+        )
+        == 2
+    )
+
+    written = report.read_text()
+    assert json.loads(written)["provenance"]["smg"] == gateway.url
+    captured = capsys.readouterr()
+    assert "s3cret" not in written + captured.out + captured.err
+    assert f"no answer from {gateway.url} for m1/render/tools" in captured.err
+
+
 def test_a_model_without_render_cases_is_named_in_the_report(tmp_path, gateway, capsys):
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
     gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
@@ -772,6 +821,7 @@ def closed_port() -> int:
         "capture not found",
         "capture is a directory",
         "set not fetched",
+        "no such set",
         "set not zstd",
         "set cut short",
         "set listed but not there",
@@ -829,6 +879,8 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 10\n"
         (fixtures / "m1" / "render" / "bench.jsonl.zst").write_text(pointer)
         message = "git lfs pull --include"
+    elif problem == "no such set":
+        extra, message = ["--set", "common", "--set", "nope"], "no render set nope for org/M1, org/M3"
     elif problem in ("set not zstd", "set cut short"):
         bench = fixtures / "m1" / "render" / "bench.jsonl.zst"
         write_fixture_file(bench, {"m1/render/bench-a": {**CASE_LINE, "id": "m1/render/bench-a"}})
