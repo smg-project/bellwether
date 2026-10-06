@@ -86,14 +86,14 @@ MEMBERS = {
 }
 
 
-def fake_wheel(tmp_path, license: str = "Apache 2.0"):
+def fake_wheel(tmp_path, license: str = "Apache 2.0", members: dict[str, list[dict]] = MEMBERS):
     """The members of the pinned wheel the shapes import reads, under a METADATA header naming ``license``."""
     path = tmp_path / "bfcl.whl"
     with zipfile.ZipFile(path, "w") as wheel:
         wheel.writestr(
             "bfcl_eval-2026.3.23.dist-info/METADATA", f"Metadata-Version: 2.1\nName: bfcl-eval\nLicense: {license}\n"
         )
-        for name, rows in MEMBERS.items():
+        for name, rows in members.items():
             wheel.writestr(name, jsonl(rows))
     return path
 
@@ -108,10 +108,12 @@ TEST_FILE = jsonl(
 )
 
 
-def build(tmp_path, monkeypatch, size: int | None = None) -> dict[tuple[str, str], list[dict]]:
+def build(
+    tmp_path, monkeypatch, size: int | None = None, members=MEMBERS, test_file: bytes = TEST_FILE, skipped=None
+) -> dict[tuple[str, str], list[dict]]:
     monkeypatch.setattr(shapes, "CATEGORIES", ("simple_python", "parallel"))
-    with zipfile.ZipFile(fake_wheel(tmp_path)) as wheel:
-        return shapes.build_sets(wheel, TEST_FILE, size=size)
+    with zipfile.ZipFile(fake_wheel(tmp_path, members=members)) as wheel:
+        return shapes.build_sets(wheel, test_file, size=size, skipped=skipped)
 
 
 TOOLS = [
@@ -205,6 +207,53 @@ def test_the_size_caps_every_set(tmp_path, monkeypatch):
     assert [len(lines) for lines in build(tmp_path, monkeypatch, size=2).values()] == [2, 2, 2, 2, 2, 2]
 
 
+NO_JUICE = "the ground truth calls Cafe.juice, which the row does not define"
+# Five simple_python rows, of which simple_python_1 has no parse case: its ground truth calls a function the row lacks.
+# Each row asks its own question, so no case repeats another.
+LEFT_OUT = {
+    f"{DATA}/BFCL_v4_simple_python.json": [bfcl_row(f"simple_python_{i}", f"Tea number {i}") for i in range(5)],
+    f"{DATA}/possible_answer/BFCL_v4_simple_python.json": [
+        bfcl_answer("simple_python_0", "tea"),
+        {"id": "simple_python_1", "ground_truth": [{"Cafe.juice": {"fruit": ["apple"]}}]},
+        *[bfcl_answer(f"simple_python_{i}", "tea") for i in (2, 3, 4)],
+    ],
+    f"{DATA}/BFCL_v4_parallel.json": [bfcl_row("parallel_0", "Tea")],
+    f"{DATA}/possible_answer/BFCL_v4_parallel.json": [bfcl_answer("parallel_0", "tea")],
+}
+NO_PARALLEL_ANSWERS = {name: rows for name, rows in MEMBERS.items() if "possible_answer/BFCL_v4_parallel" not in name}
+
+
+def test_a_bfcl_row_with_no_parse_case_and_the_cases_after_the_pairs_are_left_out_by_name(tmp_path, monkeypatch):
+    skipped: list[tuple[str, str]] = []
+    sets = build(tmp_path, monkeypatch, size=3, members=LEFT_OUT, skipped=skipped)
+    # simple_python_1 falls inside the range the pairs use: simple_python_0 and simple_python_2 are both used.
+    for lines in sets.values():
+        rows = [line["origin"]["parts"][0]["row"] for line in lines]
+        assert rows == ["simple_python_0", "parallel_0", "simple_python_2"]
+    assert skipped == [
+        ("BFCL simple_python_1", NO_JUICE),
+        ("2 BFCL simple_python parse cases, simple_python_3 to simple_python_4", "after the first 3 pairs"),
+    ]
+
+
+def test_the_gsm8k_rows_after_the_pairs_are_left_out_as_one_run(tmp_path, monkeypatch):
+    more = [
+        {"question": f"Q{row}?", "answer": f"Add 0.\nSo {row} + 0 = <<{row}+0={row}>>{row}\n#### {row}"}
+        for row in (2, 3)
+    ]
+    skipped: list[tuple[str, str]] = []
+    build(tmp_path, monkeypatch, size=2, test_file=TEST_FILE + jsonl(more), skipped=skipped)
+    assert skipped == [
+        ("BFCL simple_python_1", "after the first 2 pairs"),
+        ("2 GSM8K test rows, 2 to 3", "after the first 2 pairs"),
+    ]
+
+
+def test_a_category_without_parse_cases_stops_the_import(tmp_path, monkeypatch):
+    with pytest.raises(ValueError, match="no parse case in BFCL parallel"):
+        build(tmp_path, monkeypatch, members=NO_PARALLEL_ANSWERS)
+
+
 SET_FILES = [
     "shapes-content-calls.jsonl",
     "shapes-content.jsonl",
@@ -260,12 +309,14 @@ MIT = b"MIT License\n\nCopyright (c) 2021 OpenAI\n"
 TEST = "grade_school_math/data/test.jsonl"
 
 
-def serve(tmp_path, monkeypatch, wheel_license: str = "Apache 2.0", gsm8k_license: bytes = MIT) -> None:
+def serve(
+    tmp_path, monkeypatch, wheel_license: str = "Apache 2.0", gsm8k_license: bytes = MIT, members=MEMBERS
+) -> None:
     """Stand in for both fetchers, so the pinned files come from ``tmp_path`` and never the network.
 
     The import then reads the two categories the fake wheel holds.
     """
-    wheel = fake_wheel(tmp_path, wheel_license)
+    wheel = fake_wheel(tmp_path, wheel_license, members)
     mit_sha256 = hashlib.sha256(MIT).hexdigest()
 
     def fetch_wheel(project, version, filename, sha256, cache):
@@ -327,5 +378,22 @@ def test_the_command_refuses_a_source_under_another_license_and_writes_nothing(
 ):
     serve(tmp_path, monkeypatch, wheel_license, gsm8k_license)
     with pytest.raises(ValueError, match=refusal):
+        main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)])
+    assert not (tmp_path / "corpus").exists()
+
+
+def test_the_command_names_every_row_it_leaves_out_with_its_reason(tmp_path, monkeypatch, capsys):
+    serve(tmp_path, monkeypatch, members=LEFT_OUT)
+    monkeypatch.setattr(shapes, "SIZE", 3)
+    assert main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)]) == 0
+    assert capsys.readouterr().out.splitlines()[-2:] == [
+        f"no case for BFCL simple_python_1: {NO_JUICE}",
+        "no case for 2 BFCL simple_python parse cases, simple_python_3 to simple_python_4: after the first 3 pairs",
+    ]
+
+
+def test_the_command_stops_on_a_category_without_parse_cases_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, members=NO_PARALLEL_ANSWERS)
+    with pytest.raises(ValueError, match="no parse case in BFCL parallel"):
         main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)])
     assert not (tmp_path / "corpus").exists()

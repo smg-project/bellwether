@@ -94,19 +94,32 @@ def set_name(shape: str) -> str:
     return f"{DATASET}-{shape}"
 
 
-def build_sets(wheel: zipfile.ZipFile, test_file: bytes, size: int | None = None) -> dict[tuple[str, str], list[dict]]:
+def build_sets(
+    wheel: zipfile.ZipFile, test_file: bytes, size: int | None = None, skipped: list[tuple[str, str]] | None = None
+) -> dict[tuple[str, str], list[dict]]:
     """One parse set per message shape, from the BFCL wheel and GSM8K's test file through their importers' builders.
 
-    The calls are BFCL's parse cases of ``CATEGORIES``, interleaved; the texts are GSM8K's reasoning-content parse cases
-    of
-    ``SPLIT``. Each pair gives the i-th case of every set: the request and calls of the call, the reasoning and content
-    of the text.
+    The calls are BFCL's parse cases of ``CATEGORIES``, interleaved; a category without any stops the import. The texts
+    are GSM8K's reasoning-content parse cases of ``SPLIT``. Each pair gives the i-th case of every set: the request and
+    calls of the call, the reasoning and content of the text.
+
+    Every row the import reads and does not use is appended to ``skipped`` as ``(what, why)``: by name, each BFCL row
+    without a parse case and each GSM8K row without a case, with their importers' reasons; then the parse cases of each
+    BFCL category and the GSM8K rows that come after the pairs, each as one run in file order (``after_pairs``).
     """
-    found = bfcl.build_sets(wheel, categories=CATEGORIES)
-    calls = interleave([found.get(("parse", bfcl.set_name(category)), []) for category in CATEGORIES])
-    texts = gsm8k.build_sets({SPLIT: test_file})[("parse", gsm8k.set_name(SPLIT, "reasoning-content"))]
+    bfcl_skipped: list[tuple[str, str]] = []
+    found = bfcl.build_sets(wheel, categories=CATEGORIES, skipped=bfcl_skipped)
+    missing = [category for category in CATEGORIES if ("parse", bfcl.set_name(category)) not in found]
+    if missing:
+        raise ValueError(f"no parse case in BFCL {', '.join(missing)}: the shapes take calls from every category")
+    cases = {category: found[("parse", bfcl.set_name(category))] for category in CATEGORIES}
+    calls = interleave(list(cases.values()))
+    owners = interleave([[category] * len(lines) for category, lines in cases.items()])  # each call's category
+    gsm8k_skipped: list[tuple[str, str]] = []
+    texts = gsm8k.build_sets({SPLIT: test_file}, gsm8k_skipped)[("parse", gsm8k.set_name(SPLIT, "reasoning-content"))]
+    pairs = pair(calls, texts, SIZE if size is None else size)
     sets: dict[tuple[str, str], list[dict]] = {("parse", set_name(shape)): [] for shape in SHAPES}
-    for index, (bfcl_line, gsm8k_line) in enumerate(pair(calls, texts, SIZE if size is None else size)):
+    for index, (bfcl_line, gsm8k_line) in enumerate(pairs):
         reasoning = gsm8k_line["message"]["reasoning_content"]
         content = CONTENT.format(gsm8k_line["message"]["content"])
         origin = {"dataset": DATASET, "parts": [bfcl_line["origin"], gsm8k_line["origin"]]}
@@ -116,7 +129,35 @@ def build_sets(wheel: zipfile.ZipFile, test_file: bytes, size: int | None = None
             notes = f"shape {shape}: {bfcl_line['notes']}, {gsm8k_line['notes']}"
             line = {"name": f"{name}-{index}", "request": bfcl_line["request"], "message": message, "notes": notes}
             sets[("parse", name)].append({**line, "origin": origin})
+    if skipped is not None:
+        skipped.extend((f"BFCL {row}", why) for row, why in bfcl_skipped)
+        skipped.extend((f"GSM8K {row}", why) for row, why in gsm8k_skipped)
+        count = len(pairs)
+        skipped.extend(after_pairs(calls[count:], owners[count:], texts[count:], count))
     return sets
+
+
+def after_pairs(calls: list[dict], owners: list[str], texts: list[dict], count: int) -> list[tuple[str, str]]:
+    """The cases left after the ``count`` pairs, as ``(what, why)``: one run per BFCL category, then GSM8K's rows.
+
+    ``owners`` names each call's category. A category's calls after the pairs are its last parse cases, in file order,
+    and so are the GSM8K rows, so each run is named by how many it holds and its first and last row.
+    """
+    why = f"after the first {count} pairs"
+    runs = []
+    for category in CATEGORIES:
+        rows = [line["origin"]["row"] for line, owner in zip(calls, owners, strict=True) if owner == category]
+        if rows:
+            runs.append((run_of(rows, "BFCL", f"BFCL {category} parse cases"), why))
+    rows = [line["origin"]["row"] for line in texts]
+    if rows:
+        runs.append((run_of(rows, f"GSM8K {SPLIT} row", f"GSM8K {SPLIT} rows"), why))
+    return runs
+
+
+def run_of(rows: list, one: str, many: str) -> str:
+    """A single row by name, or a run of rows by how many it holds and its first and last."""
+    return f"{one} {rows[0]}" if len(rows) == 1 else f"{len(rows)} {many}, {rows[0]} to {rows[-1]}"
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
@@ -129,6 +170,12 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
     return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "message shape")
 
 
+def report_skipped(skipped: list[tuple[str, str]]) -> None:
+    """Print every row and run of rows the import left out with its reason, each on its own line, none summed away."""
+    for what, why in skipped:
+        print(f"no case for {what}: {why}")
+
+
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
@@ -136,7 +183,8 @@ def run(args: argparse.Namespace) -> int:
     test_file = gsm8k.fetch(gsm8k.data_file(SPLIT), gsm8k.SHA256[SPLIT], args.cache)
     with zipfile.ZipFile(pypi.fetch(bfcl.PROJECT, bfcl.VERSION, bfcl.WHEEL, bfcl.SHA256, cache=args.cache)) as wheel:
         bfcl.check_license(wheel)
-        sets = build_sets(wheel, test_file)
+        skipped: list[tuple[str, str]] = []
+        sets = build_sets(wheel, test_file, skipped=skipped)
     if args.check:
         problems = check_sets(sets, args.corpus)
         for problem in problems:
@@ -146,5 +194,6 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
         print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    report_skipped(skipped)
     write_sets(sets, args.corpus)
     return 0

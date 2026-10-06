@@ -112,7 +112,11 @@ eight Python categories with calls (`simple_python`, `multiple`, `parallel`, `pa
 ones) are interleaved, one from each category in turn, and the i-th is paired with the i-th GSM8K test row, the shorter
 list cycled, for at most 1000 pairs (`SIZE` in `src/bellwether/importers/shapes.py`). At the pins that is 160 cases from
 each of the six larger categories, the 16 of `live_parallel` and the 24 of `live_parallel_multiple`, with test rows 0
-to 999, so neither list cycles. Pair i is case i of every set (`shapes-content-calls-7`):
+to 999, so neither list cycles. A category with no parse case stops the import. The import prints every row it reads
+and does not use, with its reason: the five BFCL rows of these categories that have no parse case, by name (two of
+them, `live_simple_106-63-0` and `live_simple_112-68-0`, fall inside the range the pairs use), then the parse cases of
+each category and the GSM8K rows that come after the 1000 pairs, one run each (1346 parse cases, and test rows 1000 to
+1318). Pair i is case i of every set (`shapes-content-calls-7`):
 
 - the request and the calls are the BFCL case's; the shapes without calls keep the request and its tools, since a
   model may answer without calling;
