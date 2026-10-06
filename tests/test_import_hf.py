@@ -3,7 +3,7 @@ import hashlib
 import huggingface_hub
 import pytest
 
-from bellwether.importers import corpus_sets, hf
+from bellwether.importers import hf
 
 REVISION = "a" * 40
 
@@ -62,18 +62,3 @@ def test_check_card_license_with_none_reviewed_refuses_a_card_that_states_one():
     hf.check_card_license("org/data", "---\npretty_name: a\n---\n", None)
     with pytest.raises(ValueError, match=r"the card's license is 'apache-2.0', not the reviewed None"):
         hf.check_card_license("org/data", CARD, None)
-
-
-def test_write_refuses_a_source_past_the_limit_and_writes_nothing(tmp_path, monkeypatch):
-    sets = {("render", "x-a"): [{"name": "x-a-0"}], ("parse", "x-a"): [{"name": "x-a-0"}]}
-    size = len(corpus_sets.text(sets["render", "x-a"]).encode()) * 2
-    monkeypatch.setattr(corpus_sets, "LIMIT", size - 1)
-    with pytest.raises(ValueError, match=f"the x-\\* sets take {size} bytes, past the {size - 1}"):
-        corpus_sets.write(sets, tmp_path, "x-")
-    assert not any(tmp_path.rglob("*.jsonl"))
-    monkeypatch.setattr(corpus_sets, "LIMIT", size)
-    assert len(corpus_sets.write(sets, tmp_path, "x-")) == 2
-
-
-def test_the_limit_is_fifty_megabytes():
-    assert corpus_sets.LIMIT == 50_000_000

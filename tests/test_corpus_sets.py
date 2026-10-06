@@ -1,3 +1,5 @@
+import pytest
+
 from bellwether.importers import corpus_sets
 
 
@@ -144,3 +146,25 @@ def test_each_reason_is_printed_once_naming_every_row_it_left_out_and_what_the_r
         "no case for 1 row(s) (row 2): no final answer",
         "no parse case for 1 row(s) (simple_java_1): not strings",
     ]
+
+
+def test_write_refuses_a_source_past_the_limit_and_writes_nothing(tmp_path, monkeypatch):
+    sets = {("render", "x-a"): [{"name": "x-a-0"}], ("parse", "x-a"): [{"name": "x-a-0"}]}
+    size = len(corpus_sets.text(sets["render", "x-a"]).encode()) * 2
+    monkeypatch.setattr(corpus_sets, "LIMIT", size - 1)
+    with pytest.raises(ValueError, match=f"the x-\\* sets take {size} bytes, past the {size - 1}"):
+        corpus_sets.write(sets, tmp_path, "x-")
+    assert not any(tmp_path.rglob("*.jsonl"))
+    monkeypatch.setattr(corpus_sets, "LIMIT", size)
+    assert len(corpus_sets.write(sets, tmp_path, "x-")) == 2
+
+
+def test_the_limit_is_fifty_megabytes():
+    assert corpus_sets.LIMIT == 50_000_000
+
+
+def test_an_imports_other_files_do_not_count_toward_the_limit(tmp_path, monkeypatch):
+    sets = {("render", "x-a"): [render("x-a-0", ask("Hi"))]}
+    monkeypatch.setattr(corpus_sets, "LIMIT", len(corpus_sets.text(sets["render", "x-a"]).encode()))
+    written = corpus_sets.write(sets, tmp_path, "x-", files={"licenses/x-LICENSE": b"MIT License\n"})
+    assert written == [tmp_path / "render" / "x-a.jsonl", tmp_path / "licenses" / "x-LICENSE"]
