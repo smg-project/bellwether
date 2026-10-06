@@ -24,6 +24,14 @@ def is_compressed(path: Path) -> bool:
     return path.name.endswith(COMPRESSED_SUFFIX)
 
 
+def stem(path: Path) -> str | None:
+    """The set's name: the file's name without ``.jsonl`` or ``.jsonl.zst``; None for a file that is not a set."""
+    for suffix in (COMPRESSED_SUFFIX, ".jsonl"):
+        if path.name.endswith(suffix):
+            return path.name.removesuffix(suffix)
+    return None
+
+
 LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
 
 

@@ -1,5 +1,6 @@
 import json
 
+from bellwether import storage
 from bellwether.cli import main
 from bellwether.count import counts
 
@@ -44,3 +45,14 @@ def test_count_groups_fixture_cases_by_model_kind_and_source(tmp_path, capsys):
         "| org/M1 | render | hand-written | 2 |",
         "| all | | | 4 |",
     ]
+
+
+def test_count_finds_the_source_of_a_compressed_corpus_set(tmp_path):
+    fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
+    (fixtures / "m1").mkdir(parents=True)
+    (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+    table = 'form = "zstd"\ncases = 2\nrejected = 0\nplain_bytes = 1\nplain_sha256 = "x"\n'
+    (fixtures / "m1" / "sets.toml").write_text("[render.big-x]\n" + table)
+    lines = [{"name": f"big-x-{n}", "request": {"messages": []}, "origin": {"dataset": "big"}} for n in range(2)]
+    storage.write(corpus / "render" / "big-x.jsonl.zst", "".join(json.dumps(line) + "\n" for line in lines).encode())
+    assert counts(fixtures, corpus) == [{"model": "org/M1", "kind": "render", "source": "big", "cases": 2}]

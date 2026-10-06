@@ -12,7 +12,7 @@ import sys
 
 from bellwether import __version__
 from bellwether.manifest import find_manifest
-from bellwether.storage import COMPRESSED_SUFFIX, plain_text
+from bellwether.storage import COMPRESSED_SUFFIX, plain_text, stem
 
 from . import sets as set_tables
 from .chunks import chunk_plans
@@ -110,8 +110,8 @@ def run(args: argparse.Namespace) -> int:
     # The fixture directory mirrors the corpus: a set file the corpus no longer has goes too.
     if kind_dir.is_dir() and not wanted:
         for stale in sorted(p for p in kind_dir.iterdir() if p.is_file()):
-            name = stale.name.removesuffix(COMPRESSED_SUFFIX).removesuffix(".jsonl")
-            if name != stale.name and name not in in_corpus:
+            name = stem(stale)
+            if name is not None and name not in in_corpus:
                 stale.unlink()
                 tables.pop((args.kind, name), None)
                 print(f"{stale}: removed, the corpus has no set of that name")

@@ -10,6 +10,7 @@ import pytest
 import zstandard
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
+from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
@@ -179,6 +180,34 @@ def test_corpus_reads_a_case_whose_text_holds_unicode_line_breaks_intact(tmp_pat
     path.write_text(json.dumps(case, ensure_ascii=False) + "\n", encoding="utf-8")
     [read] = read_cases(path)
     assert read.request == {"messages": [user(BREAKS)]} and read.message == {"content": BREAKS}
+
+
+def write_compressed(path: pathlib.Path, lines: list[dict]) -> None:
+    """A corpus set in the compressed form an import past corpus_sets.LIMIT writes."""
+    storage.write(path, "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines).encode("utf-8"))
+
+
+def test_corpus_reads_a_compressed_set_under_the_sets_name_with_its_lines_intact(tmp_path):
+    imported = {"name": "x-0", "request": {"messages": [user(BREAKS)]}, "origin": {"dataset": "x"}}
+    write_compressed(tmp_path / "render" / "x-a.jsonl.zst", [imported])
+    write_jsonl(tmp_path / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
+    sets = load_corpus(tmp_path, "render", "tiny-chat")
+    assert {name: [case.name for case in cases] for name, cases in sets.items()} == {"common": ["a"], "x-a": ["x-0"]}
+    assert sets["x-a"][0].request == {"messages": [user(BREAKS)]} and sets["x-a"][0].origin == {"dataset": "x"}
+
+
+def test_corpus_refuses_a_set_stored_in_both_forms(tmp_path):
+    write_jsonl(tmp_path / "render" / "x-a.jsonl", [{"name": "a", "request": {"messages": []}}])
+    write_compressed(tmp_path / "render" / "x-a.jsonl.zst", [{"name": "b", "request": {"messages": []}}])
+    with pytest.raises(ValueError, match="x-a.jsonl.zst: set x-a is stored in both forms, beside .*x-a.jsonl$"):
+        load_corpus(tmp_path, "render", "tiny-chat")
+
+
+def test_corpus_names_a_set_git_lfs_has_not_fetched_with_the_command_that_fetches_it(tmp_path):
+    (tmp_path / "render").mkdir()
+    (tmp_path / "render" / "x-a.jsonl.zst").write_text(LFS_POINTER)
+    with pytest.raises(ValueError, match="x-a.jsonl.zst is a Git LFS pointer; fetch it first: git lfs pull"):
+        load_corpus(tmp_path, "render", "tiny-chat")
 
 
 def test_reference_oracle_renders_the_checkpoint_template_and_its_ids(tiny_model):
