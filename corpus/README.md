@@ -340,7 +340,9 @@ prose and tool calls in the assistant turns, code and shell commands in the argu
 
 - **The request** is an OpenAI chat request: the trajectory's messages before the turn, unchanged, and `tools.json`
   (checked to be OpenAI's tool shape) as `tools`. The data's tool messages carry no id, so the k-th tool message after
-  an assistant turn takes the id of that turn's k-th call. A row whose results and calls do not pair is left out and
+  an assistant turn takes the id of that turn's k-th call. That `tool_call_id` is the only text bellwether writes into
+  a SWE-Hero case (the calls' own ids are the data's), so a case whose request holds a tool message has
+  `"written": ["tool result ids"]` in its `origin`. A row whose results and calls do not pair is left out and
   named; only the last turn may go unanswered, since every trajectory ends with a `finish` call. Messages take
   OpenAI's key order (`role`, `content`, `tool_calls`; `role`, `tool_call_id`, `content`), not the shard's
   alphabetical struct order, and `tool_calls` only where a turn makes calls (parquet fills it with null elsewhere).
@@ -348,7 +350,8 @@ prose and tool calls in the assistant turns, code and shell commands in the argu
   it (a row with one that is not a JSON object string is left out and named), with no call id, since a parser makes
   its own. The render case is the same request.
 - **Origin.** Each line's `origin` names the shard and `tools.json`, each with its sha256, the row and the turn,
-  the instance and trajectory ids, and the repository with its license. That license is the dataset's label, not
+  the instance and trajectory ids, the repository with its license, and `written` where the request holds a tool
+  message (178 of the 266 render and 178 of the 267 parse cases). That license is the dataset's label, not
   checked against the repository: in 2 of the 89 sampled rows the repository's own README, as the requests quote
   it, names another (`borgbackup/borg`, labelled BSD-2-Clause, says BSD 3-clause; `getsentry/sentry-python`,
   labelled MIT, says BSD).

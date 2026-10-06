@@ -272,6 +272,7 @@ def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
         "repository": "owner/repo",
         "repository_license": "MIT",
         "license": "CC-BY-4.0",
+        "written": ["tool result ids"],
     }
     request = {"messages": swehero.messages_for(TRAJECTORY)[:4], "tools": TOOLS}
     notes = "SWE-Hero owner__repo-0: the assistant turn at message 4 of 8 (execute_bash, execute_bash)"
@@ -298,6 +299,18 @@ def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
             {"type": "function", "function": {"name": "finish", "arguments": '{"message": "Fixed \\u2615."}'}}
         ],
     }
+
+
+def test_origin_marks_the_tool_result_ids_bellwether_writes_where_a_request_holds_a_tool_message():
+    # The data's tool messages carry no id: each one's tool_call_id is bellwether's, the id of the call it answers by
+    # position. The calls' own ids are the data's. A request with no tool message holds nothing bellwether wrote.
+    sets = swehero.build_sets([row()], TOOLS)
+    for kind in (RENDER, PARSE):
+        first, middle, last = sets[kind]
+        assert [message["role"] for message in first["request"]["messages"]] == ["system", "user"]
+        assert "written" not in first["origin"]
+        assert middle["origin"]["written"] == last["origin"]["written"] == ["tool result ids"]
+        assert list(middle["origin"])[-1] == "written"
 
 
 def test_a_turn_without_calls_is_a_parse_case_with_content_only():

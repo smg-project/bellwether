@@ -7,11 +7,11 @@ repository's license (the row's ``license``, an SPDX id) is one the card names: 
 BSD-3-Clause. Qwen3-Coder-480B-A35B-Instruct wrote the assistant turns, running in OpenHands.
 
 A request is an OpenAI chat request: the trajectory's messages before a turn, unchanged, each tool message given the
-id of the call it answers, and ``tools.json`` as the tools. A turn's parse case is its content and its calls, the
-arguments the JSON strings the data holds. A case for every turn, each with its whole history, would grow with the
-square of a trajectory's length, so the import samples: one row in ``STRIDE``, and in each the first, middle and last
-of the assistant turns whose request fits in ``MAX_REQUEST_BYTES``. No message is ever cut to fit: a later turn gives
-way to an earlier one.
+id of the call it answers, which bellwether writes and ``origin`` marks (``WRITTEN``), and ``tools.json`` as the
+tools. A turn's parse case is its content and its calls, the arguments the JSON strings the data holds. A case for
+every turn, each with its whole history, would grow with the square of a trajectory's length, so the import samples:
+one row in ``STRIDE``, and in each the first, middle and last of the assistant turns whose request fits in
+``MAX_REQUEST_BYTES``. No message is ever cut to fit: a later turn gives way to an earlier one.
 """
 
 from __future__ import annotations
@@ -53,6 +53,11 @@ UNPAIRED = "its tool results do not pair with the calls before them"
 NOT_AN_OBJECT = "a call's arguments are not a JSON object string"
 CALLS_OUTSIDE_A_TURN = "a message other than an assistant turn carries calls"
 NO_TURN = "no assistant turn's request fits under the cap"
+
+# The text bellwether writes into a SWE-Hero case that the dataset does not have, as ``origin.written`` names it: the
+# ``tool_call_id`` of each tool message in a request, the id of the call it answers by position (``messages_for``).
+# The calls' own ids are the data's.
+WRITTEN = "tool result ids"
 
 
 class Unusable(ValueError):
@@ -196,10 +201,14 @@ def no_turn(messages: list[dict], tools: list[dict]) -> str:
     return f"the first assistant turn's request has {request_bytes(request_for(messages, first, tools))} bytes"
 
 
-def origin(number: int, row: dict, turn: int) -> dict:
+def origin(number: int, row: dict, turn: int, request: dict) -> dict:
     """Where a case came from: the shard, its row and the turn in it, ``tools.json`` (the request's tools), and both
-    licenses that bind the text, the repository's as the dataset labels it."""
-    return {
+    licenses that bind the text, the repository's as the dataset labels it.
+
+    ``written`` lists the text bellwether wrote into the case rather than took from the row: ``WRITTEN`` when the
+    request holds a tool message, whose ``tool_call_id`` the dataset does not have.
+    """
+    found = {
         "dataset": "swehero",
         "source": SOURCE,
         "sha256": FILES[SHARD_FILE],
@@ -214,6 +223,9 @@ def origin(number: int, row: dict, turn: int) -> dict:
         "repository_license": row["license"],
         "license": LICENSE,
     }
+    if any(message["role"] == "tool" for message in request["messages"]):
+        found["written"] = [WRITTEN]
+    return found
 
 
 def case_lines(number: int, row: dict, messages: list[dict], turn: int, tools: list[dict]) -> tuple[dict, dict]:
@@ -232,7 +244,7 @@ def case_lines(number: int, row: dict, messages: list[dict], turn: int, tools: l
     name = f"{SET}-{number}-{turn}"
     request = request_for(messages, turn, tools)
     notes = f"SWE-Hero {row['instance_id']}: the assistant turn at message {turn} of {len(messages)} ({calls})"
-    found = origin(number, row, turn)
+    found = origin(number, row, turn, request)
     render = {"name": name, "request": request, "notes": notes, "origin": found}
     return render, {"name": name, "request": request, "message": message, "notes": notes, "origin": found}
 
