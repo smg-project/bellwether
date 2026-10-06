@@ -189,15 +189,44 @@ def test_a_card_that_opens_a_front_matter_huggingface_hub_does_not_find_is_refus
         hf.card_license("---\rlicense: gpl-3.0\r---\r# A dataset\r")
 
 
-def test_check_card_license_passes_the_reviewed_license_and_refuses_any_other():
-    hf.check_card_license("org/data", CARD, "apache-2.0")
-    with pytest.raises(
-        ValueError, match=r"org/data README.md: the card's license is 'apache-2.0', not the reviewed 'mit'"
-    ):
-        hf.check_card_license("org/data", CARD, "mit")
+def check(hub, tmp_path, card: bytes, reviewed: str | None, card_sha256: str | None = None) -> None:
+    """check_card_license on ``card`` served by the stub Hub as the dataset's README.md, pinned by its sha256."""
+    hub.files["README.md"] = card
+    hf.check_card_license(REPO, REVISION, card_sha256 or sha(card), reviewed, cache=tmp_path / "cache")
 
 
-def test_check_card_license_with_none_reviewed_refuses_a_card_that_states_one():
-    hf.check_card_license("org/data", "---\npretty_name: a\n---\n", None)
+def test_check_card_license_fetches_the_pinned_card_and_passes_the_reviewed_license(tmp_path, hub):
+    check(hub, tmp_path, CARD.encode(), "apache-2.0")
+    assert hub.downloads("README.md") == 1
+
+
+def test_check_card_license_refuses_any_other_license_naming_the_card_at_its_commit(tmp_path, hub):
+    refusal = f"hf:datasets/{REPO}@{REVISION} README.md: the card's license is 'apache-2.0', not the reviewed 'mit'"
+    with pytest.raises(ValueError, match=re.escape(f"{refusal}; review it before importing")):
+        check(hub, tmp_path, CARD.encode(), "mit")
+
+
+def test_with_none_reviewed_a_card_that_states_none_passes_and_one_that_states_one_is_refused(tmp_path, hub):
+    check(hub, tmp_path, b"---\npretty_name: a\n---\n", None)
     with pytest.raises(ValueError, match=r"the card's license is 'apache-2.0', not the reviewed None"):
-        hf.check_card_license("org/data", CARD, None)
+        check(hub, tmp_path / "other", CARD.encode(), None)
+
+
+@pytest.mark.parametrize("stated, reviewed", [("MIT", "mit"), ("mit-0", "mit"), ("apache-2.0", "apache")])
+def test_the_license_is_compared_exactly_not_by_case_or_by_containment(tmp_path, hub, stated, reviewed):
+    with pytest.raises(ValueError, match=f"the card's license is '{stated}', not the reviewed '{reviewed}'"):
+        check(hub, tmp_path, f"---\nlicense: {stated}\n---\n".encode(), reviewed)
+
+
+def test_a_card_whose_bytes_open_with_a_byte_order_mark_is_read_as_yaml_reads_it(tmp_path, hub):
+    with pytest.raises(ValueError, match="the card's license is 'gpl-3.0', not the reviewed None"):
+        check(hub, tmp_path, b"\xef\xbb\xbf---\nlicense: gpl-3.0\n---\n", None)
+
+
+def test_a_card_that_is_not_the_pinned_one_is_refused_before_its_license_is_read(tmp_path, hub):
+    with pytest.raises(ValueError, match="is not the pinned"):
+        check(hub, tmp_path, CARD.encode(), "apache-2.0", card_sha256=sha(b"the reviewed card"))
+
+
+def test_source_names_the_dataset_at_its_commit_as_the_other_sources_do():
+    assert hf.source(REPO, REVISION) == f"hf:datasets/{REPO}@{REVISION}"

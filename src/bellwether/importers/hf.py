@@ -10,8 +10,9 @@ huggingface_hub 1.33 keeps the bytes of a file stored with Xet once for the whol
 links to them. A CI cache of that folder alone keeps the links and loses the bytes, so CI caches ``--cache`` whole, in
 the one step that also keeps the PyPI and GitHub files.
 
-A dataset card (``README.md``) states its license in the YAML front matter; an importer pins the card by sha256 and
-checks that the license is still the one it was reviewed for.
+A dataset card (``README.md``) states its license in the YAML front matter. ``check_card_license`` fetches the card an
+importer pins by sha256 and refuses it unless the license is still the one the importer was reviewed for, and
+``source`` spells a dataset at a commit for a corpus line's ``origin``, so every importer writes both the same way.
 """
 
 from __future__ import annotations
@@ -21,6 +22,16 @@ from pathlib import Path
 from . import pinned
 
 CARD = "README.md"
+
+
+def source(repo: str, revision: str) -> str:
+    """A dataset at a commit as a corpus line's ``origin.source`` names it: ``hf:datasets/<repo>@<revision>``.
+
+    It reads as the other sources do, ``pypi:<project>==<version>`` and ``github:<owner>/<repo>@<commit>``: where the
+    files come from, then the pin. ``datasets/`` stays because a Hub id alone does not say what it names: a model and
+    a dataset can share one.
+    """
+    return f"hf:datasets/{repo}@{revision}"
 
 
 def fetch(repo: str, revision: str, filename: str, sha256: str, cache: Path = pinned.CACHE) -> Path:
@@ -75,10 +86,19 @@ def card_license(card: str) -> object:
     return read.data.license
 
 
-def check_card_license(repo: str, card: str, reviewed: str | None) -> None:
-    """Refuse a card whose license is not the one the importer was reviewed for (None: a card that states none)."""
+def check_card_license(
+    repo: str, revision: str, card_sha256: str, reviewed: str | None, cache: Path = pinned.CACHE
+) -> None:
+    """Fetch the dataset's card at ``revision``, pinned by ``card_sha256``, and refuse it unless its license is the one
+    the importer was reviewed for (None: a card that states none).
+
+    The license is compared as it is written: case and every character count. A byte order mark before the front
+    matter is dropped, as YAML allows one.
+    """
+    card = fetch(repo, revision, CARD, card_sha256, cache).read_bytes().decode("utf-8-sig")
     found = card_license(card)
     if found != reviewed:
         raise ValueError(
-            f"{repo} {CARD}: the card's license is {found!r}, not the reviewed {reviewed!r}; review it before importing"
+            f"{source(repo, revision)} {CARD}: the card's license is {found!r}, not the reviewed {reviewed!r}; "
+            "review it before importing"
         )
