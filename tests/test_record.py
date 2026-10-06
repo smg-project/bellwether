@@ -494,6 +494,43 @@ def test_a_template_that_renders_only_the_last_call_fails_even_when_the_names_st
         )
 
 
+def test_a_template_that_renders_the_names_without_the_arguments_fails_the_case(tiny_model, tmp_path_factory):
+    # The rename changes the rendered turn, so only the marker argument finds that the arguments never reach it.
+    call = "{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "names-only-chat", assistant_template(call))
+    with pytest.raises(ValueError, match="does not render every tool call"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_template_that_renders_the_arguments_without_the_names_fails_the_case(tiny_model, tmp_path_factory):
+    # The marker argument changes the rendered turn, so only the rename finds that the name never reaches it.
+    call = "{{ '<tool_call>' + c['function']['arguments'] | tojson + '</tool_call>' }}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "arguments-only-chat", assistant_template(call))
+    with pytest.raises(ValueError, match="does not render every tool call"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_template_that_raises_on_an_unknown_tool_name_still_records_the_case(tiny_model, tmp_path_factory):
+    # Some templates look the call's tool up in `tools` and raise when there is none. Failing on the renamed call
+    # shows the template read the name; the marker argument still changes the rendered turn, so the case is recorded.
+    call = (
+        "{%- if c['function']['name'] not in tools | map(attribute='function.name') | list %}"
+        "{{ raise_exception('no tool named ' + c['function']['name']) }}{%- endif %}"
+        "{{ '<tool_call>' + c['function']['name'] }}"
+        "{%- for k, v in c['function']['arguments'].items() %}{{ ' ' + k + '=' + v | string }}{%- endfor %}"
+        "{{ '</tool_call>' }}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "tool-lookup-chat", assistant_template(call))
+    out = RoundtripOracle(str(model), "local").render_output(
+        {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
+
+
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
