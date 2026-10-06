@@ -30,8 +30,9 @@ for now; embedding, reranking and classification models are out.
     NVFP4, MXFP4, MXFP8, Int4, Int8, bitsandbytes) carry their source's files. Checkpoints created
     before 2025 are left out unless a registry names them.
 
-  The command pins the registry refs and the date it read the Hub, so a rerun with the same pins
-  gives the same list. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
+  The command pins the registry refs, but the Hub only shows its present state, so what is
+  reproducible is the committed list with each row's revision; a rerun shows what changed as a diff
+  of that list. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
   Qwen organization: about 45 checkpoints today.
 - **Every checkpoint is a row.** Each row gives the model, its pinned revision, checkpoint group,
   tier, and a status. The status says what was recorded, what was rejected and why, or why nothing
@@ -106,9 +107,10 @@ The single-turn categories give 3641 render cases and 2501 parse cases per check
 
 ## Recording
 
-`record` stays the recorder. A probe over 45 current checkpoints (gpt-oss set aside) found two
-things the round-trip oracle has to learn, both declared per model in the manifest. Each lands as
-its own change, and each shows that the existing fixtures come out byte-identical.
+`record` stays the recorder. The probe covered 63 current checkpoints (gpt-oss set aside); 45 of
+them load and record BFCL's render cases, and the parse and storage figures here are for those 45.
+It found two things the round-trip oracle has to learn, both declared per model in the manifest.
+Each lands as its own change, and each shows that the existing fixtures come out byte-identical.
 
 - **How the template takes tool-call arguments.**
   - Most current templates iterate the arguments as an object: Qwen3.5 to 3.8, GLM, MiniMax, Step,
@@ -130,6 +132,8 @@ its own change, and each shows that the existing fixtures come out byte-identica
     target, and in which canonical form, is #24; the form is Simo's call at S2.
   - Each parse line records, per call, whether the arguments string occurs verbatim in the output
     (`arguments_verbatim`). That adds a field to the case schema, so it waits for Simo's approval.
+    When it is false for a template that writes JSON, the reference still holds the canonical
+    string, and each such template is reported as its own kind.
   - When engine witnesses land for a tagged format, each engine's argument string is kept per case.
 - **Where the assistant turn ends.** The oracle cuts the output at the tokenizer's end-of-sequence
   token, but many templates close a turn with their own marker:
@@ -175,7 +179,7 @@ length, so they add no information that could go stale, and compressed they cost
 All-model figures, from the 45-model probe (BFCL single-turn alone):
 
 - **Plain JSON Lines:** about 52 MB per checkpoint group (32 MB render, 20 MB parse); 2.3 GB for
-  the 45, and about 13 GB for 250 groups.
+  the 45, and a projected 13 GB for 250 groups.
 - **zstd at level 19:** about 2.3 MB per group, 23 times smaller.
 - **Git's packing:** the plain files of all 45 pack into 61 MB, because the same requests recur in
   every model's files. But a checkout still writes every byte, so the working tree would be several
@@ -199,8 +203,8 @@ Decision:
 
 What it costs:
 
-- **Storage:** about 2.3 MB per group for BFCL single-turn, 0.6 GB for 250 groups. With BFCL
-  multi_turn, GSM8K and tau2, an estimated 1.5 to 2 GB per full recording. LFS keeps every version
+- **Storage:** about 2.3 MB per group for BFCL single-turn, a projected 0.6 GB for 250 groups.
+  With BFCL multi_turn, GSM8K and tau2, an estimated 1.5 to 2 GB per full recording. LFS keeps every version
   in history, so each full re-record adds about as much again; re-records follow an oracle or
   environment change, a few a year.
 - **Bandwidth:** the weekly check downloads nothing, and a pull request downloads only the sets it
@@ -248,12 +252,13 @@ Each step is its own pull request.
 2. The argument form, per model in the manifest, with the existing fixtures re-recorded
    byte-identical.
 3. The end-of-turn rule, likewise, with GLM-5.3-Flash's parse cases first.
-4. `bellwether models`; groups and manifests for tier 1; tier 1 recorded, with `sets.toml`,
-   `unpack` and `.lfsconfig`; and the per-model table.
-5. Tiers 2 and 3 in batches, with the extra work in tier order: a vendor-code oracle (DeepSeek V3.2
+4. `bellwether models` and the committed list.
+5. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
+6. Tier 1: groups and manifests, its recorded sets, and the per-model table.
+7. Tiers 2 and 3 in batches, with the extra work in tier order: a vendor-code oracle (DeepSeek V3.2
    and V4-Flash, Kimi-K3), tokenizers that need `tiktoken` or custom code, gated models, and a
    reference for templates that drop the tool list.
-6. The next sources, from BFCL multi_turn on; #19's `tool_choice` cases are built from the BFCL
+8. The next sources, from BFCL multi_turn on; #19's `tool_choice` cases are built from the BFCL
    import.
 
 ## Questions for Simo
