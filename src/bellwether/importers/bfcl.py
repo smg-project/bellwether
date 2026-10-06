@@ -23,6 +23,7 @@ VERSION = "2026.3.23"
 WHEEL = "bfcl_eval-2026.3.23-py3-none-any.whl"
 SHA256 = "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
 LICENSE = "Apache-2.0"
+METADATA_LICENSE = "Apache 2.0"  # the License field of the reviewed wheel's METADATA; LICENSE is its SPDX name
 SOURCE = f"pypi:{PROJECT}=={VERSION}"
 DATA = "bfcl_eval/data"
 TEMPERATURE = 0.001
@@ -313,10 +314,28 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
     return problems
 
 
+def check_license(wheel: zipfile.ZipFile) -> None:
+    """Refuse a wheel whose METADATA header does not carry the license this importer was reviewed for."""
+    found = None
+    members = [name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")]
+    if members:
+        for line in wheel.read(members[0]).decode("utf-8").splitlines():
+            if not line.strip():
+                break  # the header ends at the first blank line; the description follows
+            if line.startswith(("License:", "License-Expression:")):
+                found = line.split(":", 1)[1].strip()
+                break
+    if found != METADATA_LICENSE:
+        raise ValueError(
+            f"{WHEEL}: license {found!r} is not the reviewed {METADATA_LICENSE!r}; review it before importing"
+        )
+
+
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
+        check_license(wheel)
         sets = build_sets(wheel)
     if args.check:
         problems = check_sets(sets, args.corpus)

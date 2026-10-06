@@ -347,3 +347,28 @@ def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'bfcl-simple-python.jsonl'}: 1 cases" in out
+
+
+def metadata_wheel(tmp_path, text: str):
+    path = tmp_path / "metadata.whl"
+    with zipfile.ZipFile(path, "w") as wheel:
+        wheel.writestr("bfcl_eval-2026.3.23.dist-info/METADATA", text)
+    return path
+
+
+def test_the_reviewed_license_passes(tmp_path):
+    text = "Metadata-Version: 2.1\nName: bfcl-eval\nLicense: Apache 2.0\n"
+    with zipfile.ZipFile(metadata_wheel(tmp_path, text)) as wheel:
+        bfcl.check_license(wheel)
+
+
+def test_a_wheel_under_another_license_is_refused(tmp_path):
+    text = "Metadata-Version: 2.1\nName: bfcl-eval\nLicense: MIT\n"
+    with zipfile.ZipFile(metadata_wheel(tmp_path, text)) as wheel, pytest.raises(ValueError, match="license 'MIT'"):
+        bfcl.check_license(wheel)
+
+
+def test_a_license_line_in_the_description_does_not_count(tmp_path):
+    text = "Metadata-Version: 2.1\nName: bfcl-eval\n\nLicense: Apache 2.0\n"
+    with zipfile.ZipFile(metadata_wheel(tmp_path, text)) as wheel, pytest.raises(ValueError, match="license None"):
+        bfcl.check_license(wheel)
