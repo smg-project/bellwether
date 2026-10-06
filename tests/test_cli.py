@@ -24,7 +24,8 @@ def test_no_command_prints_help_and_fails(capsys):
     [
         ["record", "--model", "moonshotai/Kimi-K3", "--kind", "tokenize", "--oracle", "reference"],
         ["record", "--model", "moonshotai/Kimi-K3", "--kind", "render", "--oracle", "vllm"],
-        ["verify", "--smg", "http://127.0.0.1:30000"],
+        ["verify", "--smg", "http://127.0.0.1:30000", "--capture", "capture.jsonl", "--kind", "parse"],
+        ["verify", "--smg", "http://127.0.0.1:30000", "--capture", "capture.jsonl", "--kind", "detokenize"],
         ["report", "runs/a.json"],
     ],
 )

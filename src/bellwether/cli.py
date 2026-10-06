@@ -1,8 +1,9 @@
 """Command line entry point: ``bellwether gaps | models | record | import | count | unpack | verify | report``.
 
-``gaps`` (M1), ``models`` and ``record --kind render --oracle reference`` (M2) are implemented. The
-other subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs
-exit with status 2 so that scripts never mistake a missing feature for a passing run.
+``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
+``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
+kinds are stubs until their milestone lands (see the milestone table in README.md); stubs exit with status 2
+so that scripts never mistake a missing feature for a passing run.
 """
 
 from __future__ import annotations
@@ -16,9 +17,11 @@ from bellwether import __version__
 from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
 from bellwether.importers import run as import_run
+from bellwether.manifest import KINDS
 from bellwether.models import run as models_run
 from bellwether.record import run as record_run
 from bellwether.unpack import run as unpack_run
+from bellwether.verify import run as verify_run
 
 NOT_IMPLEMENTED = 2
 
@@ -118,12 +121,61 @@ def build_parser() -> argparse.ArgumentParser:
     unpack.add_argument("--model", help="only this Hugging Face model id")
     unpack.set_defaults(func=unpack_run)
 
-    verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")
-    verify.add_argument("--smg", required=True, help="SMG base URL, e.g. http://127.0.0.1:30000")
-    verify.add_argument("--fixtures", default="fixtures")
-    verify.add_argument("--chunk-plan", action="append", default=None, help="restrict to named chunk plans")
-    verify.add_argument("--junit", help="write a JUnit XML report here")
-    verify.set_defaults(func=_stub("verify", "M3"))
+    verify = sub.add_parser(
+        "verify",
+        help="replay fixtures against SMG fronting the scripted mock engine",
+        description=(
+            "Send each render fixture's request to a running SMG, read the prompt token ids SMG sent from the "
+            "capture file of the mock worker behind it, and compare them with the reference. Exit 0 when every "
+            "case matches or is a listed known difference, 1 otherwise, 2 when the run gives no verdict."
+        ),
+    )
+    verify.add_argument("--smg", required=True, metavar="URL", help="SMG base URL, e.g. http://127.0.0.1:30000")
+    verify.add_argument(
+        "--capture",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="the file the mock worker behind SMG appends each request it receives to",
+    )
+    verify.add_argument(
+        "--kind", choices=KINDS, default="render", help="fixtures to replay; only render is implemented (default)"
+    )
+    verify.add_argument(
+        "--fixtures", type=Path, default=Path("fixtures"), metavar="DIR", help="fixture root holding the manifests"
+    )
+    verify.add_argument(
+        "--model",
+        dest="models",
+        action="append",
+        metavar="ID",
+        help="verify only this model's fixtures (repeat for more); default: every manifest",
+    )
+    verify.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="verify only this render set (repeat for more); default: every set of the selected models",
+    )
+    verify.add_argument(
+        "--chunk-plan",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help="restrict parse replays to named chunk plans",
+    )
+    verify.add_argument(
+        "--known",
+        type=Path,
+        metavar="PATH",
+        help="known differences: a TOML table per fixture id with the verdict SMG is known to give (regression, or "
+        "rejected with SMG's error code), a reason and an issue link; a listed case passes while it has exactly "
+        "that outcome and fails on any other",
+    )
+    verify.add_argument("--report", type=Path, metavar="PATH", help="write the JSON report here")
+    verify.add_argument("--junit", type=Path, metavar="PATH", help="write a JUnit XML report here")
+    verify.set_defaults(func=verify_run)
 
     report = sub.add_parser("report", help="summarize verify reports as markdown for the artifacts repo")
     report.add_argument("reports", nargs="+")

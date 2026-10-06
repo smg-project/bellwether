@@ -30,7 +30,10 @@ def slug_for(model: str) -> str:
 
 
 def load_manifest(path: Path) -> Manifest:
-    data = tomllib.loads(path.read_text())
+    try:
+        data = tomllib.loads(path.read_text())
+    except ValueError as err:  # not TOML, or not text: the message does not say which file
+        raise ValueError(f"{path}: {err}") from None
     for key in ("model", "revision"):
         if not isinstance(data.get(key), str) or not data[key]:
             raise ValueError(f"{path}: `{key}` is required")

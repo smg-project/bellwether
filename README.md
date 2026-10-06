@@ -71,17 +71,21 @@ catches up.
 | waiver | a reviewed, expiring record explaining an `engine_defect`, with an upstream link |
 | manifest | per-model file: revision, authority order, SMG and engine parser names |
 | chunk plan | how an output token stream is cut into engine chunks for a streaming replay |
+| capture | the mock worker's record of each request SMG sends it, one JSON line per request |
+| known difference | a case where SMG is known to differ from the reference, listed for `verify --known` with the outcome SMG gives on it, the reason and the issue |
 
 ## Status
 
-`gaps` is implemented (M1, 2026-10-05). The other subcommands exist and exit with status 2 until
-their milestone lands:
+`gaps` (M1, 2026-10-05), `record` for render and parse with the reference oracle (M2, M4), `import`,
+`count`, `unpack`, and `verify` on render cases against a running SMG (the first half of M3) are
+implemented. `report`, `record` with an engine oracle or for tokenize and detokenize, and `verify` for
+the other kinds exist and exit with status 2 until their milestone lands:
 
 | Milestone | Deliverable |
 |---|---|
 | M1 | `gaps` against the live registries and SMG (done) |
 | M2 | render fixtures from the checkpoint template, in the order Symphony needs them: Qwen3-8B and DeepSeek-R1 (done), then DeepSeek-V4.1-Flash, GLM-5.3-Flash, MiniMax-M3, Kimi-K3; engine witnesses on Linux; fixture-driven tests in SMG |
-| M3 | `mock-worker --script/--capture` in SMG; `verify` end to end on render cases |
+| M3 | `mock-worker --script/--capture` in SMG; `verify` end to end on render cases (against a running SMG: done; starting SMG and the mock per model: next) |
 | M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle (Qwen3-8B done; DeepSeek-R1 needs a decision, issue #14), waivers |
 | M5 | CI in both repositories; weekly record against engine nightlies; reports to `smg-project/artifacts` |
 | M6 | coverage work from the gaps list |
@@ -199,6 +203,73 @@ as the importers check their sets. A list read from the Hub changes every day, i
 their order with it, so it is that day's evidence, not a committed file: it goes to
 `runs/models-<date>.jsonl` and is published to smg-project/artifacts, each row pinning the sha the
 Hub gave that day.
+
+## Verifying render fixtures against a running SMG
+
+```bash
+uv run bellwether verify --smg http://127.0.0.1:30000 --capture capture.jsonl --model Qwen/Qwen3-8B \
+  --report runs/verify.json --junit runs/verify.xml
+```
+
+SMG runs in front of its `mock-worker`, started with `--capture capture.jsonl`, which creates the file
+and appends each request SMG sends it as one JSON line; `verify` opens the file before its first
+request. `verify` posts every render fixture's request to `/v1/chat/completions` with the manifest's
+`model`, the fixture id as `rid`, `stream: false` and, unless the request sets a limit, `max_tokens: 1`;
+none of these reach the chat template. SMG passes the `rid` to the engine as `request_id`, verbatim, or
+in prefill-decode mode as `<rid>-<uuid>`, with a fresh UUID for each attempt; `verify` takes that suffix
+off, so the capture lines written during the run are joined to the cases on it, and each case gets a
+verdict. Every render set of the selected models is read whole, plain or compressed, before the first
+request, and nothing in them is passed over: a set Git LFS has not fetched stops the run with the
+command that fetches it, and so does a set `sets.toml` lists that the checkout lacks, a set that is not
+zstd or is cut short, a line that is not a case with a request and reference ids, and a case id in two
+of a model's sets. A model named with `--model` must have render cases; any other model without them is
+named in the report. `--set NAME` verifies only the named render sets, and each must be some selected
+model's. That first read keeps only the case ids; the cases are then sent, judged and written one at a
+time, so a run's memory does not grow with its number of cases, and the JSON report and the JUnit XML
+are put together when the run finishes.
+
+| Verdict | Meaning |
+|---|---|
+| `match` | the `input_ids` SMG sent equal the reference's |
+| `regression` | they do not; the report gives the first differing index, the ids around it on both sides, and whether the prompt text SMG sent equals the reference text (equal text points at tokenization, other text at rendering) |
+| `rejected` | SMG refused the request: a 400 whose body is SMG's error object; its code and message are kept |
+| `missing` | SMG answered 200, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
+| `measurement_failed` | SMG answered neither 200 nor its refusal (a redirect, a 404 for a model no worker serves, a 429 or 5xx, a proxy's page) and no capture line carries the case's id: nothing was measured |
+
+Every capture line that carries a case's id is compared, whatever SMG answered after sending it, and the
+answer is kept beside the verdict. A request can reach the engine more than once (a retry; under
+prefill-decode, both legs), so a case matches only when each of its lines does. The report counts the
+lines written during the run, those that joined a case and those that did not (another client's, a line
+for no case), so a line no case takes is never dropped unseen. `missing` and `measurement_failed` are
+about the setup, so no known difference excuses them. Before the first case, `verify` asks SMG's
+`/v1/models` for the models it serves; a model with cases that SMG does not list stops the run, as does
+an answer other than SMG's list (a 404 there usually means `--smg` ends in `/v1`). The report and the
+messages give `--smg` without a user and password, should the URL carry them.
+
+`--known PATH` lists SMG's known differences, one TOML table per fixture id stating the outcome SMG is
+known to give, why, and the issue that tracks it; bellwether ships no such list:
+
+```toml
+["qwen3-8b/render/some-case"]
+verdict = "rejected"   # or "regression"
+code = "bad_request"   # a rejected entry's: SMG's error code, or 400 for its validation errors
+reason = "what SMG does on this case, and why it is not fixed yet"
+issue = "https://github.com/smg-project/smg/issues/NNN"
+```
+
+A listed case passes while it has exactly that outcome and fails on any other: a match, so the entry
+goes as soon as SMG is fixed; another verdict or code; or an outcome about the setup. A listed id that
+can name no case fails the run: one that is not a fixture id, one whose slug no manifest has, or a
+render id of a verified model that a run of every set did not find. Ids of models, sets or kinds the run
+does not verify are counted and listed in the report, so the list cannot go stale. The exit status is 0
+when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such model, a
+manifest or a set verify cannot read, a capture file verify cannot open, no answer from SMG, a model it
+does not serve) or stops before its last case. After the first request, a case left without a verdict
+(no answer from SMG, a capture line verify cannot read, a set that cannot be read again) stops the
+sending: the cases answered so far are judged and reported, and the report names the case the run
+stopped at and every case it did not send. A case is judged against its reference alone for now: telling
+an `engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once
+they are recorded.
 
 ## Layout
 
