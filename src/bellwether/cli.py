@@ -52,6 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--oracle", required=True, choices=["reference", "vllm", "sglang"])
     record.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     record.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    record.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="record only this corpus set (repeat for more); other sets' fixture files are left as they are",
+    )
     record.set_defaults(func=record_run)
 
     verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")

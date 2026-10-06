@@ -524,3 +524,33 @@ def test_committed_fixtures_are_canonical_sorted_and_valid(path):
         if case["kind"] == "parse":
             assert len(case["output_pieces"]) == len(case["output_ids"])
             assert "".join(case["output_pieces"]) == case["reference"]["text"]
+
+
+def record_argv(tmp_path, tiny_model, *extra: str) -> list[str]:
+    argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "reference"]
+    return argv + ["--fixtures", str(tmp_path / "fixtures"), "--corpus", str(tmp_path / "corpus"), *extra]
+
+
+def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, tiny_model):
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    assert status == 0
+    extra_before = (out_dir / "extra.jsonl").read_text()
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a2", "request": {"messages": [user("A")]}}])
+    (tmp_path / "corpus" / "render" / "extra.jsonl").unlink()
+
+    assert main(record_argv(tmp_path, tiny_model, "--set", "common")) == 0
+
+    ids = [json.loads(line)["id"] for line in (out_dir / "common.jsonl").read_text().splitlines()]
+    assert ids == ["tiny-chat/render/a2"]
+    assert (out_dir / "extra.jsonl").read_text() == extra_before
+
+
+def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1
+    assert "no corpus set named missing" in capsys.readouterr().err
