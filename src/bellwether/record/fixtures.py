@@ -13,6 +13,8 @@ would no longer be the request the reference answers.
 from __future__ import annotations
 
 import json
+import subprocess
+from collections.abc import Sequence
 from functools import cache
 from importlib import resources
 from pathlib import Path
@@ -69,11 +71,35 @@ def is_lfs_pointer(path: Path) -> bool:
         return handle.read(len(LFS_POINTER_PREFIX)) == LFS_POINTER_PREFIX
 
 
+def repository_root(path: Path) -> Path | None:
+    """The root of the git checkout that holds the file at ``path``; None outside a checkout, or without git."""
+    try:
+        found = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path.parent, capture_output=True, text=True)
+    except OSError:
+        return None
+    return Path(found.stdout.strip()) if found.returncode == 0 else None
+
+
+def lfs_include(paths: Sequence[Path], root: Path | None) -> str:
+    """The sets' paths from the repository root, comma-joined: what ``git lfs pull --include`` matches, wherever in
+    the checkout it runs. Outside a checkout, the paths as given."""
+    if root is None:
+        return ",".join(str(path) for path in paths)
+    return ",".join(path.resolve().relative_to(root.resolve()).as_posix() for path in paths)
+
+
+def lfs_pull_command(paths: Sequence[Path], root: Path | None) -> str:
+    """The command that fetches these sets. ``--exclude ''`` clears ``.lfsconfig``'s ``fetchexclude``, which names
+    every benchmark set and would otherwise win over ``--include``, so that the pull fetched nothing."""
+    return f"git lfs pull --include '{lfs_include(paths, root)}' --exclude ''"
+
+
 def plain_text(path: Path) -> str:
     """A fixture file's lines as text, whichever form it is stored in."""
     data = path.read_bytes()
     if data.startswith(LFS_POINTER_PREFIX):
-        raise ValueError(f"{path} is a Git LFS pointer; fetch it first: git lfs pull --include '{path}'")
+        command = lfs_pull_command([path], repository_root(path))
+        raise ValueError(f"{path} is a Git LFS pointer; fetch it first: {command}")
     if is_compressed(path):
         data = zstandard.ZstdDecompressor().decompress(data)
     return data.decode("utf-8")

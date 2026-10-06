@@ -2,6 +2,8 @@ import hashlib
 import json
 import os
 import pathlib
+import re
+import subprocess
 
 import pytest
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
@@ -14,6 +16,7 @@ from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import (
     canonical_line,
     is_lfs_pointer,
+    lfs_pull_command,
     plain_text,
     read_fixture_file,
     schema_path,
@@ -643,8 +646,13 @@ COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixture
 
 @pytest.mark.parametrize("path", COMMITTED_SETS, ids=lambda p: str(p.relative_to(ROOT)))
 def test_committed_fixtures_are_canonical_sorted_and_valid(path):
+    check_committed_set(path, ROOT)
+
+
+def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
+    """One committed set against its manifest, its ``sets.toml`` table and the schema; skipped while a pointer."""
     if is_lfs_pointer(path):
-        pytest.skip("Git LFS has not fetched this set: git lfs pull --include it to check it")
+        pytest.skip(f"Git LFS has not fetched this set; fetch it with: {lfs_pull_command([path], root)}")
     manifest = load_manifest(path.parent.parent / "manifest.toml")
     plain = plain_text(path)
     name = path.name.removesuffix(".zst").removesuffix(".jsonl")
@@ -850,3 +858,52 @@ def test_every_sets_toml_table_has_its_set(path):
     for kind, name in set_tables.read(path):
         files = [path.parent / kind / f"{name}.jsonl", path.parent / kind / f"{name}.jsonl.zst"]
         assert sum(f.is_file() for f in files) == 1, f"{path}: [{kind}.{name}] needs exactly one set file"
+
+
+def git(cwd: pathlib.Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, stdout=subprocess.DEVNULL)
+
+
+def runs(*argv: str) -> bool:
+    try:
+        return subprocess.run(argv, capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+needs_git = pytest.mark.skipif(not runs("git", "--version"), reason="needs git")
+
+
+@pytest.fixture
+def git_sandbox(tmp_path, monkeypatch) -> pathlib.Path:
+    """``tmp_path``, with git reading a config of its own and no repository inherited from the environment."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    return tmp_path
+
+
+# Git LFS matches --include against the path from the repository root, and .lfsconfig's fetchexclude wins over it
+# unless --exclude '' clears it: an absolute path, one relative to a subdirectory, or no --exclude fetches nothing.
+FETCH_BENCH_X = "git lfs pull --include 'fixtures/m/render/bench-x.jsonl.zst' --exclude ''"
+
+
+@needs_git
+def test_a_pointer_error_names_the_command_that_fetches_it_from_the_repository_root(git_sandbox, monkeypatch):
+    git(git_sandbox, "init", "-q", "clone")
+    pointer = git_sandbox / "clone" / "fixtures" / "m" / "render" / "bench-x.jsonl.zst"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(LFS_POINTER)
+    monkeypatch.chdir(pointer.parent.parent)
+    for given in (pointer, pathlib.Path("render/bench-x.jsonl.zst")):
+        with pytest.raises(ValueError, match=re.escape(FETCH_BENCH_X)):
+            plain_text(given)
+
+
+def test_the_committed_fixture_check_skips_a_set_git_lfs_has_not_fetched(tmp_path):
+    pointer = tmp_path / "fixtures" / "m" / "render" / "bench-x.jsonl.zst"
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(LFS_POINTER)
+    with pytest.raises(pytest.skip.Exception, match=re.escape(FETCH_BENCH_X)):
+        check_committed_set(pointer, tmp_path)
