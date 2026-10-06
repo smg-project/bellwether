@@ -62,7 +62,11 @@ UNCHECKED = "unchecked"  # --registry-only: the Hub was not asked
 NOT_ON_HUB = "not-on-hub"  # a registry names it, the Hub has no such model
 GATED = "gated"  # the files need an accepted license and a token
 NO_CHAT_TEMPLATE = "no-chat-template"  # the hf-template oracle has nothing to render with
+# The template is only in the processor's files, which the oracle (AutoTokenizer) does not read yet.
+PROCESSOR_CHAT_TEMPLATE = "processor-chat-template"
 PENDING = "pending"  # nothing recorded yet, nothing in the way
+# A tokenizer or processor config that could not be read gives its own status (``Details.unread``):
+# hub-error- and the Hub's HTTP status or the error's name, invalid-tokenizer-config, invalid-processor-config.
 
 _HUB_ID = re.compile(r"[A-Za-z0-9][\w.-]*/[\w.-]+")
 
@@ -107,9 +111,12 @@ def admits_listing(listed: Listed) -> bool:
 
 
 def admits_details(details: Details, registered: Collection[str]) -> bool:
-    """A Hub model joins the list when its config names a registered architecture and it ships a template."""
+    """A Hub model joins the list when its config names a registered architecture and it ships a template.
+
+    A tokenizer config that could not be read may hold one, so its model joins with a status that says why.
+    """
     return (
-        details.chat_template
+        (details.chat_template or details.unread is not None)
         and any(arch in registered for arch in details.architectures)
         and not is_gpt_oss(details.id, details.architectures)
     )
@@ -147,8 +154,12 @@ def status_of(details: Details | None, checked: bool) -> str:
         return NOT_ON_HUB
     if details.gated:
         return GATED
+    if details.unread:
+        return details.unread
     if not details.chat_template:
         return NO_CHAT_TEMPLATE
+    if details.processor_only:
+        return PROCESSOR_CHAT_TEMPLATE
     return PENDING
 
 

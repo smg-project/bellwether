@@ -70,8 +70,8 @@ def test_simos_models_the_list_lacks_are_named() -> None:
 
 
 def details(model: str, created: date, downloads: int, architectures: tuple[str, ...], **flags) -> Details:
-    chat_template, gated = flags.get("chat_template", True), flags.get("gated", False)
-    return Details(model, f"sha-of-{model}", created, downloads, (), architectures, chat_template, gated)
+    flags = {"chat_template": True, "gated": False, **flags}
+    return Details(model, f"sha-of-{model}", created, downloads, (), architectures, **flags)
 
 
 def listed(model: str, created: date, pipeline_tag: str = "text-generation") -> Listed:
@@ -224,6 +224,47 @@ def test_an_sglang_only_architecture_is_registered_through_its_checkpoints_confi
     assert "Qwen/Qwen-Image" not in rows  # its config names no architecture
     assert "example/oss-tune-20b" not in rows  # gpt-oss, as only its architecture says
     assert "example/oss-named-120b" not in rows  # the same, named by a registry
+
+
+def test_a_hub_model_whose_tokenizer_config_could_not_be_read_is_a_row_that_says_why() -> None:
+    def qwen(name: str, **flags) -> Details:
+        return details(f"Qwen/{name}", date(2025, 4, 28), 10, ("Qwen3ForCausalLM",), **flags)
+
+    models = {
+        "Qwen/Qwen3-8B": qwen("Qwen3-8B"),
+        "Qwen/Qwen3-14B": qwen("Qwen3-14B", chat_template=False, unread="hub-error-503"),
+        "Qwen/Qwen3-32B": qwen("Qwen3-32B", chat_template=False, unread="invalid-tokenizer-config"),
+        "Qwen/Qwen3-4B": qwen("Qwen3-4B", chat_template=False, gated=True, unread="hub-error-401"),
+        "Qwen/Qwen3-1.7B": qwen("Qwen3-1.7B", chat_template=False, gated=True),  # read with access: it ships none
+    }
+    entries = [Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",))]
+    hub = FakeHub({"Qwen": [listed(model, date(2025, 4, 28)) for model in models]}, models)
+    statuses = {row.model: row.status for row in hub_rows(entries, hub, BUILT)}
+    assert statuses == {
+        "Qwen/Qwen3-8B": "pending",
+        "Qwen/Qwen3-14B": "hub-error-503",
+        "Qwen/Qwen3-32B": "invalid-tokenizer-config",
+        "Qwen/Qwen3-4B": "gated",
+    }
+
+
+def test_a_hub_model_whose_template_only_the_processor_reads_is_kept_with_a_status_that_says_so() -> None:
+    def qwen(name: str, **flags) -> Details:
+        return details(f"Qwen/{name}", date(2025, 4, 28), 10, ("Qwen3VLForConditionalGeneration",), **flags)
+
+    models = {
+        "Qwen/Qwen3-VL-8B": qwen("Qwen3-VL-8B"),
+        "Qwen/Qwen3-VL-4B": qwen("Qwen3-VL-4B", processor_only=True),
+        "Qwen/Qwen3-VL-2B": qwen("Qwen3-VL-2B", processor_only=True, gated=True),
+    }
+    entries = [Entry("vllm", "Qwen3VLForConditionalGeneration", MULTIMODAL, True, True, ("Qwen/Qwen3-VL-8B",))]
+    hub = FakeHub({"Qwen": [listed(model, date(2025, 4, 28)) for model in models]}, models)
+    statuses = {row.model: row.status for row in hub_rows(entries, hub, BUILT)}
+    assert statuses == {
+        "Qwen/Qwen3-VL-8B": "pending",
+        "Qwen/Qwen3-VL-4B": "processor-chat-template",
+        "Qwen/Qwen3-VL-2B": "gated",
+    }
 
 
 def test_the_list_is_canonical_json_lines() -> None:

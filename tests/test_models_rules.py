@@ -233,3 +233,11 @@ def test_the_status_says_why_nothing_can_be_recorded_yet() -> None:
     assert rules.status_of(details(gated=True, chat_template=False), checked=True) == "gated"
     assert rules.status_of(details(chat_template=False), checked=True) == "no-chat-template"
     assert rules.status_of(details(), checked=True) == "pending"
+
+
+def test_a_tokenizer_config_that_could_not_be_read_gives_its_own_status_not_no_chat_template() -> None:
+    assert rules.status_of(details(chat_template=False, unread="hub-error-503"), checked=True) == "hub-error-503"
+    invalid = details(chat_template=False, unread="invalid-tokenizer-config")
+    assert rules.status_of(invalid, checked=True) == "invalid-tokenizer-config"
+    out_of_reach = details(gated=True, chat_template=False, unread="hub-error-403")
+    assert rules.status_of(out_of_reach, checked=True) == "gated"

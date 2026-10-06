@@ -9,14 +9,30 @@ from pathlib import Path
 import httpx
 import pytest
 from huggingface_hub import ModelInfo
-from huggingface_hub.errors import GatedRepoError, HfHubHTTPError, RepositoryNotFoundError
+from huggingface_hub.errors import (
+    GatedRepoError,
+    HfHubHTTPError,
+    LocalEntryNotFoundError,
+    RemoteEntryNotFoundError,
+    RepositoryNotFoundError,
+)
 
 from bellwether.models.hub import Details, HfHub, Listed
+from bellwether.models.rules import status_of
+
+REQUEST = httpx.Request("GET", "https://huggingface.co/api/models/example")
+TEMPLATE = {"chat_template": "{{ messages }}"}
 
 
 def http_error(kind: type[HfHubHTTPError], status: int, **headers: str) -> HfHubHTTPError:
-    request = httpx.Request("GET", "https://huggingface.co/api/models/example")
-    return kind(f"{status} from the Hub", response=httpx.Response(status, headers=headers, request=request))
+    return kind(f"{status} from the Hub", response=httpx.Response(status, headers=headers, request=REQUEST))
+
+
+def unreachable(cause: Exception) -> LocalEntryNotFoundError:
+    """What ``hf_hub_download`` raises when its HEAD request fails and the file is not cached."""
+    error = LocalEntryNotFoundError("An error happened while trying to locate the file on the Hub")
+    error.__cause__ = cause
+    return error
 
 
 class StubApi:
@@ -46,19 +62,30 @@ class StubApi:
 
 
 class Downloads:
-    """Stands in for ``hf_hub_download``: writes the given tokenizer config and records each call."""
+    """Stands in for ``hf_hub_download``: writes each config it is given, as JSON or as raw bytes."""
 
-    def __init__(self, tmp_path: Path, tokenizer_config: dict | Exception) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        tokenizer_config: dict | bytes | Exception | None,
+        processor_config: dict | bytes | Exception | None = None,
+    ) -> None:
         self.tmp_path = tmp_path
-        self.tokenizer_config = tokenizer_config
+        self.files = {"tokenizer_config.json": tokenizer_config, "processor_config.json": processor_config}
         self.calls: list[tuple] = []
 
     def __call__(self, repo_id: str, filename: str, revision: str) -> str:
         self.calls.append((repo_id, filename, revision))
-        if isinstance(self.tokenizer_config, Exception):
-            raise self.tokenizer_config
+        content = self.files[filename]
+        if content is None:
+            raise AssertionError(f"downloaded {filename}, which the repository does not list")
+        if isinstance(content, Exception):
+            raise content
         path = self.tmp_path / filename
-        path.write_text(json.dumps(self.tokenizer_config))
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(json.dumps(content))
         return str(path)
 
 
@@ -127,12 +154,80 @@ def test_a_model_the_hub_does_not_have_has_no_details() -> None:
     assert client(StubApi()).model("example/missing") is None
 
 
-@pytest.mark.parametrize(
-    "files", [["chat_template.jinja"], ["chat_template.json"], ["additional_chat_templates/tool_use.jinja"]]
-)
+@pytest.mark.parametrize("files", [["chat_template.jinja"], ["additional_chat_templates/tool_use.jinja"]])
 def test_a_template_file_is_a_chat_template(files: list[str]) -> None:
     siblings = [{"rfilename": name} for name in ["config.json", "tokenizer_config.json", *files]]
     assert client(StubApi(models={"Qwen/Qwen3-8B": info(siblings=siblings)})).model("Qwen/Qwen3-8B").chat_template
+
+
+@pytest.mark.parametrize(
+    ("files", "tokenizer_config", "processor_config", "status", "downloaded"),
+    [
+        (["chat_template.jinja", "chat_template.json"], None, None, "pending", []),
+        (["tokenizer_config.json", "chat_template.json"], TEMPLATE, None, "pending", ["tokenizer_config.json"]),
+        (
+            ["tokenizer_config.json", "chat_template.json"],
+            {},
+            None,
+            "processor-chat-template",
+            ["tokenizer_config.json"],
+        ),
+        (["chat_template.json"], None, None, "processor-chat-template", []),
+        (
+            ["tokenizer_config.json", "processor_config.json"],
+            {},
+            TEMPLATE,
+            "processor-chat-template",
+            ["tokenizer_config.json", "processor_config.json"],
+        ),
+        (
+            ["tokenizer_config.json", "processor_config.json"],
+            {},
+            {"image_seq_length": 256},
+            "no-chat-template",
+            ["tokenizer_config.json", "processor_config.json"],
+        ),
+        (["processor_config.json"], None, b"{", "invalid-processor-config", ["processor_config.json"]),
+        (
+            ["processor_config.json"],
+            None,
+            unreachable(http_error(HfHubHTTPError, 503)),
+            "hub-error-503",
+            ["processor_config.json"],
+        ),
+        (
+            ["tokenizer_config.json", "chat_template.json"],
+            unreachable(http_error(HfHubHTTPError, 503)),
+            None,
+            "hub-error-503",
+            ["tokenizer_config.json"],
+        ),
+    ],
+    ids=[
+        "both-template-files",
+        "tokenizer-config-and-processor-file",
+        "processor-file-only",
+        "processor-file-and-no-tokenizer-config",
+        "processor-config-only",
+        "processor-config-without-a-template",
+        "processor-config-not-json",
+        "processor-config-unread",
+        "tokenizer-config-unread-beside-a-processor-file",
+    ],
+)
+def test_a_template_only_the_processor_reads_has_its_own_status_and_the_tokenizers_is_read_first(
+    tmp_path: Path,
+    files: list[str],
+    tokenizer_config: dict | bytes | Exception | None,
+    processor_config: dict | bytes | Exception | None,
+    status: str,
+    downloaded: list[str],
+) -> None:
+    siblings = [{"rfilename": name} for name in ["config.json", *files]]
+    downloads = Downloads(tmp_path, tokenizer_config, processor_config)
+    hub = client(StubApi(models={"Qwen/Qwen3-VL-8B": info("Qwen/Qwen3-VL-8B", siblings=siblings)}), downloads)
+    assert status_of(hub.model("Qwen/Qwen3-VL-8B"), checked=True) == status
+    assert [filename for _, filename, _ in downloads.calls] == downloaded
 
 
 def test_a_template_the_hub_reads_from_the_tokenizer_config_needs_no_download() -> None:
@@ -156,11 +251,58 @@ def test_a_model_without_a_tokenizer_config_ships_no_template() -> None:
     assert details.architectures == ()
 
 
-def test_a_gated_tokenizer_config_out_of_reach_counts_as_no_template(tmp_path: Path) -> None:
+def test_a_gated_tokenizer_config_out_of_reach_is_unread_not_a_missing_template(tmp_path: Path) -> None:
     gated = info("google/gemma-3-4b-it", gated="manual")
     out_of_reach = Downloads(tmp_path, http_error(GatedRepoError, 401))
     details = client(StubApi(models={"google/gemma-3-4b-it": gated}), out_of_reach).model("google/gemma-3-4b-it")
-    assert details.gated and not details.chat_template
+    assert (details.gated, details.chat_template, details.unread) == (True, False, "hub-error-401")
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (http_error(HfHubHTTPError, 403), "hub-error-403"),  # refused on the download itself
+        (http_error(RepositoryNotFoundError, 401), "hub-error-401"),  # how huggingface_hub reports a 401 on a file
+        (unreachable(http_error(HfHubHTTPError, 403)), "hub-error-403"),  # refused on the HEAD request before it
+    ],
+)
+def test_a_tokenizer_config_answering_401_or_403_is_out_of_reach_as_a_gated_ones_is(
+    tmp_path: Path, error: Exception, status: str
+) -> None:
+    hub = client(StubApi(models={"Qwen/Qwen3-8B": info(gated=False)}), Downloads(tmp_path, error))
+    details = hub.model("Qwen/Qwen3-8B")
+    assert (details.gated, details.chat_template, details.unread) == (True, False, status)
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (http_error(HfHubHTTPError, 500), "hub-error-500"),
+        (unreachable(http_error(HfHubHTTPError, 503)), "hub-error-503"),  # what is left after the HEAD's retries
+        (unreachable(httpx.ConnectError("connection refused", request=REQUEST)), "hub-error-connect-error"),
+        (httpx.ReadTimeout("timed out", request=REQUEST), "hub-error-read-timeout"),
+        (http_error(RemoteEntryNotFoundError, 404), "hub-error-404"),  # listed, then not found at the same sha
+    ],
+)
+def test_any_other_error_reading_the_tokenizer_config_is_named_not_counted_as_no_template(
+    tmp_path: Path, error: Exception, status: str
+) -> None:
+    hub = client(StubApi(models={"Qwen/Qwen3-8B": info()}), Downloads(tmp_path, error))
+    details = hub.model("Qwen/Qwen3-8B")
+    assert (details.gated, details.chat_template, details.unread) == (False, False, status)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [b'{"chat_template": "{{ messages }}"', b"[]", b'"{{ messages }}"', b"\xff\xfe{}"],
+    ids=["cut-short", "array", "string", "not-utf-8"],
+)
+def test_a_tokenizer_config_that_is_not_a_json_object_is_invalid_not_without_a_template(
+    tmp_path: Path, text: bytes
+) -> None:
+    hub = client(StubApi(models={"Qwen/Qwen3-8B": info()}), Downloads(tmp_path, text))
+    details = hub.model("Qwen/Qwen3-8B")
+    assert (details.chat_template, details.unread) == (False, "invalid-tokenizer-config")
 
 
 def test_the_hub_is_asked_again_after_a_rate_limit() -> None:

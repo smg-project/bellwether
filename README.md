@@ -161,7 +161,8 @@ except gpt-oss (the rule is in `docs/benchmark-sets.md`, "Which models"). It rea
   Int8 or bitsandbytes in the name, or the Hub's `base_model:quantized` tag), embedding, reranking
   and classification models, and checkpoints created before 2025 that no registry names. A token
   (`HF_TOKEN`) raises the Hub's rate limits; none is needed, and a rate-limited call waits and is
-  made again.
+  made again. A model whose tokenizer or processor config cannot be read (gated, an error from the
+  Hub, a file that is not JSON) is kept, with a status that says so.
 
 It writes one JSON line per checkpoint, ordered by tier and then within the tier:
 
@@ -170,7 +171,7 @@ It writes one JSON line per checkpoint, ordered by tier and then within the tier
 | `model` | the Hugging Face id, as the Hub spells it |
 | `revision` | the Hub's sha when the list was built |
 | `tier` | 1: Simo's models, in his order; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads |
-| `status` | `pending`, or why nothing can be recorded yet: `gated`, `no-chat-template`, `not-on-hub`; `unchecked` without the Hub |
+| `status` | `pending`, or why nothing can be recorded yet: `gated` (also when a config answers 401 or 403), `no-chat-template`, `processor-chat-template` (the template is only in the processor's files, `chat_template.json` or the `chat_template` in `processor_config.json`, which `AutoProcessor` and vLLM read but the oracle's `AutoTokenizer` does not; the oracle reading processor templates is the follow-up), `not-on-hub`; when a config could not be read, `invalid-tokenizer-config` or `invalid-processor-config` (not a JSON object), or `hub-error-` and the HTTP status or the error (`hub-error-503`, `hub-error-read-timeout`); `unchecked` without the Hub |
 | `created`, `downloads` | the Hub's creation date and downloads over the last 30 days |
 | `modality` | `multimodal` when a registry or the architecture says so, else `text` |
 | `sources` | the engines whose registries name the checkpoint, or `hub` |
