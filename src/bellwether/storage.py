@@ -11,10 +11,12 @@ importers import nothing beyond the standard library. Nor does this module until
 
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TextIO
 
 COMPRESSED_SUFFIX = ".jsonl.zst"
 # Level 19, one thread: the compressed bytes are a function of the content for a given zstandard version, which
@@ -66,6 +68,10 @@ def lfs_pull_command(paths: Sequence[Path], root: Path | None) -> str:
     return f"git lfs pull --include '{lfs_include(paths, root)}' --exclude ''"
 
 
+def _pointer_refused(path: Path) -> ValueError:
+    return ValueError(f"{path} is a Git LFS pointer; fetch it first: {lfs_pull_command([path], repository_root(path))}")
+
+
 def plain_bytes(path: Path) -> bytes:
     """A set file's content as plain JSON Lines, whichever form it is stored in.
 
@@ -74,8 +80,7 @@ def plain_bytes(path: Path) -> bytes:
     """
     data = path.read_bytes()
     if data.startswith(LFS_POINTER_PREFIX):
-        command = lfs_pull_command([path], repository_root(path))
-        raise ValueError(f"{path} is a Git LFS pointer; fetch it first: {command}")
+        raise _pointer_refused(path)
     if is_compressed(path):
         import zstandard
 
@@ -89,6 +94,22 @@ def plain_bytes(path: Path) -> bytes:
 def plain_text(path: Path) -> str:
     """A set file's lines as text, whichever form it is stored in."""
     return plain_bytes(path).decode("utf-8")
+
+
+def open_text(path: Path) -> TextIO:
+    """A set file's lines as a text stream, whichever form it is stored in: read and decompressed as they are asked
+    for, so a reader that needs the first lines does not load the set whole.
+
+    Only "\\n" ends a line (``newline="\\n"``), as in ``jsonl``: U+2028 and its kind stay inside the string that holds
+    them. A Git LFS pointer is refused as ``plain_bytes`` refuses it.
+    """
+    if is_lfs_pointer(path):
+        raise _pointer_refused(path)
+    if not is_compressed(path):
+        return path.open(encoding="utf-8", newline="\n")
+    import zstandard
+
+    return io.TextIOWrapper(zstandard.ZstdDecompressor().stream_reader(path.open("rb")), encoding="utf-8", newline="\n")
 
 
 def write(path: Path, data: bytes) -> None:

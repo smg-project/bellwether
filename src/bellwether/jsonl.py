@@ -2,7 +2,8 @@
 
 ``json.dumps`` with ``ensure_ascii=False``, as the corpus and fixture writers call it, writes U+2028, U+2029 and U+0085
 raw inside a string, and ``str.splitlines()`` would end a line at each of them. The corpus and fixture readers and the
-importers' dataset readers all read through ``loads``. It is a top-level module so that both sides can import it:
+importers' dataset readers all read through ``loads``, or ``load`` over a stream (``count``, which reads one record of
+each set). It is a top-level module so that both sides can import it:
 importing anything under ``bellwether.record`` runs its ``__init__``, which loads the oracles and their third-party
 dependencies, and the importers import nothing beyond the standard library. Nor does this module.
 """
@@ -10,7 +11,7 @@ dependencies, and the importers import nothing beyond the standard library. Nor 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,15 @@ def loads(text: str, where: str | Path) -> Iterator[tuple[int, Any]]:
     Only "\\n" ends a line, so the empty piece after a final "\\n" is a blank line too. A line that is not JSON raises
     ``ValueError`` naming ``where`` (the file the text came from) and the line's number.
     """
-    for number, line in enumerate(text.split("\n"), start=1):
+    return load(text.split("\n"), where)
+
+
+def load(lines: Iterable[str], where: str | Path) -> Iterator[tuple[int, Any]]:
+    """As ``loads``, over lines already split at "\\n" alone, such as a file opened with ``newline="\\n"`` gives them.
+
+    Each line is parsed as it is reached, so a reader that stops early reads no further.
+    """
+    for number, line in enumerate(lines, start=1):
         if not line.strip():
             continue
         try:
