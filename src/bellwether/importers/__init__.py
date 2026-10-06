@@ -10,4 +10,8 @@ def run(args: argparse.Namespace) -> int:
         from .bfcl import run as run_bfcl
 
         return run_bfcl(args)
+    if args.dataset == "gsm8k":
+        from .gsm8k import run as run_gsm8k
+
+        return run_gsm8k(args)
     raise ValueError(f"no importer for {args.dataset!r}")

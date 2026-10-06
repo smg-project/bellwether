@@ -32,6 +32,7 @@ dataset's license.
 | Dataset | Sets | Source | License | Attribution |
 |---|---|---|---|---|
 | BFCL | `bfcl-<category>` for the 13 single-turn categories of smg's weekly run: 3641 render cases, one per row; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them) | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
+| GSM8K | `gsm8k-train` and `gsm8k-test`: 7473 and 1319 render cases, one per row; `gsm8k-<split>-reasoning` and `gsm8k-<split>-content`: the same rows as parse cases, one set per message shape (no row of the pinned files is left out) | `github:openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c`; sha256 `17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465` (`grade_school_math/data/train.jsonl`), `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` (`grade_school_math/data/test.jsonl`), `86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b` (`LICENSE`) | MIT, checked against the LICENSE file's sha256 on every import | Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -39,12 +40,24 @@ BFCL's "may be omitted" marker, and each call held to BFCL's own parameter rules
 declare is left out when the answer allows it. `docs/benchmark-sets.md` has the rules; `scripts/bfcl_equivalence.py`
 checks every request and call against BFCL's own code, in a throwaway environment.
 
-Set names starting with `bfcl-` belong to the importer: `bellwether import bfcl` deletes any `bfcl-*.jsonl` it did
-not write. Name hand-written sets otherwise.
+A GSM8K case is one grade school math problem. Its request is the question as a single user turn, with no system
+prompt, tools or sampling parameters. Its parse cases take the assistant message from the published answer, the worked
+solution with its calculator annotations (`<<16-3-4=9>>`) and then a last line `#### <final answer>`, in the two
+shapes a model's output takes: `gsm8k-<split>-reasoning` holds the solution, annotations as written, as
+`reasoning_content` and the text after `#### ` as `content`; `gsm8k-<split>-content` holds the whole answer, `#### `
+line included, as `content` with no reasoning. Case names carry the split and the row's 0-based line index
+(`gsm8k-test-7`, `gsm8k-test-reasoning-7`). A row with an empty question, or whose answer does not end in a `#### `
+line, would be left out of all three sets of its split with its reason printed; the pinned files have none. One train
+question (row 2381) holds two U+2028 line separators, which the corpus keeps raw, so the readers split JSON Lines on
+`"\n"` only.
 
-`--check` reads the pinned wheel from `~/.cache/bellwether/datasets` and downloads it on a miss. It then needs PyPI to
-still serve that exact file: a yanked release still does when pinned by version; a release deleted from PyPI does not,
-and the check fails until the importer pins another.
+Set names starting with `bfcl-` or `gsm8k-` belong to that importer: `bellwether import bfcl` deletes any
+`bfcl-*.jsonl` it did not write, and `bellwether import gsm8k` any `gsm8k-*.jsonl`. Name hand-written sets otherwise.
+
+`--check` reads the pinned files from `~/.cache/bellwether/datasets` and downloads them on a miss. It then needs PyPI to
+still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from PyPI does not,
+and the check fails until the importer pins another. GSM8K's files are read from `raw.githubusercontent.com` at the
+pinned commit, which serves them as long as the repository keeps that commit.
 
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.

@@ -5,7 +5,8 @@ installed and none of its code runs. The weekly run uses BFCL's function-calling
 ``OpenAICompletionsHandler``, so a request is the case's messages plus the functions turned into tools the way
 that handler does: BFCL's language hint and Java/JavaScript rewrite (``_func_doc_language_specific_pre_processing``
 in ``bfcl_eval/utils.py``), then ``convert_to_tool`` for OpenAI chat completions (``bfcl_eval/model_handler/utils.py``).
-This module imports nothing beyond the standard library.
+This module, like the set writer it shares with the other importers (``corpus_sets``), imports nothing beyond the
+standard library.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ import re
 import sys
 import zipfile
 from pathlib import Path
+
+from . import corpus_sets
 
 PROJECT = "bfcl-eval"
 VERSION = "2026.3.23"
@@ -337,39 +340,14 @@ def build_sets(
     return sets
 
 
-def _text(lines: list[dict]) -> str:
-    return "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
-
-
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
     """Write every set, and remove ``bfcl-*`` files no category writes any more."""
-    written = []
-    for (kind, name), lines in sorted(sets.items()):
-        path = corpus_dir / kind / f"{name}.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(_text(lines).encode("utf-8"))
-        written.append(path)
-    for kind in ("render", "parse"):
-        for stale in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
-            if stale not in written:
-                stale.unlink()
-    return written
+    return corpus_sets.write(sets, corpus_dir, "bfcl-")
 
 
 def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
     """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    expected = {corpus_dir / kind / f"{name}.jsonl": _text(lines) for (kind, name), lines in sets.items()}
-    problems = []
-    for path, text in sorted(expected.items()):
-        if not path.is_file():
-            problems.append(f"{path}: missing")
-        elif path.read_bytes().decode("utf-8") != text:
-            problems.append(f"{path}: differs from a fresh import")
-    for kind in ("render", "parse"):
-        for path in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
-            if path not in expected:
-                problems.append(f"{path}: no BFCL category writes it")
-    return problems
+    return corpus_sets.check(sets, corpus_dir, "bfcl-", "BFCL category")
 
 
 def check_license(wheel: zipfile.ZipFile) -> None:
