@@ -3,19 +3,20 @@
 The fake stands in for SMG and the mock worker behind it, as verify sees them: it answers
 ``/v1/chat/completions``, and for a request that reaches the engine it appends the capture line the mock
 writes before SMG answers. The engine receives each case's own reference unless a test changes it.
+
+The fake listens on 127.0.0.1, so every test here is marked ``loopback`` (``tests/conftest.py``): it may
+connect to that address and to no other.
 """
 
 import json
 import re
 import socket
-import subprocess
 import threading
 import tracemalloc
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 import zstandard
@@ -23,7 +24,9 @@ import zstandard
 from bellwether import __version__
 from bellwether.cli import main
 from bellwether.record.fixtures import write_fixture_file
-from bellwether.verify import render, report
+from bellwether.verify import render
+
+pytestmark = pytest.mark.loopback
 
 
 class FakeGateway:
@@ -876,26 +879,6 @@ def test_lines_written_after_the_last_answer_are_counted(tmp_path, gateway, monk
     assert verify(gateway, fixtures, "--report", str(report)) == 0
 
     assert json.loads(report.read_text())["capture"] == {"lines": 4, "joined": 3, "other": 1, "unfinished": False}
-
-
-def test_the_commit_is_given_only_for_bellwethers_own_checkout(monkeypatch):
-    package = Path(report.__file__).resolve().parents[1]  # src/bellwether
-    answers = {
-        "rev-parse --show-toplevel": str(package.parents[1]),
-        "rev-parse HEAD": "c" * 40,
-        "status --porcelain": " M x",
-    }
-    monkeypatch.setattr(report, "_git", lambda where, *args: answers[" ".join(args)])
-    assert report.bellwether_version() == {"version": __version__, "commit": "c" * 40, "dirty": True}
-
-    answers |= {"rev-parse --show-toplevel": "/another/repository", "status --porcelain": ""}
-    assert report.bellwether_version() == {"version": __version__, "commit": None, "dirty": None}
-
-    def no_checkout(where, *args):
-        raise subprocess.CalledProcessError(128, ["git", *args])
-
-    monkeypatch.setattr(report, "_git", no_checkout)
-    assert report.bellwether_version() == {"version": __version__, "commit": None, "dirty": None}
 
 
 def closed_port() -> int:

@@ -43,3 +43,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "loopback: the test may connect to a server it runs on 127.0.0.1 or ::1; every other address and name stays refused (tests/conftest.py)",
+]
