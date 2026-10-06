@@ -255,6 +255,30 @@ def test_derender_decodes_the_ids_whole_and_keeps_special_tokens_unless_told(fak
     assert skipped["completion_request"]["skip_special_tokens"] is True
 
 
+def test_derender_of_no_ids_is_empty_text_without_a_call(fake_server, vllm_render):
+    """No ids decode to no text, as derender_pieces gives no pieces for them, and the server is not asked.
+
+    It would refuse: a choice with empty token_ids is a 400 (vllm/renderers/online_derenderer.py:639-643, mapped by
+    vllm/entrypoints/serve/exception_handling/error_response.py:69-72), the reply queued here.
+    """
+    fake_server.replies.append(
+        (
+            400,
+            {
+                "error": {
+                    "message": "choice 0 in response 4f2b6c1d has empty or null token_ids",
+                    "type": "BadRequestError",
+                    "param": None,
+                    "code": 400,
+                }
+            },
+        )
+    )
+
+    assert vllm_render.RenderServer(fake_server.url, timeout=5).derender([]) == ""
+    assert fake_server.received == []
+
+
 def test_derender_pieces_streams_one_token_per_call_and_carries_the_state_back(fake_server, vllm_render):
     """Streaming /v1/completions/derender, one token per call, gives the text each token contributes.
 
@@ -276,6 +300,27 @@ def test_derender_pieces_streams_one_token_per_call_and_carries_the_state_back(f
     assert all(body["stream"] is True for body in bodies)
     assert all(body["completion_request"]["skip_special_tokens"] is False for body in bodies)
     assert [body["stream_state"] for body in bodies] == [None] + [reply["stream_state"] for reply in replies[:-1]]
+
+
+@pytest.mark.parametrize("skip_special_tokens", [False, True])
+def test_every_derender_call_carries_a_one_token_prompt_whatever_the_ids(fake_server, vllm_render, skip_special_tokens):
+    """The completion request is there only for skip_special_tokens, so its prompt is one token, id 0.
+
+    Neither derender form reads anything else from it (vllm/renderers/online_derenderer.py:626-630 and 711-715),
+    but it is validated as a whole CompletionRequest, which refuses one without a prompt
+    (vllm/entrypoints/openai/completion/protocol.py:550-567). With the ids as that prompt, each of derender_pieces'
+    n calls would carry all n ids.
+    """
+    replies = [stream_reply(piece, *window) for piece, window in zip(OUTPUT_PIECES, WINDOWS, strict=True)]
+    fake_server.replies += [(200, completion_response(OUTPUT_TEXT, 5))] + [(200, reply) for reply in replies]
+    server = vllm_render.RenderServer(fake_server.url, timeout=5)
+
+    server.derender(OUTPUT_IDS, skip_special_tokens=skip_special_tokens)
+    server.derender_pieces(OUTPUT_IDS, skip_special_tokens=skip_special_tokens)
+
+    assert [body["completion_request"] for body in fake_server.bodies()] == [
+        {"prompt": [0], "skip_special_tokens": skip_special_tokens}
+    ] * (1 + len(OUTPUT_IDS))
 
 
 @pytest.mark.parametrize(

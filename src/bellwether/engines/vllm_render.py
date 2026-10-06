@@ -79,14 +79,17 @@ class RenderServer:
         (vllm/renderers/online_derenderer.py:645-647).
 
         ``skip_special_tokens`` defaults to False, as bellwether records an output (record/roundtrip.py:77-80);
-        the server's own default is True.
+        the server's own default is True. No ids give empty text without a call, as ``derender_pieces`` gives no
+        pieces: the server refuses a choice with no token ids (vllm/renderers/online_derenderer.py:639-643).
         """
+        if not ids:
+            return ""
         answer = self._post(
             COMPLETIONS_DERENDER,
             {
                 "stream": False,
                 "generate_responses": [{"choices": [{"index": 0, "token_ids": ids}]}],
-                "completion_request": _completion_request(ids, skip_special_tokens),
+                "completion_request": _completion_request(skip_special_tokens),
             },
         )
         return _only_choice(answer)["text"]
@@ -111,7 +114,7 @@ class RenderServer:
         the prompt (vllm/v1/engine/detokenizer.py:182-183), which changes the first piece of SentencePiece
         tokenizers.
         """
-        completion_request = _completion_request(ids, skip_special_tokens)
+        completion_request = _completion_request(skip_special_tokens)
         pieces: list[str] = []
         state = None
         for token in ids:
@@ -149,14 +152,16 @@ class RenderServer:
         return json.loads(text)
 
 
-def _completion_request(ids: list[int], skip_special_tokens: bool) -> dict:
+def _completion_request(skip_special_tokens: bool) -> dict:
     """The ``completion_request`` a derender call carries, there only to set ``skip_special_tokens``.
 
     The derenderer reads nothing else from it (vllm/renderers/online_derenderer.py:626-630 and 711-715), but
     it is validated as a whole CompletionRequest, which refuses one without a prompt
-    (vllm/entrypoints/openai/completion/protocol.py:550-567); the ids being decoded serve as that prompt.
+    (vllm/entrypoints/openai/completion/protocol.py:550-567). Its prompt is therefore one token, id 0 (a prompt
+    may be a list of non-negative ids, protocol.py:50-56), whatever the ids being decoded: with those ids as the
+    prompt, each of ``derender_pieces``' calls would carry all of them.
     """
-    return {"prompt": ids, "skip_special_tokens": skip_special_tokens}
+    return {"prompt": [0], "skip_special_tokens": skip_special_tokens}
 
 
 def _only_choice(answer: dict) -> dict:
