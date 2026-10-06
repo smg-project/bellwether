@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 import pytest
 
@@ -319,6 +320,77 @@ def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp
         f"{corpus / 'render' / 'mgsm-ja.jsonl'}: missing",
         f"{corpus / 'render' / 'mgsm-stale.jsonl'}: no MGSM file writes it",
     ]
+
+
+# Bengali as MGSM writes it, from the pinned files: U+09DC BENGALI LETTER RRA and U+09DF BENGALI LETTER YYA as one code
+# point each, which NFC writes as two. BN_QUESTION is row 2's first sentence and its question; the exemplar is exemplar
+# 8, whose final sentence gains the word for its cars so that it holds RRA too.
+RRA, YYA = "\N{BENGALI LETTER RRA}", "\N{BENGALI LETTER YYA}"
+BN_QUESTION = f"জোশ একটি বা{RRA}ি ফ্লিপ করার সিদ্ধান্ত নি{YYA}েছেন। তিনি কত ডলার লাভ করলেন?"
+BN_EXEMPLAR_QUESTION = f"পার্কিং লটে যদি 3 টি গা{RRA}ি থাকে এবং আরও 2টি গা{RRA}ি আসে, তাহলে পার্কিং লটটিতে কতগুলি গা{RRA}ি আছে?"
+BN_SOLUTION = f"শুরুতে সেখানে 3টি গা{RRA}ি ছিল, আরও 2টি গা{RRA}ি আসে, তাহলে বর্তমানে 3 +2 = 5টি গা{RRA}ি থাকা উচিৎ।"
+BN_FINAL = f"উত্তর হল 5টি গা{RRA}ি।"
+
+
+def test_a_case_is_named_by_its_row_not_by_its_place_among_the_rows_kept():
+    sets = mgsm.language_sets({"ja": tsv(["How\tmany?\t18", f"{JA}\t18"])}, skipped=[])
+    [render] = sets[("render", "mgsm-ja")]
+    [content] = sets[("parse", "mgsm-ja-content")]
+    assert (render["name"], render["notes"], render["origin"]["row"]) == ("mgsm-ja-1", "MGSM ja row 1", 1)
+    assert (content["name"], content["notes"], content["origin"]["row"]) == ("mgsm-ja-content-1", "MGSM ja row 1", 1)
+
+
+def test_text_that_is_not_in_nfc_reaches_the_written_sets_as_written(tmp_path):
+    for text in [BN_QUESTION, BN_EXEMPLAR_QUESTION, BN_SOLUTION, BN_FINAL]:
+        assert not unicodedata.is_normalized("NFC", text)
+    question_label, answer_label, _ = mgsm.WORDING["bn"]
+    exemplar = {"q": question_label + BN_EXEMPLAR_QUESTION, "a": f"{answer_label}{BN_SOLUTION} {BN_FINAL}"}
+    exemplars = exemplars_py({"bn": {"8": exemplar}}, [11, 29, 39, 9, 33, 8, 8, 5])
+    mgsm.write_sets(mgsm.build_sets({"bn": tsv([f"{BN_QUESTION}\t70000"])}, exemplars), tmp_path)
+    for kind, name in [("render", "mgsm-bn"), ("parse", "mgsm-bn-content")]:
+        [case] = read_cases(tmp_path / kind / f"{name}.jsonl")
+        assert case.request == {"messages": [{"role": "user", "content": BN_QUESTION}]}
+    [case] = read_cases(tmp_path / "parse" / "mgsm-exemplars.jsonl")
+    assert case.request == {"messages": [{"role": "user", "content": BN_EXEMPLAR_QUESTION}]}
+    assert case.message == {"reasoning_content": BN_SOLUTION, "content": BN_FINAL}
+
+
+def test_a_line_of_whitespace_alone_is_a_row_named_with_its_reason_not_a_line_dropped():
+    skipped: list[tuple[str, str]] = []
+    sets = mgsm.language_sets({"ja": tsv([f"{JA}\t18", "   ", "\t", f"{JA}\t5"])}, skipped=skipped)
+    assert [line["origin"]["row"] for line in sets[("parse", "mgsm-ja-content")]] == [0, 3]
+    assert skipped == [
+        ("ja row 1", "the line holds 0 tabs, not the one between the question and the final answer"),
+        ("ja row 2", "the question is empty"),
+    ]
+
+
+def test_whitespace_at_the_edges_of_a_question_or_an_exemplar_is_kept_as_written():
+    question = f"  {JA} "
+    sets = mgsm.language_sets({"ja": tsv([f"{question}\t18"])})
+    for key in [("render", "mgsm-ja"), ("parse", "mgsm-ja-content")]:
+        [line] = sets[key]
+        assert line["request"] == {"messages": [{"role": "user", "content": question}]}
+    exemplar = {"q": f"Question:  {EN_QUESTION}\n", "a": f"Step-by-Step Answer:  {EN_SOLUTION} {EN_FINAL} "}
+    [line] = mgsm.exemplar_set(exemplars_py({"en": {"1": exemplar}}, [11]))
+    assert line["request"] == {"messages": [{"role": "user", "content": f" {EN_QUESTION}\n"}]}
+    assert line["message"] == {"reasoning_content": f" {EN_SOLUTION}", "content": f"{EN_FINAL} "}
+
+
+# 18 in Bengali, Devanagari, Arabic-Indic, fullwidth and Thai digits, and an ASCII 1 before a Bengali 8: int() reads
+# each as 18, and the regular expression \d matches each.
+OTHER_DIGITS = ["\u09e7\u09ee", "\u0967\u096e", "\u0661\u0668", "\uff11\uff18", "\u0e51\u0e58", "1\u09ee"]
+
+
+def test_a_final_answer_in_digits_other_than_ascii_is_unusable_in_a_row_or_a_final_sentence():
+    for final_answer in OTHER_DIGITS:
+        assert int(final_answer) == 18
+        with pytest.raises(mgsm.Unusable, match="is not an integer"):
+            mgsm.question_and_final_answer(["How many?", final_answer])
+    eleven = "\u09e7\u09e7"  # 11 in Bengali digits
+    exemplar = dict(EN_1, a=f"Step-by-Step Answer: {EN_SOLUTION} The answer is {eleven}.")
+    with pytest.raises(mgsm.Unusable, match="does not state the exemplar's final answer 11"):
+        mgsm.split_exemplar("en", exemplar, 11)
 
 
 LANGUAGES = ["bn", "de", "en", "es", "fr", "ja", "ru", "sw", "te", "th", "zh"]
