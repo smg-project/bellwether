@@ -25,6 +25,7 @@ class FakeGateway:
     def __init__(self, capture):
         self.capture = capture
         self.prompts: dict[str, tuple[list[int] | None, str | None]] = {}  # rid -> what the engine receives
+        self.request_ids: dict[str, str] = {}  # rid -> the engine's request_id, where it is not the rid as sent
         # rid -> the status and the message SMG answers with; bytes are a plain body from something in front of it
         self.rejections: dict[str, tuple[int, str | bytes]] = {}
         self.appended_after: dict[str, str] = {}  # rid -> raw text another client appends after it
@@ -68,7 +69,7 @@ class FakeGateway:
         ids, text = self.prompts.get(rid, ([], ""))
         if rid in self.prompts:
             line = {
-                "request_id": rid,
+                "request_id": self.request_ids.get(rid, rid),
                 "input_ids": ids,
                 "original_text": text,
                 "stream": body.get("stream"),
@@ -131,6 +132,8 @@ CASES = {
         "<t>Weather?",
     ),
 }
+# What SMG appends to a rid under prefill-decode disaggregation: a UUIDv7, a fresh one for each attempt.
+PD_SUFFIX = "-0199b9d4-6a52-7c3e-8f21-{:012x}"
 
 
 def verify(gateway, fixtures, *extra) -> int:
@@ -259,6 +262,39 @@ def test_a_capture_file_nobody_writes_leaves_every_answered_case_missing(tmp_pat
 
     assert main(["verify", *argv, "--report", str(report)]) == 1
     assert {case["verdict"] for case in json.loads(report.read_text())["cases"]} == {"missing"}
+
+
+def test_a_request_id_with_the_prefill_decode_suffix_joins_to_its_case(tmp_path, gateway):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    cases = write_model(fixtures, "m1", "org/M1", CASES)
+    gateway.serve(cases)
+    for n, case_id in enumerate(cases):
+        gateway.request_ids[case_id] = case_id + PD_SUFFIX.format(n)
+    # A retry goes out under a fresh suffix; the first line for a case is the one compared.
+    retry = {"request_id": "m1/render/hello" + PD_SUFFIX.format(99), "input_ids": [1]}
+    gateway.appended_after["m1/render/hello"] = json.dumps(retry) + "\n"
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 0
+
+    verdicts = {case["id"]: case["verdict"] for case in json.loads(report.read_text())["cases"]}
+    assert verdicts == dict.fromkeys(cases, "match")
+
+
+@pytest.mark.parametrize("prefill_decode", [False, True], ids=["verbatim", "prefill-decode"])
+def test_a_capture_line_joins_one_case_only(tmp_path, gateway, prefill_decode):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    # One case's id is the other's with a suffix of SMG's form after it.
+    twin = "hello" + PD_SUFFIX.format(7)
+    cases = write_model(fixtures, "m1", "org/M1", {"hello": CASES["hello"], twin: (BYE, [7, 8], "b")})
+    gateway.serve(cases)
+    del gateway.prompts["m1/render/hello"]  # so the only line that could join it is the twin's
+    if prefill_decode:
+        gateway.request_ids[f"m1/render/{twin}"] = f"m1/render/{twin}" + PD_SUFFIX.format(8)
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 1
+
+    verdicts = {case["id"]: case["verdict"] for case in json.loads(report.read_text())["cases"]}
+    assert verdicts == {"m1/render/hello": "missing", f"m1/render/{twin}": "match"}
 
 
 def test_listed_known_differences_pass_while_they_differ_or_are_rejected(tmp_path, gateway, capsys):
@@ -426,6 +462,9 @@ def closed_port() -> int:
         "chunk plans",
         "unknown model",
         "no render cases",
+        "manifest without a revision",
+        "manifest not TOML",
+        "manifest not readable",
         "bad known file",
         "no gateway",
         "not a capture file",
@@ -445,6 +484,16 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         extra, message = ["--model", "org/Nope"], "no manifest under"
     elif problem == "no render cases":
         extra, message = ["--model", "org/M3"], "no render fixtures"
+    elif problem == "manifest without a revision":
+        (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3"\n')
+        message = "`revision` is required"
+    elif problem == "manifest not TOML":
+        # --model finds a manifest by reading each one in turn, so the error must name the file it stopped at.
+        (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3\n')
+        extra, message = ["--model", "org/M3"], str(fixtures / "m3" / "manifest.toml")
+    elif problem == "manifest not readable":
+        (fixtures / "m4" / "manifest.toml").mkdir(parents=True)
+        message = str(fixtures / "m4" / "manifest.toml")
     elif problem == "bad known file":
         (tmp_path / "known.toml").write_text('"m1/render/hello" = ""\n')
         extra, message = ["--known", str(tmp_path / "known.toml")], "known.toml"

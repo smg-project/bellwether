@@ -193,7 +193,7 @@ def describe(result: dict) -> str:
     elif result["verdict"] == "rejected":
         detail = f"HTTP {result['status']}: {result['message']}"
     elif result["verdict"] == "missing":
-        detail = "SMG answered, but the capture has no line with this request_id"
+        detail = "SMG answered, but no capture line carries this case's id"
     elif result["known"] is not None:
         detail = "matches"
     if result["known"] is not None:

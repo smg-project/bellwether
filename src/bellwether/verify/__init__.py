@@ -60,13 +60,16 @@ def run(args: argparse.Namespace) -> int:
 
 
 def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]:
-    """The manifests of the named models, or every manifest under ``fixtures`` when none is named."""
-    if models:
-        try:
+    """The manifests of the named models, or every manifest under ``fixtures`` when none is named.
+
+    A manifest that cannot be read or is not valid stops the run, as a model without one does: no verdict is given.
+    """
+    try:
+        if models:
             return [find_manifest(fixtures, model) for model in dict.fromkeys(models)]
-        except FileNotFoundError as err:
-            raise CannotVerify(str(err)) from None
-    manifests = [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
+        manifests = [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
+    except (OSError, ValueError) as err:
+        raise CannotVerify(str(err)) from None
     if not manifests:
         raise CannotVerify(f"no manifests under {fixtures}")
     return manifests

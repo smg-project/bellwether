@@ -1,14 +1,16 @@
 """Render verify: does SMG send the engine the prompt token ids the reference renders?
 
 Each render fixture's request goes to SMG's chat endpoint with the fixture id as ``rid``. SMG passes a
-client ``rid`` through as the engine request's ``request_id``, and the mock worker behind SMG writes every
-Generate request it receives to its capture file as one JSON line, so a case's capture line is found by
-its id and the ``input_ids`` on it are compared with ``reference.input_ids``.
+client ``rid`` through as the engine request's ``request_id``, verbatim or, under prefill-decode
+disaggregation, with a UUID after it, and the mock worker behind SMG writes every Generate request it
+receives to its capture file as one JSON line, so a case's capture line is found by its id and the
+``input_ids`` on it are compared with ``reference.input_ids``.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -19,6 +21,9 @@ from bellwether.manifest import Manifest
 TIMEOUT = 60.0  # seconds per request; a render case takes milliseconds, so this only catches a stuck SMG
 ID_WINDOW = 8  # ids shown on each side of the first difference
 TEXT_WINDOW = 40  # characters shown on each side of the first difference in the prompt text
+# Under prefill-decode disaggregation SMG's gRPC router sends a rid as `{rid}-{uuid}`, with a fresh UUIDv7 for each
+# attempt (smg's resolve_request_id_stamp and IdStamp::restamp). Any UUID in canonical form is taken off.
+PREFILL_DECODE_ID = re.compile(r"(.+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 class CannotVerify(Exception):
@@ -87,11 +92,12 @@ def capture_size(path: Path) -> int:
 
 
 def read_capture(path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
-    """The first capture line for each wanted request id among the complete lines written since ``start``.
+    """The first capture line for each wanted fixture id among the complete lines written since ``start``.
 
     Lines for other request ids are other clients'. The text after the last newline is a line the mock is still
     writing for one of them: every request this run sent was answered, and the mock writes a request's line
-    before the engine answers. SMG retries under the same id, so a later line for an id is a retry.
+    before the engine answers. A later line for a case is a retry or, under prefill-decode, the other leg's copy
+    of the request.
     """
     try:
         with path.open("rb") as f:
@@ -110,13 +116,28 @@ def read_capture(path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
         except ValueError:
             raise CannotVerify(f"{path}: the line at byte {at} is not JSON; is this the mock's capture file?") from None
         request_id = line.get("request_id") if isinstance(line, dict) else None
-        if not isinstance(request_id, str) or request_id not in wanted or request_id in found:
+        case_id = fixture_id(request_id, wanted)
+        if case_id is None or case_id in found:
             continue
         ids = line.get("input_ids")
         if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
             raise CannotVerify(f"{path}: the line at byte {at} for {request_id} has no list of integer input_ids")
-        found[request_id] = line
+        found[case_id] = line
     return found
+
+
+def fixture_id(request_id: object, wanted: set[str]) -> str | None:
+    """The wanted fixture id a captured ``request_id`` carries, or None.
+
+    An id that is a wanted fixture id as it stands is that case's, so no line joins two cases; otherwise one
+    prefill-decode suffix is taken off its end.
+    """
+    if not isinstance(request_id, str):
+        return None
+    if request_id in wanted:
+        return request_id
+    match = PREFILL_DECODE_ID.fullmatch(request_id)
+    return match[1] if match and match[1] in wanted else None
 
 
 def compare(case: dict, line: dict) -> dict:
