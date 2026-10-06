@@ -288,8 +288,9 @@ def test_written_sets_are_raw_unicode_that_reads_back_whole_and_a_rewrite_is_byt
     def sets():
         return mgsm.build_sets({"te": tsv([f"{TE_QUESTION}\t39"])}, exemplars_py({"ja": {"1": ja_5}}, [11]))
 
-    written = mgsm.write_sets(sets(), corpus)
+    written = mgsm.write_sets(sets(), corpus, CC_BY)
     assert sorted(path.relative_to(corpus).as_posix() for path in written) == [
+        "licenses/mgsm-LICENSE",
         "parse/mgsm-exemplars.jsonl",
         "parse/mgsm-te-content.jsonl",
         "render/mgsm-te.jsonl",
@@ -302,20 +303,20 @@ def test_written_sets_are_raw_unicode_that_reads_back_whole_and_a_rewrite_is_byt
     assert exemplar.request["messages"][0]["content"] == "ロジャーは5個の\nテニスボールがあります。"
     for path in [corpus / "render" / "mgsm-te.jsonl", corpus / "parse" / "mgsm-te-content.jsonl"]:
         assert [case.request["messages"][0]["content"] for case in read_cases(path)] == [TE_QUESTION]
-    mgsm.write_sets(sets(), corpus)
+    mgsm.write_sets(sets(), corpus, CC_BY)
     assert {path: path.read_bytes() for path in written} == first
 
 
 def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp_path):
     sets = mgsm.build_sets({"ja": tsv([f"{JA}\t18"])}, exemplars_py({"en": {"1": EN_1}}, [11]))
     corpus = tmp_path / "corpus"
-    mgsm.write_sets(sets, corpus)
-    assert mgsm.check_sets(sets, corpus) == []
+    mgsm.write_sets(sets, corpus, CC_BY)
+    assert mgsm.check_sets(sets, corpus, CC_BY) == []
     (corpus / "parse" / "mgsm-ja-content.jsonl").write_text("{}\n")
     (corpus / "render" / "mgsm-ja.jsonl").unlink()
     (corpus / "render" / "mgsm-stale.jsonl").write_text("{}\n")
     (corpus / "render" / "gsm8k-other.jsonl").write_text("{}\n")
-    assert mgsm.check_sets(sets, corpus) == [
+    assert mgsm.check_sets(sets, corpus, CC_BY) == [
         f"{corpus / 'parse' / 'mgsm-ja-content.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'mgsm-ja.jsonl'}: missing",
         f"{corpus / 'render' / 'mgsm-stale.jsonl'}: no MGSM file writes it",
@@ -346,7 +347,7 @@ def test_text_that_is_not_in_nfc_reaches_the_written_sets_as_written(tmp_path):
     question_label, answer_label, _ = mgsm.WORDING["bn"]
     exemplar = {"q": question_label + BN_EXEMPLAR_QUESTION, "a": f"{answer_label}{BN_SOLUTION} {BN_FINAL}"}
     exemplars = exemplars_py({"bn": {"8": exemplar}}, [11, 29, 39, 9, 33, 8, 8, 5])
-    mgsm.write_sets(mgsm.build_sets({"bn": tsv([f"{BN_QUESTION}\t70000"])}, exemplars), tmp_path)
+    mgsm.write_sets(mgsm.build_sets({"bn": tsv([f"{BN_QUESTION}\t70000"])}, exemplars), tmp_path, CC_BY)
     for kind, name in [("render", "mgsm-bn"), ("parse", "mgsm-bn-content")]:
         [case] = read_cases(tmp_path / kind / f"{name}.jsonl")
         assert case.request == {"messages": [{"role": "user", "content": BN_QUESTION}]}
@@ -470,6 +471,28 @@ def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_th
         "mgsm-ja-content-0",
         "mgsm-ja-content-2",
     ]
+
+
+def test_the_command_writes_the_pinned_license_next_to_the_sets(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, pinned_files())
+    corpus = tmp_path / "corpus"
+    assert main(["import", "mgsm", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
+    assert (corpus / "licenses" / "mgsm-LICENSE").read_bytes() == CC_BY
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    serve(tmp_path, monkeypatch, pinned_files())
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "mgsm-LICENSE"
+    argv = ["import", "mgsm", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    copy.unlink()
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(CC_BY + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(CC_BY)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
 
 
 def test_the_command_refuses_a_license_that_is_not_cc_by_4_and_writes_nothing(tmp_path, monkeypatch):

@@ -29,6 +29,9 @@ LICENSE = "CC-BY-4.0"
 DATA = "mgsm"
 LICENSE_FILE = f"{DATA}/LICENSE"
 LICENSE_SHA256 = "c97deeeca4ae375a0334bc7f7af5f707aabfcec959c53c783b9f8771d28fd5b3"
+# Where the import writes the pinned LICENSE, under the corpus root: the corpus keeps each dataset's license file
+# next to its sets.
+LICENSE_COPY = "licenses/mgsm-LICENSE"
 # The reviewed LICENSE file's first line.
 LICENSE_TITLE = "Creative Commons Attribution 4.0 International Public License (CC-BY)"
 EXEMPLARS_FILE = f"{DATA}/exemplars.py"
@@ -250,14 +253,14 @@ def build_sets(
     return {**language_sets(files, skipped), ("parse", EXEMPLAR_SET): exemplar_set(exemplars, skipped)}
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``mgsm-*`` files the import no longer writes."""
-    return corpus_sets.write(sets, corpus_dir, "mgsm-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the pinned LICENSE, and remove ``mgsm-*`` set files the import no longer writes."""
+    return corpus_sets.write(sets, corpus_dir, "mgsm-", {LICENSE_COPY: license_text})
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "mgsm-", "MGSM file")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the LICENSE copy, that differs from a fresh import; empty when none does."""
+    return corpus_sets.check(sets, corpus_dir, "mgsm-", "MGSM file", {LICENSE_COPY: license_text})
 
 
 def fetch(path: str, sha256: str, cache: Path) -> bytes:
@@ -266,14 +269,15 @@ def fetch(path: str, sha256: str, cache: Path) -> bytes:
 
 
 def run(args: argparse.Namespace) -> int:
-    check_license(fetch(LICENSE_FILE, LICENSE_SHA256, args.cache))
+    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache)
+    check_license(license_text)
     files = {lang: fetch(data_file(lang), sha256, args.cache) for lang, sha256 in SHA256.items()}
     exemplars = fetch(EXEMPLARS_FILE, EXEMPLARS_SHA256, args.cache)
     skipped: list[tuple[str, str]] = []
     sets = build_sets(files, exemplars, skipped)
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(kept, args.corpus)
+        problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -281,5 +285,5 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     corpus_sets.report("MGSM", sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped(skipped)
-    write_sets(kept, args.corpus)
+    write_sets(kept, args.corpus, license_text)
     return 0
