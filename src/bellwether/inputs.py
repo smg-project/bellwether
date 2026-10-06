@@ -102,7 +102,10 @@ def _sha256(path: Path, stop_ids_from_config: bool) -> str:
     data = path.read_bytes()
     fields = NARROWED.get(path.name)
     if fields is not None:
-        loaded = json.loads(data)
+        try:
+            loaded = json.loads(data)
+        except ValueError as err:  # JSONDecodeError, and UnicodeDecodeError for bytes that are not text
+            raise ValueError(f"{path}: not valid JSON: {err}") from err
         if not isinstance(loaded, dict):
             raise ValueError(f"{path}: not a JSON object")
         narrowed = {key: loaded.get(key) for key in fields}

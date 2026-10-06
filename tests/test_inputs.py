@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 
 import pytest
@@ -67,6 +68,14 @@ def test_chat_template_json_is_hashed_over_its_template_so_its_whitespace_does_n
     assert oracle_inputs(str(checkpoint), "local") == inputs
     path.write_text(json.dumps({"chat_template": "{{ messages[0] }}"}))
     assert oracle_inputs(str(checkpoint), "local")["chat_template.json"] != inputs["chat_template.json"]
+
+
+@pytest.mark.parametrize("name", ["config.json", "generation_config.json", "chat_template.json"])
+@pytest.mark.parametrize("data", [b'{"eos_token_id": 2,', b"\xff\xfe not text"], ids=["not-json", "not-utf-8"])
+def test_a_narrowed_file_that_does_not_parse_is_named(checkpoint, name, data):
+    (checkpoint / name).write_bytes(data)
+    with pytest.raises(ValueError, match=re.escape(f"{checkpoint / name}: not valid JSON: ")):
+        oracle_inputs(str(checkpoint), "local")
 
 
 def test_sampling_defaults_leave_the_inputs_as_they_are_and_token_ids_change_them(checkpoint):
