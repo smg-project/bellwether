@@ -907,3 +907,58 @@ def test_the_committed_fixture_check_skips_a_set_git_lfs_has_not_fetched(tmp_pat
     pointer.write_text(LFS_POINTER)
     with pytest.raises(pytest.skip.Exception, match=re.escape(FETCH_BENCH_X)):
         check_committed_set(pointer, tmp_path)
+
+
+needs_git_lfs = pytest.mark.skipif(not runs("git", "lfs", "version"), reason="needs git and git-lfs")
+
+
+@pytest.fixture
+def lfs_clone(git_sandbox, monkeypatch) -> pathlib.Path:
+    """A default clone of a repository (``source``, beside it) that keeps a benchmark set in Git LFS under this
+    repository's .gitattributes and .lfsconfig, pushed to a local remote: the clone holds the set's pointer."""
+    for role in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{role}_NAME", "bellwether")
+        monkeypatch.setenv(f"GIT_{role}_EMAIL", "bellwether@example.com")
+    source, remote, clone = git_sandbox / "source", git_sandbox / "remote.git", git_sandbox / "clone"
+    git(git_sandbox, "init", "-q", "--bare", "-b", "main", str(remote))
+    git(git_sandbox, "init", "-q", "-b", "main", str(source))
+    git(source, "lfs", "install")  # the LFS filters, in the sandbox's config, and the hook that pushes LFS objects
+    for name in (".gitattributes", ".lfsconfig"):
+        (source / name).write_bytes((ROOT / name).read_bytes())
+    write_manifest(source / "fixtures", "m", "acme/M")
+    write_fixture_file(source / "fixtures" / "m" / "render" / "common.jsonl", render_cases("a"))
+    write_fixture_file(source / "fixtures" / "m" / "render" / "bench-x.jsonl.zst", render_cases("x-0", "x-1"))
+    git(source, "add", "-A")
+    git(source, "commit", "-q", "-m", "fixtures")
+    git(source, "push", "-q", remote.as_uri(), "main")
+    git(git_sandbox, "clone", "-q", remote.as_uri(), str(clone))
+    return clone
+
+
+@needs_git_lfs
+def test_unpack_fetches_the_sets_a_default_clone_holds_as_pointers(lfs_clone, monkeypatch):
+    assert is_lfs_pointer(lfs_clone / "fixtures" / "m" / "render" / "bench-x.jsonl.zst")
+    monkeypatch.chdir(lfs_clone / "fixtures")
+    out = lfs_clone.parent / "plain"
+    assert main(["unpack", "--fixtures", ".", "--out", str(out)]) == 0
+    source = lfs_clone.parent / "source" / "fixtures" / "m" / "render"
+    assert (out / "m" / "render" / "bench-x.jsonl").read_text() == plain_text(source / "bench-x.jsonl.zst")
+    assert (out / "m" / "render" / "common.jsonl").read_text() == (source / "common.jsonl").read_text()
+
+
+@needs_git
+def test_unpack_names_the_sets_it_could_not_fetch_and_writes_nothing(git_sandbox, tiny_model, monkeypatch, capsys):
+    git(git_sandbox, "init", "-q")
+    common = [{"name": "a", "request": {"messages": [user("A")]}}]
+    record(git_sandbox, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))
+    pointer = git_sandbox / "fixtures" / "tiny-chat" / "render" / "bench-x.jsonl.zst"
+    pointer.write_text(LFS_POINTER)
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)  # a pull that fetches nothing: no git-lfs, no network
+    out = git_sandbox / "plain"
+    assert main(["unpack", "--fixtures", str(git_sandbox / "fixtures"), "--out", str(out)]) == 1
+    assert asked == [[pointer]]
+    err = capsys.readouterr().err
+    assert str(pointer) in err
+    assert "git lfs pull --include 'fixtures/tiny-chat/render/bench-x.jsonl.zst' --exclude ''" in err
+    assert not out.exists()
