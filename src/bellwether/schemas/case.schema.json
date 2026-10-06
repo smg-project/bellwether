@@ -5,6 +5,13 @@
   "description": "One fixture line: a case plus the reference result and each witness's result.",
   "type": "object",
   "required": ["id", "kind", "model", "reference"],
+  "allOf": [
+    {
+      "description": "a parse line carries the output's token ids and the text each one contributes",
+      "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
+      "then": {"required": ["output_ids", "output_pieces"]}
+    }
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {"type": "string", "pattern": "^[a-z0-9.-]+/(render|parse|tokenize|detokenize)/[a-z0-9-]+$"},

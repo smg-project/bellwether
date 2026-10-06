@@ -51,6 +51,7 @@ def test_case_schema_is_valid_and_accepts_examples():
         "model": "moonshotai/Kimi-K3",
         "tools": [],
         "output_ids": [5, 6, 7],
+        "output_pieces": ["<", "tool", ">"],
         "chunk_plans": {"whole": None, "per_token": None, "random-42": [2, 1]},
         "reference": {"source": "roundtrip", "message": {"role": "assistant"}, "finish_reason": "tool_calls"},
     }

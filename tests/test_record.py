@@ -473,6 +473,22 @@ def test_fixture_writer_rejects_a_line_off_the_schema(tmp_path):
     assert read_fixture_file(tmp_path / "x.jsonl") == {"tiny-chat/render/a": good}
 
 
+def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path):
+    line = {
+        "id": "tiny-chat/parse/a",
+        "kind": "parse",
+        "model": "tiny-chat",
+        "output_ids": [5, 6],
+        "output_pieces": ["a", "b"],
+        "reference": {"source": "roundtrip", "text": "ab"},
+    }
+    write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/parse/a": line})
+    for missing in ("output_ids", "output_pieces"):
+        partial = {key: value for key, value in line.items() if key != missing}
+        with pytest.raises(ValueError, match="tiny-chat/parse/a: does not match the case schema at \\(root\\)"):
+            write_fixture_file(tmp_path / "y.jsonl", {"tiny-chat/parse/a": partial})
+
+
 @pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/*/*.jsonl")), ids=lambda p: str(p.relative_to(ROOT)))
 def test_committed_fixtures_are_canonical_sorted_and_valid(path):
     manifest = load_manifest(path.parent.parent / "manifest.toml")
