@@ -9,6 +9,7 @@ from bellwether.importers import github, gsm8k
 from bellwether.record.corpus import read_cases
 
 FILE = "data/test.jsonl"
+COMMIT = "c0ffee" + "0" * 34
 
 
 def sha(data: bytes) -> str:
@@ -28,15 +29,15 @@ def opener(data: bytes, calls: list[str]):
 def test_fetch_downloads_the_file_at_the_commit_into_the_cache(tmp_path, monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(github, "urlopen", opener(b"rows", calls))
-    path = github.fetch("acme", "sums", "c0ffee", FILE, sha(b"rows"), cache=tmp_path)
-    assert path == tmp_path / "github" / "acme" / "sums" / "c0ffee" / "data" / "test.jsonl"
+    path = github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path)
+    assert path == tmp_path / "github" / "acme" / "sums" / COMMIT / "data" / "test.jsonl"
     assert path.read_bytes() == b"rows"
-    assert calls == ["https://raw.githubusercontent.com/acme/sums/c0ffee/data/test.jsonl"]
+    assert calls == [f"https://raw.githubusercontent.com/acme/sums/{COMMIT}/data/test.jsonl"]
     assert [p.name for p in path.parent.iterdir()] == ["test.jsonl"]
 
 
 def cached(tmp_path, data: bytes):
-    path = tmp_path / "github" / "acme" / "sums" / "c0ffee" / FILE
+    path = tmp_path / "github" / "acme" / "sums" / COMMIT / FILE
     path.parent.mkdir(parents=True)
     path.write_bytes(data)
     return path
@@ -45,41 +46,44 @@ def cached(tmp_path, data: bytes):
 def test_fetch_uses_a_cached_file_whose_hash_matches_without_the_network(tmp_path, monkeypatch):
     path = cached(tmp_path, b"rows")
     monkeypatch.setattr(github, "urlopen", lambda *a, **k: pytest.fail("no download expected"))
-    assert github.fetch("acme", "sums", "c0ffee", FILE, sha(b"rows"), cache=tmp_path) == path
+    assert github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path) == path
 
 
 def test_fetch_rejects_a_download_that_is_not_the_pinned_one_and_caches_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(github, "urlopen", opener(b"tampered", []))
     with pytest.raises(ValueError, match="is not the pinned"):
-        github.fetch("acme", "sums", "c0ffee", FILE, sha(b"rows"), cache=tmp_path)
+        github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_refuses_a_ref_that_is_not_a_full_commit_id_before_reading_anything(tmp_path, monkeypatch):
+    monkeypatch.setattr(github, "urlopen", lambda *a, **k: pytest.fail("no download expected"))
+    for ref in ["main", "v1.0", COMMIT[:7], COMMIT.upper(), COMMIT + "0", COMMIT[:-1] + "g"]:
+        cached_ref = tmp_path / "github" / "acme" / "sums" / ref / FILE
+        cached_ref.parent.mkdir(parents=True, exist_ok=True)
+        cached_ref.write_bytes(b"rows")
+        with pytest.raises(ValueError, match="is not a commit id"):
+            github.fetch("acme", "sums", ref, FILE, sha(b"rows"), cache=tmp_path)
 
 
 def test_fetch_replaces_a_cached_file_whose_hash_does_not_match(tmp_path, monkeypatch):
     cached(tmp_path, b"stale")
     monkeypatch.setattr(github, "urlopen", opener(b"rows", []))
-    assert github.fetch("acme", "sums", "c0ffee", FILE, sha(b"rows"), cache=tmp_path).read_bytes() == b"rows"
+    assert github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path).read_bytes() == b"rows"
 
 
 MIT = b"MIT License\n\nCopyright (c) 2021 OpenAI\n"
 
 
-def test_the_reviewed_license_passes(monkeypatch):
-    monkeypatch.setattr(gsm8k, "LICENSE_SHA256", sha(MIT))
+def test_the_mit_license_passes():
     gsm8k.check_license(MIT)
 
 
-def test_a_license_file_other_than_the_reviewed_one_is_refused(monkeypatch):
-    monkeypatch.setattr(gsm8k, "LICENSE_SHA256", sha(MIT))
-    with pytest.raises(ValueError, match="is not the reviewed"):
-        gsm8k.check_license(MIT + b"Additional terms apply.\n")
-
-
-def test_a_license_that_is_not_mit_is_refused_even_when_its_hash_is_pinned(monkeypatch):
-    apache = b"Apache License\nVersion 2.0, January 2004\n"
-    monkeypatch.setattr(gsm8k, "LICENSE_SHA256", sha(apache))
+def test_a_license_that_is_not_mit_is_refused():
+    # fetch holds the file to its pinned sha256, so a pin moved to a commit whose license is not MIT would pass on an
+    # updated hash alone; this check is what refuses it.
     with pytest.raises(ValueError, match="not the MIT License"):
-        gsm8k.check_license(apache)
+        gsm8k.check_license(b"Apache License\nVersion 2.0, January 2004\n")
 
 
 def jsonl(rows: list[dict]) -> bytes:
@@ -101,7 +105,14 @@ ROW = {"question": "Janet’s ducks lay 16 eggs per day. How much does she make?
 
 def test_the_answer_splits_into_the_solution_as_written_and_the_final_answer():
     assert gsm8k.split_answer(ROW["answer"]) == (SOLUTION, "18")
-    assert gsm8k.split_answer("1 + 1 = <<1+1=2>>2\n#### 2 ") == ("1 + 1 = <<1+1=2>>2", "2")
+    assert gsm8k.split_answer("1 + 1 = <<1+1=2>>2 \n#### 2") == ("1 + 1 = <<1+1=2>>2 ", "2")
+
+
+def test_a_final_answer_with_whitespace_around_it_is_unusable_rather_than_stripped():
+    # Stripped, it would change the reasoning set's content and not the content set's, and no line would say so.
+    for answer in ["1 + 1 = <<1+1=2>>2\n#### 2 ", "1 + 1 = <<1+1=2>>2\n####  2", "1 + 1 = <<1+1=2>>2\n#### 2\r"]:
+        with pytest.raises(gsm8k.Unusable, match="the final answer after '#### ' starts or ends with whitespace"):
+            gsm8k.split_answer(answer)
 
 
 def test_an_answer_whose_last_line_is_not_the_final_answer_is_unusable():

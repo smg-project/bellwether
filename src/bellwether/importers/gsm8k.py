@@ -10,7 +10,6 @@ standard library.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 from pathlib import Path
 
@@ -42,17 +41,13 @@ class Unusable(ValueError):
 
 
 def check_license(text: bytes) -> None:
-    """Refuse a LICENSE file other than the one this importer was reviewed for.
+    """Refuse a LICENSE file that is not the MIT License.
 
-    The sha256 pins the reviewed text. The opening line is checked as well, so that moving the pins to another commit
-    whose license is no longer MIT cannot pass on an updated hash alone.
+    ``fetch`` has already held the file to ``LICENSE_SHA256``, the reviewed text. The opening line is checked as well,
+    so that moving the pins to another commit whose license is no longer MIT cannot pass on an updated hash alone.
     """
-    where = f"{LICENSE_FILE} at {COMMIT}"
     if not text.decode("utf-8").startswith("MIT License"):
-        raise ValueError(f"{where}: not the MIT License; review it before importing")
-    digest = hashlib.sha256(text).hexdigest()
-    if digest != LICENSE_SHA256:
-        raise ValueError(f"{where}: sha256 {digest} is not the reviewed {LICENSE_SHA256}; review it before importing")
+        raise ValueError(f"{LICENSE_FILE} at {COMMIT}: not the MIT License; review it before importing")
 
 
 def read_rows(data: bytes, where: str) -> list[tuple[int, dict]]:
@@ -63,12 +58,17 @@ def read_rows(data: bytes, where: str) -> list[tuple[int, dict]]:
 def split_answer(answer: str) -> tuple[str, str]:
     """The worked solution and the final answer: the text before the answer's last line, ``#### <final answer>``.
 
-    The solution is kept as written, calculator annotations included, without the newline that ends it.
+    Both are kept as written: the solution with its calculator annotations, without the newline that ends it, and the
+    final answer as the rest of the last line. A final answer that starts or ends with whitespace is ``Unusable``:
+    stripped, it would change the reasoning set's content and not the content set's, and no line would say so.
     """
     solution, _, last = answer.rpartition("\n")
     if not last.startswith(FINAL):
         raise Unusable("the answer's last line is not '#### <final answer>'")
-    return solution, last[len(FINAL) :].strip()
+    final = last[len(FINAL) :]
+    if final != final.strip():
+        raise Unusable("the final answer after '#### ' starts or ends with whitespace")
+    return solution, final
 
 
 def data_file(split: str) -> str:

@@ -33,7 +33,7 @@ A case that repeats an earlier one is left out, since it tests nothing the first
 of the same kind and its `request` (render), or its `request` and `message` (parse), is the same JSON, key order
 included, since a template can see key order; names, notes and origin do not count. Earlier is in the order the importer
 builds its sets. The import names each case it leaves out and the case it repeats, so the counts below are of distinct
-cases.
+cases within one dataset: the rule compares the sets of one import, not one dataset's sets with another's.
 
 | Dataset | Sets | Source | License | Attribution |
 |---|---|---|---|---|
@@ -52,10 +52,10 @@ solution with its calculator annotations (`<<16-3-4=9>>`) and then a last line `
 shapes a model's output takes: `gsm8k-<split>-reasoning` holds the solution, annotations as written, as
 `reasoning_content` and the text after `#### ` as `content`; `gsm8k-<split>-content` holds the whole answer, `#### `
 line included, as `content` with no reasoning. Case names carry the split and the row's 0-based line index
-(`gsm8k-test-7`, `gsm8k-test-reasoning-7`). A row with an empty question, or whose answer does not end in a `#### `
-line, would be left out of all three sets of its split with its reason printed; the pinned files have none. One train
-question (row 2381) holds two U+2028 line separators, which the corpus keeps raw, so the readers split JSON Lines on
-`"\n"` only.
+(`gsm8k-test-7`, `gsm8k-test-reasoning-7`). A row with an empty question, whose answer does not end in a `#### ` line,
+or whose final answer starts or ends with whitespace, would be left out of all three sets of its split with its reason
+printed; the pinned files have none. One train question (row 2381) holds two U+2028 line separators, which the corpus
+keeps raw, so the readers split JSON Lines on `"\n"` only.
 
 The GSM8K sets copy the dataset's text whole, and the MIT license asks that its notice be included in all copies or
 substantial portions, so `bellwether import gsm8k` also writes the pinned `LICENSE` to `corpus/licenses/gsm8k-LICENSE`,

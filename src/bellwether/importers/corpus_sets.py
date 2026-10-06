@@ -30,20 +30,22 @@ def leave_out_repeats(
 
     A case repeats an earlier one when it is of the same kind and its ``request`` (render), or its ``request`` and
     ``message`` (parse), are equal to the earlier case's as the line writes them: JSON with the keys in the order the
-    importer built them, since a template can see key order. Names, notes and origin do not count. Earlier means in the
-    order the importer built its sets: the sets in the dict's order, and each set's lines in order. A repeat is left
-    out because it tests nothing its first case does not, and a count that included it would overstate the corpus.
+    importer built them, since a template can see key order. Names, notes and origin do not count. The key is the
+    request's JSON and then the message's, or ``""`` for a render case; no JSON text is empty, so a render case and a
+    parse case never share a key. Earlier means in the order the importer built its sets: the sets in the dict's order,
+    and each set's lines in order. A repeat is left out because it tests nothing its first case does not, and a count
+    that included it would overstate the corpus.
 
     The kept sets have the same keys in the same order, each with its lines in order; a set whose every case repeats
     an earlier one stays, empty. The pairs come in the order of the cases left out, each naming the kept case.
     """
-    first: dict[tuple[str, str, str], str] = {}
+    first: dict[tuple[str, str], str] = {}
     kept: dict[tuple[str, str], list[dict]] = {}
     repeats: list[tuple[str, str]] = []
     for (kind, name), lines in sets.items():
         kept[(kind, name)] = []
         for line in lines:
-            compared = (kind, _json(line["request"]), _json(line["message"]) if kind == "parse" else "")
+            compared = (_json(line["request"]), _json(line["message"]) if kind == "parse" else "")
             if compared in first:
                 repeats.append((line["name"], first[compared]))
             else:
