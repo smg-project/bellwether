@@ -276,6 +276,16 @@ COLUMNS = ("repo", "instance_id", "base_commit", "patch", "problem_statement", "
 EMPTY = (("problem statement", "problem_statement"), ("patch", "patch"))
 SYSTEM = "You are working on the {repo} repository at commit {base_commit}."
 HINTS = "\n\nHints:\n"
+# The text bellwether writes into a SWE-bench case, which the dataset does not have, by the short names that
+# ``origin.written`` lists in the order of the line's fields: the system turn; HINTS, when the row has hints; the one
+# tool; and in a parse case's message, the call around the gold patch or the diff block's fences.
+WRITTEN = {
+    "system": "system prompt",
+    "hints": "hints separator",
+    "tool": "submit_patch tool",
+    "call": "submit_patch call",
+    "content": "code fences",
+}
 # bellwether's framing: the data has no tool, so this is the one every case offers.
 SUBMIT_PATCH = {
     "type": "function",
@@ -307,6 +317,11 @@ def blank(text: str | None) -> bool:
     return text is None or not text.strip()
 
 
+def has_hints(row: dict) -> bool:
+    """Whether the user turn carries the row's hints after ``HINTS``: when they are not blank."""
+    return not blank(row["hints_text"])
+
+
 def request_for(row: dict) -> dict:
     """The request for one row: the repository and base commit as the system turn, the issue as the user turn.
 
@@ -315,7 +330,7 @@ def request_for(row: dict) -> dict:
     """
     system = SYSTEM.format(repo=row["repo"], base_commit=row["base_commit"])
     user = row["problem_statement"]
-    if not blank(row["hints_text"]):
+    if has_hints(row):
         user += HINTS + row["hints_text"]
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     return {"messages": messages, "tools": [SUBMIT_PATCH]}
@@ -348,19 +363,23 @@ def set_name(family: str, form: str | None, copyleft: bool) -> str:
     return "-".join(["swebench", family, *([form] if form else []), *(["copyleft"] if copyleft else [])])
 
 
-def origin(source: Source, row: dict, code: RowLicense | None) -> dict:
-    """Where a case came from: the row, its repository, and the license of what the line holds.
+def origin(source: Source, row: dict, code: RowLicense | None, form: str | None) -> dict:
+    """Where a case came from: the row, its repository, the license of what the line holds, and what bellwether wrote.
 
-    A render line (``code`` None) holds the issue text and its hints alone: no license is established for them. A parse
-    line's message is the row's gold patch, code under its repository's license at the base commit, which names its
-    copyright holder and the copied files that go with it. A parse case's message comes from the same row, its
-    ``patch``, so no other file is named.
+    A render line (``code`` and ``form`` None) holds the issue text and its hints alone: no license is established for
+    them. A parse line's message is the row's gold patch, code under its repository's license at the base commit, which
+    names its copyright holder and the copied files that go with it; ``form`` is the message's, ``call`` or ``content``.
+    A parse case's message comes from the same row, its ``patch``, so no other file is named. ``written`` names the text
+    bellwether wrote into the line (``WRITTEN``).
     """
     found = {"dataset": DATASET, "source": source.uri, "sha256": source.sha256, "file": source.file}
     found |= {"row": row["instance_id"], "repository": row["repo"]}
     if code is None:
-        return {**found, "license": NO_LICENSE}
-    return {**found, "license": code.spdx, "copyright": code.holder, "notices": list(code.notices)}
+        found["license"] = NO_LICENSE
+    else:
+        found |= {"license": code.spdx, "copyright": code.holder, "notices": list(code.notices)}
+    written = [WRITTEN["system"], *([WRITTEN["hints"]] if has_hints(row) else []), WRITTEN["tool"]]
+    return {**found, "written": [*written, *([WRITTEN[form]] if form else [])]}
 
 
 def build_sets(
@@ -427,7 +446,7 @@ def build_sets(
                 "name": f"swebench-{source.family}-{case_slug}",
                 "request": request,
                 "notes": notes,
-                "origin": origin(source, row, None),
+                "origin": origin(source, row, None, None),
             }
             add("render", set_name(source.family, None, code.copyleft), render, row_id)
             for form, message, probe in (
@@ -439,7 +458,7 @@ def build_sets(
                     "request": request,
                     "message": message,
                     "notes": f"{notes}: {probe}",
-                    "origin": origin(source, row, code),
+                    "origin": origin(source, row, code, form),
                 }
                 add("parse", set_name(source.family, form, code.copyleft), line, row_id)
     return sets

@@ -246,17 +246,21 @@ message: `glaive_func_calling` pairs one chat with several tool lists, and cases
 so the 18746 parse cases of `hermes-glaive-func-calling` expect 8803 distinct messages. In the other two parse sets each
 case expects a message of its own.
 
-A SWE-bench case is bellwether's framing, since SWE-bench has no prompt and no tools. The request is a system turn,
-"You are working on the {repo} repository at commit {base_commit}.", then the problem statement verbatim as the user
-turn, followed by `"\n\nHints:\n"` and the hints when they are not blank, with one tool on every case: `submit_patch`,
-whose one required string parameter `patch` is "A unified diff that resolves the issue, applied at the repository's base
-commit." Each row gives two parse cases on that request. In `-call`, the message is `content: ""` and one `submit_patch`
-call whose arguments are `{"patch": ...}` with the gold patch, written as JSON with raw Unicode. In `-content`, the
-message's content is the gold patch in a fenced `diff` block; a patch without a final newline gets one before the
-closing fence, and every patch at these pins has one. A row with an empty problem statement or patch is skipped and
-named; at these pins none is. The sets take 45,278,474 bytes as plain JSON Lines, under the 50,000,000 past which an
-import's sets are stored compressed (`corpus_sets.LIMIT`), so they stay plain. No case repeats another; the 4472
-parse cases hold 4470 distinct messages, since pytest-dev__pytest-7236 and pytest-dev__pytest-7283 carry the same
+A SWE-bench case is bellwether's framing, since SWE-bench has no prompt and no tools. The request is a system turn, "You
+are working on the {repo} repository at commit {base_commit}.", then the problem statement verbatim as the user turn,
+followed by `"\n\nHints:\n"` and the hints when they are not blank, with one tool on every case: `submit_patch`, whose
+one required string parameter `patch` is "A unified diff that resolves the issue, applied at the repository's base
+commit." That text is bellwether's, not the dataset's, and every line's `origin.written` lists what of it the line
+holds, in the order of its fields: `system prompt`, the system turn; `hints separator`, the `"\n\nHints:\n"` before the
+hints, when there are any; `submit_patch tool`, the tool; `submit_patch call`, a `-call` message's call around the gold
+patch, with its empty content, its name and its argument key; `code fences`, a `-content` message's fenced `diff` block
+around it. Each row gives two parse cases on that request. In `-call`, the message is `content: ""` and one
+`submit_patch` call whose arguments are `{"patch": ...}` with the gold patch, written as JSON with raw Unicode. In
+`-content`, the message's content is the gold patch in a fenced `diff` block; a patch without a final newline gets one
+before the closing fence, and every patch at these pins has one. A row with an empty problem statement or patch is
+skipped and named; at these pins none is. The sets take 45,795,527 bytes as plain JSON Lines, under the 50,000,000 past
+which an import's sets are stored compressed (`corpus_sets.LIMIT`), so they stay plain. No case repeats another; the
+4472 parse cases hold 4470 distinct messages, since pytest-dev__pytest-7236 and pytest-dev__pytest-7283 carry the same
 patch, on requests that differ in the base commit.
 
 The SWE-bench dataset cards state no license, and the import checks on every run that their front matter still states

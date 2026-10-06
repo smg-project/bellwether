@@ -305,14 +305,17 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         "row": "django__django-11099",
         "repository": "django/django",
         "license": "NOASSERTION",
+        "written": ["system prompt", "submit_patch tool"],
     }
     # A parse line's message is the gold patch: code under the license of its repository at the row's base commit.
     parse_origin = {
-        **render_origin,
+        **{key: value for key, value in render_origin.items() if key != "written"},
         "license": "BSD-3-Clause",
         "copyright": "Django Software Foundation and individual contributors",
         "notices": [f"licenses/{DJANGO_COPY}"],
     }
+    call_origin = {**parse_origin, "written": ["system prompt", "submit_patch tool", "submit_patch call"]}
+    content_origin = {**parse_origin, "written": ["system prompt", "submit_patch tool", "code fences"]}
     request = swebench.request_for(row())
     assert sets[("render", "swebench-verified")] == [
         {
@@ -328,28 +331,29 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         "request": request,
         "message": swebench.call_message(PATCH),
         "notes": "SWE-bench Verified django__django-11099: the gold patch as one submit_patch call",
-        "origin": parse_origin,
+        "origin": call_origin,
     }
     assert list(call) == ["name", "request", "message", "notes", "origin"]
     assert list(call["origin"]) == [
-        "dataset", "source", "sha256", "file", "row", "repository", "license", "copyright", "notices"
+        "dataset", "source", "sha256", "file", "row", "repository", "license", "copyright", "notices", "written"
     ]  # fmt: skip
     [content] = sets[("parse", "swebench-verified-content")]
     assert content["name"] == "swebench-verified-content-django-django-11099"
     assert content["message"] == swebench.content_message(PATCH)
     assert content["notes"] == "SWE-bench Verified django__django-11099: the gold patch in a diff block"
-    assert content["origin"] == parse_origin
+    assert content["origin"] == content_origin
     [copyleft] = sets[("render", "swebench-verified-copyleft")]
     assert copyleft["name"] == "swebench-verified-pylint-dev-pylint-4551"
     pylint = {**VERIFIED_ORIGIN, "row": "pylint-dev__pylint-4551", "repository": "pylint-dev/pylint"}
-    assert copyleft["origin"] == {**pylint, "license": "NOASSERTION"}
-    for form in ("call", "content"):
+    assert copyleft["origin"] == {**pylint, "license": "NOASSERTION", "written": ["system prompt", "submit_patch tool"]}
+    for form, wrote in (("call", "submit_patch call"), ("content", "code fences")):
         [line] = sets[("parse", f"swebench-verified-{form}-copyleft")]
         assert line["origin"] == {
             **pylint,
             "license": "GPL-2.0-or-later",
             "copyright": "the pylint contributors",
             "notices": [f"licenses/{PYLINT_COPY}"],
+            "written": ["system prompt", "submit_patch tool", wrote],
         }
     [tested] = sets[("render", "swebench-test")]
     assert tested["name"] == "swebench-test-django-django-10097"
@@ -362,7 +366,31 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
         "row": "django__django-10097",
         "repository": "django/django",
         "license": "NOASSERTION",
+        "written": ["system prompt", "submit_patch tool"],
     }
+
+
+def test_origin_names_the_text_bellwether_wrote_in_each_line_in_the_order_of_its_fields():
+    hinted = row(instance_id="django__django-11100", hints_text="Hint.\n")
+    sets = swebench.build_sets([(swebench.VERIFIED, [row(), hinted])], LICENSES)
+    written = {line["name"]: line["origin"]["written"] for lines in sets.values() for line in lines}
+    request = ["system prompt", "submit_patch tool"]
+    hinted_request = ["system prompt", "hints separator", "submit_patch tool"]
+    assert written == {
+        "swebench-verified-django-django-11099": request,
+        "swebench-verified-call-django-django-11099": [*request, "submit_patch call"],
+        "swebench-verified-content-django-django-11099": [*request, "code fences"],
+        "swebench-verified-django-django-11100": hinted_request,
+        "swebench-verified-call-django-django-11100": [*hinted_request, "submit_patch call"],
+        "swebench-verified-content-django-django-11100": [*hinted_request, "code fences"],
+    }
+    assert all(list(line["origin"])[-1] == "written" for lines in sets.values() for line in lines)
+
+
+def test_the_corpus_readme_says_what_each_written_name_stands_for():
+    readme = (CORPUS / "README.md").read_text("utf-8")
+    for name in swebench.WRITTEN.values():
+        assert f"`{name}`" in readme, name
 
 
 def names(lines: list[dict]) -> list[str]:
