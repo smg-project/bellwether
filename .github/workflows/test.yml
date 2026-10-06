@@ -40,7 +40,22 @@ jobs:
       - run: uv run bellwether import hermes --check
       - run: uv run bellwether import swebench --check
       - run: uv run bellwether import glaive-v2 --check
+      # The SWE-Hero shard is 141 MB: the dataset's folder in the Hugging Face cache is kept per pinned commit, read
+      # from the importer. huggingface_hub keeps a file served from Xet storage in a store shared by the whole cache
+      # (hub/blobs/<2 hex>/<hash>) and only a link to it in the dataset's folder, so the check runs with
+      # HF_HUB_DISABLE_SHARED_BLOBS and the shard's bytes land in the folder the cache keeps.
+      - id: swehero
+        run: |
+          revision=$(sed -n 's/^REVISION = "\([0-9a-f]\{40\}\)"$/\1/p' src/bellwether/importers/swehero.py)
+          test -n "$revision"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface/hub/datasets--nvidia--SWE-Hero-openhands-trajectories
+          key: hf-swehero-unshared-blobs-${{ steps.swehero.outputs.revision }}
       - run: uv run bellwether import swehero --check
+        env:
+          HF_HUB_DISABLE_SHARED_BLOBS: "1"
       - name: The README's tables are what fixtures/ and corpus/ hold
         run: uv run bellwether count --readme README.md --check
       - uses: actions/cache@v6

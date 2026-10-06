@@ -387,8 +387,12 @@ commit. `bellwether import shapes --check` reads the same pinned files as the BF
 SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under
 `huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their
 sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history
-or a deleted dataset would end. SWE-Hero's three files are read from the Hugging Face Hub at the pinned commit, into
-`huggingface/` under the same cache (141 MB for the shard), and `HF_HUB_OFFLINE=1` turns a miss into an error.
+or a deleted dataset would end. SWE-Hero's three files are read from the Hugging Face Hub at the pinned commit and stay
+in its cache (`~/.cache/huggingface/hub`, or `HF_HUB_CACHE`), 141 MB for the shard; `HF_HUB_OFFLINE=1` turns a miss into
+an error. huggingface_hub keeps a file served from Xet storage, such as the shard, in a store shared by the whole cache
+(`hub/blobs/`) and only a link to it in the dataset's own folder. CI runs the check with
+`HF_HUB_DISABLE_SHARED_BLOBS=1`, so the shard's bytes stay in the dataset's folder, and caches that folder per pinned
+commit.
 
 The glaive-v2 file and card come through `hf.fetch`, which keeps them in the Hugging Face cache layout under the same
 `~/.cache/bellwether/datasets` (`huggingface/`) and downloads them on a miss; with `HF_HUB_OFFLINE=1` it reads the
