@@ -145,22 +145,64 @@ def test_each_named_chat_template_is_an_input_and_nothing_else_in_their_director
 OLD, NEW = "1" * 40, "2" * 40
 
 
-def test_oracle_inputs_read_the_hugging_face_cache_at_the_exact_revision(tmp_path, tiny_model, monkeypatch):
-    repo = tmp_path / "hub" / "models--acme--tiny-chat"
-    for revision in (OLD, NEW):
-        shutil.copytree(tiny_model, repo / "snapshots" / revision)
-    (repo / "snapshots" / NEW / "chat_template.jinja").write_text("{{ messages }}")
-    (repo / "refs").mkdir()
-    (repo / "refs" / "main").write_text(NEW)
+def cached(hub: pathlib.Path, files: pathlib.Path, revision: str, *, listed: list[str] | None = None) -> pathlib.Path:
+    """``files`` as the Hugging Face cache holds a snapshot of acme/tiny-chat at ``revision``, with the commit's file
+    list (``trees/<commit>.json``) naming ``listed``, every file of the snapshot by default; an empty ``listed`` leaves
+    the list out, as a cache filled one file at a time has none."""
+    repo = hub / "models--acme--tiny-chat"
+    snapshot = repo / "snapshots" / revision
+    shutil.copytree(files, snapshot)
+    names = sorted(p.relative_to(snapshot).as_posix() for p in snapshot.rglob("*") if p.is_file())
+    if listed != []:
+        listing = {name: {"size": 1, "blob_id": "0" * 40} for name in (names if listed is None else listed)}
+        (repo / "trees").mkdir(exist_ok=True)
+        (repo / "trees" / f"{revision}.json").write_text(json.dumps({"format_version": 1, "files": listing}))
+    return snapshot
+
+
+@pytest.fixture
+def offline_hub(tmp_path, monkeypatch) -> pathlib.Path:
     monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path / "hub"))
     monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", True)
+    return tmp_path / "hub"
+
+
+def test_oracle_inputs_read_the_hugging_face_cache_at_the_exact_revision(offline_hub, tiny_model):
+    cached(offline_hub, tiny_model, OLD)
+    newer = cached(
+        offline_hub, tiny_model, NEW, listed=["chat_template.jinja", "tokenizer.json", "tokenizer_config.json"]
+    )
+    (newer / "chat_template.jinja").write_text("{{ messages }}")
+    (offline_hub / "models--acme--tiny-chat" / "refs").mkdir()
+    (offline_hub / "models--acme--tiny-chat" / "refs" / "main").write_text(NEW)
 
     assert oracle_inputs("acme/tiny-chat", OLD) == oracle_inputs(str(tiny_model), "local")
     assert "chat_template.jinja" in oracle_inputs("acme/tiny-chat", NEW)
 
 
-def test_oracle_inputs_name_a_revision_the_offline_cache_does_not_hold(tmp_path, monkeypatch):
-    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path / "hub"))
-    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", True)
+def test_oracle_inputs_name_a_revision_the_offline_cache_does_not_hold(offline_hub):
     with pytest.raises(FileNotFoundError, match=f"acme/tiny-chat at {OLD}: "):
         oracle_inputs("acme/tiny-chat", OLD)
+
+
+def test_offline_a_snapshot_without_the_commit_s_file_list_is_refused(offline_hub, tiny_model):
+    # Filled one file at a time, the cache cannot tell a file it lacks from one the checkpoint does not ship, which
+    # would drop out of the inputs unnoticed.
+    cached(offline_hub, tiny_model, OLD, listed=[])
+    with pytest.raises(
+        FileNotFoundError, match=f"acme/tiny-chat at {OLD}: the cache holds no list of the commit's files"
+    ):
+        oracle_inputs("acme/tiny-chat", OLD)
+
+
+@pytest.mark.parametrize("missing", ["vocab.json", "additional_chat_templates/tool_use.jinja"])
+def test_offline_a_snapshot_that_lacks_a_file_the_commit_lists_is_refused(offline_hub, tiny_model, missing):
+    names = ["tokenizer.json", "tokenizer_config.json", missing]
+    cached(offline_hub, tiny_model, OLD, listed=names)
+    with pytest.raises(FileNotFoundError, match=rf"acme/tiny-chat at {OLD}: .*incomplete.*{missing}"):
+        oracle_inputs("acme/tiny-chat", OLD)
+
+
+def test_offline_a_file_the_commit_does_not_list_is_one_the_checkpoint_does_not_ship(offline_hub, tiny_model):
+    cached(offline_hub, tiny_model, OLD, listed=["tokenizer.json", "tokenizer_config.json", "model.safetensors"])
+    assert oracle_inputs("acme/tiny-chat", OLD) == oracle_inputs(str(tiny_model), "local")

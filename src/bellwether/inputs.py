@@ -21,9 +21,11 @@ checkpoint without ``generation_config.json``, ``config.json``'s fields are join
 
 A Hub checkpoint is read from the Hugging Face cache at the exact revision, through ``huggingface_hub``, which fetches
 only these files, and only those the cache lacks; no file from the repository is run. Offline (``HF_HUB_OFFLINE=1``),
-the cached snapshot stands for the checkpoint, as it does for the oracle, which can read nothing else offline. When
-the cache also holds the commit's file list, a snapshot that lacks one of these files is refused rather than read as
-complete. A model given as a directory is read as it is, as the reference oracle reads it, and the revision is unused.
+the cached snapshot stands for the checkpoint only when the cache also holds the commit's file list, which a download
+with network access leaves (``trees/<commit>.json``): with it, a snapshot that lacks a listed file is refused, and a
+file the list does not name is one the checkpoint does not ship. Without it, a file the snapshot lacks could be either,
+so the checkpoint is refused rather than read with a file missing from its inputs. A model given as a directory is read
+as it is, as the reference oracle reads it, and the revision is unused.
 """
 
 from __future__ import annotations
@@ -74,14 +76,23 @@ def checkpoint_dir(model: str, revision: str) -> Path:
     else its snapshot in the Hugging Face cache."""
     if Path(model).is_dir():
         return Path(model)
-    from huggingface_hub import constants, snapshot_download
+    from huggingface_hub import constants, get_cached_repo_tree, snapshot_download
+    from huggingface_hub.errors import CachedRepoTreeNotFoundError
 
+    offline = constants.is_offline_mode()
     try:
-        # Offline, the snapshot is read from the cache as it is: asked for a commit, the library would otherwise
-        # ask the Hub for the commit's file list whenever the cache does not hold it, and fail.
-        found = snapshot_download(
-            model, revision=revision, allow_patterns=list(PATTERNS), local_files_only=constants.is_offline_mode()
-        )
+        # Offline, the snapshot is read from the cache: asked for a commit, the library would otherwise ask the Hub
+        # for the commit's file list whenever the cache does not hold it, and fail. With the list cached, it refuses a
+        # snapshot that lacks a listed file (IncompleteSnapshotError, a FileNotFoundError).
+        found = snapshot_download(model, revision=revision, allow_patterns=list(PATTERNS), local_files_only=offline)
+        if offline:
+            get_cached_repo_tree(model, revision=revision)
+    except CachedRepoTreeNotFoundError as err:
+        raise FileNotFoundError(
+            f"{model} at {revision}: the cache holds no list of the commit's files, so a file its snapshot lacks "
+            "cannot be told from one the checkpoint does not ship; read it once with network access, which caches "
+            "the list and fetches what the snapshot lacks"
+        ) from err
     except FileNotFoundError as err:
         raise FileNotFoundError(f"{model} at {revision}: {err}") from err
     return Path(found)
