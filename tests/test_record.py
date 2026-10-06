@@ -802,3 +802,29 @@ def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, t
     tables = sets_tables(tmp_path)["render"]
     assert tables["extra"] == before
     assert (tables["common"]["cases"], tables["common"]["rejected"]) == (1, 1)
+
+
+LFS_POINTER = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 12\n"
+
+
+def test_unpack_writes_one_plain_tree_of_both_forms_and_the_manifests(tmp_path, tiny_model):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-x", [imported("bench-x-0", "X")]),
+    )
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    for name in ("common", "bench-x"):
+        source = next((fixtures / "tiny-chat" / "render").glob(f"{name}.jsonl*"))
+        assert (out / "tiny-chat" / "render" / f"{name}.jsonl").read_text() == plain_text(source)
+    for name in ("manifest.toml", "sets.toml"):
+        assert (out / "tiny-chat" / name).read_bytes() == (fixtures / "tiny-chat" / name).read_bytes()
+
+
+def test_a_git_lfs_pointer_is_named_not_decompressed(tmp_path):
+    pointer = tmp_path / "set.jsonl.zst"
+    pointer.write_text(LFS_POINTER)
+    with pytest.raises(ValueError, match="Git LFS pointer"):
+        plain_text(pointer)

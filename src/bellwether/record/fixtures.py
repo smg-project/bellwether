@@ -60,9 +60,20 @@ def is_compressed(path: Path) -> bool:
     return path.name.endswith(COMPRESSED_SUFFIX)
 
 
+LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+
+
+def is_lfs_pointer(path: Path) -> bool:
+    """A file Git LFS has not fetched: its pointer stands where the content would be."""
+    with path.open("rb") as handle:
+        return handle.read(len(LFS_POINTER_PREFIX)) == LFS_POINTER_PREFIX
+
+
 def plain_text(path: Path) -> str:
     """A fixture file's lines as text, whichever form it is stored in."""
     data = path.read_bytes()
+    if data.startswith(LFS_POINTER_PREFIX):
+        raise ValueError(f"{path} is a Git LFS pointer; fetch it first: git lfs pull --include '{path}'")
     if is_compressed(path):
         data = zstandard.ZstdDecompressor().decompress(data)
     return data.decode("utf-8")
