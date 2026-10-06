@@ -58,8 +58,9 @@ def run(args: argparse.Namespace) -> int:
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
     kind_dir = args.fixtures / manifest.slug / args.kind
-    tables_path = args.fixtures / manifest.slug / set_tables.FILE
-    tables = set_tables.read(tables_path)
+    # This run's sets.toml tables, by set; None drops the set's table. sets.toml is read when they are put in, at the
+    # end of the run, so a run of the other kind for this model that wrote it in the meantime keeps its tables.
+    tables: dict[str, dict | None] = {}
     for set_name, cases in sets.items():
         # A set imported from a public dataset is a benchmark set, stored compressed in Git LFS; the rest are plain.
         form = "zstd" if any(case.origin for case in cases) else "plain"
@@ -92,10 +93,10 @@ def run(args: argparse.Namespace) -> int:
         removed = len(set(previous) - set(lines))
         if lines:
             write_fixture_file(out, lines)
-            tables[(args.kind, set_name)] = set_tables.entry(form, plain_text(out), len(lines), rejected)
+            tables[set_name] = set_tables.entry(form, plain_text(out), len(lines), rejected)
         else:
             out.unlink(missing_ok=True)
-            tables.pop((args.kind, set_name), None)
+            tables[set_name] = None
         # Only once the new file is written, so a failed write keeps the set in its old form.
         other.unlink(missing_ok=True)
         summary = [f"{len(lines)} cases recorded"]
@@ -112,9 +113,9 @@ def run(args: argparse.Namespace) -> int:
             name = stale.name.removesuffix(COMPRESSED_SUFFIX).removesuffix(".jsonl")
             if name != stale.name and name not in in_corpus:
                 stale.unlink()
-                tables.pop((args.kind, name), None)
+                tables[name] = None
                 print(f"{stale}: removed, the corpus has no set of that name")
-    set_tables.write(tables_path, tables)
+    set_tables.update(args.fixtures / manifest.slug / set_tables.FILE, args.kind, tables)
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
