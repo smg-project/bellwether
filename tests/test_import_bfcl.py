@@ -385,8 +385,8 @@ def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_th
     out = capsys.readouterr().out.splitlines()
     assert "no case bfcl-irrelevance-1: it repeats bfcl-simple-python-0" in out
     assert f"{corpus / 'render' / 'bfcl-irrelevance.jsonl'}: 1 cases, 1 left out as repeats" in out
-    assert f"{corpus / 'parse' / 'bfcl-simple-python.jsonl'}: 1 cases" in out
-    assert f"{corpus}: 3 cases in the 3 BFCL sets, 1 left out as repeats" in out
+    assert f"{corpus / 'parse' / 'bfcl-simple-python.jsonl'}: 1 cases, 1 distinct messages" in out
+    assert f"{corpus}: 3 cases in the 3 BFCL sets, 1 left out as repeats, 1 distinct messages" in out
     assert [case.name for case in read_cases(corpus / "render" / "bfcl-irrelevance.jsonl")] == ["bfcl-irrelevance-0"]
 
 

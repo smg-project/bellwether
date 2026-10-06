@@ -273,7 +273,7 @@ def test_the_command_writes_then_checks_and_names_the_rows_it_leaves_out(tmp_pat
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'gsm8k-train-reasoning-content.jsonl'}: 1 cases" in out
+    assert f"{corpus / 'parse' / 'gsm8k-train-reasoning-content.jsonl'}: 1 cases, 1 distinct messages\n" in out
     assert "no case for 1 row(s) (train row 1): the question is empty" in out
     assert f"{corpus}: the GSM8K sets equal a fresh import of {gsm8k.SOURCE}" in out
 
@@ -294,7 +294,7 @@ def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_th
         assert f"no case {name}-1: it repeats {name}-0" in out
     assert f"{corpus / 'render' / 'gsm8k-train.jsonl'}: 1 cases, 1 left out as repeats" in out
     assert f"{corpus / 'render' / 'gsm8k-test.jsonl'}: 1 cases" in out
-    assert f"{corpus}: 6 cases in the 6 GSM8K sets, 3 left out as repeats" in out
+    assert f"{corpus}: 6 cases in the 6 GSM8K sets, 3 left out as repeats, 4 distinct messages" in out
     assert [case.name for case in read_cases(corpus / "render" / "gsm8k-train.jsonl")] == ["gsm8k-train-0"]
 
 

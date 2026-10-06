@@ -100,17 +100,38 @@ def test_the_report_names_each_repeat_then_each_set_by_kind_and_name_with_its_co
     sets = {
         ("render", "zeta"): [render("a", ask("Hi")), render("b", ask("Hi"))],
         ("render", "alpha"): [render("c", ask("Hi")), render("d", ask("Bye"))],
-        ("parse", "zeta"): [parse("e", ask("Hi"), {"content": "Hello"})],
+        ("parse", "zeta"): [parse("e", ask("Hi"), {"content": "Hello"}), parse("f", ask("Hi"), {"content": "Hello"})],
     }
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     corpus_sets.report("Test", sets, kept, repeats, tmp_path)
     assert capsys.readouterr().out.splitlines() == [
         "no case b: it repeats a",
         "no case c: it repeats a",
-        f"{tmp_path / 'parse' / 'zeta.jsonl'}: 1 cases",
+        "no case f: it repeats e",
+        f"{tmp_path / 'parse' / 'zeta.jsonl'}: 1 cases, 1 left out as repeats, 1 distinct messages",
         f"{tmp_path / 'render' / 'alpha.jsonl'}: 1 cases, 1 left out as repeats",
         f"{tmp_path / 'render' / 'zeta.jsonl'}: 1 cases, 1 left out as repeats",
-        f"{tmp_path}: 3 cases in the 3 Test sets, 2 left out as repeats",
+        f"{tmp_path}: 3 cases in the 3 Test sets, 3 left out as repeats, 1 distinct messages",
+    ]
+
+
+def test_the_report_counts_distinct_messages_as_written_per_parse_set_and_once_across_the_sets(tmp_path, capsys):
+    # Cases that are not repeats can carry the same message, which is all a parser sees: the counts keep them apart.
+    sets = {
+        ("parse", "s"): [
+            parse("a", ask("Hi"), {"content": "Hello"}),
+            parse("b", ask("Hey"), {"content": "Hello"}),
+            parse("c", ask("Hi"), {"reasoning_content": "Greet.", "content": "Hello"}),
+            parse("d", ask("Hi"), {"content": "Hello", "reasoning_content": "Greet."}),
+        ],
+        ("parse", "t"): [parse("e", ask("Yo"), {"content": "Hello"}), parse("f", ask("Yo"), {"content": "Bye"})],
+    }
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    corpus_sets.report("Test", sets, kept, repeats, tmp_path)
+    assert capsys.readouterr().out.splitlines() == [
+        f"{tmp_path / 'parse' / 's.jsonl'}: 4 cases, 3 distinct messages",
+        f"{tmp_path / 'parse' / 't.jsonl'}: 2 cases, 2 distinct messages",
+        f"{tmp_path}: 6 cases in the 2 Test sets, 0 left out as repeats, 4 distinct messages",
     ]
 
 

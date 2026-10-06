@@ -65,16 +65,29 @@ def report(
     """Print what an import leaves out as repeats, and what it keeps.
 
     First each case ``leave_out_repeats`` left out, with the case it repeats; then each kept set's file, by kind and
-    name, with its count of cases and of repeats left out; then the total for ``dataset``'s sets.
+    name, with its count of cases, of repeats left out when there are any, and, for a parse set, of distinct messages;
+    then the same three numbers for ``dataset``'s sets. Cases that are not repeats can still carry the same message,
+    which is all a parser sees, so messages are counted apart, compared as the line writes them, and the total counts
+    each message once across the sets: no count overstates what the sets hold.
     """
     for name, first in repeats:
         print(f"no case {name}: it repeats {first}")
+    all_messages: set[str] = set()
     for (kind, name), lines in sorted(kept.items()):
+        counts = [f"{len(lines)} cases"]
         left_out = len(sets[(kind, name)]) - len(lines)
-        repeated = f", {left_out} left out as repeats" if left_out else ""
-        print(f"{corpus_dir / kind / f'{name}.jsonl'}: {len(lines)} cases{repeated}")
+        if left_out:
+            counts.append(f"{left_out} left out as repeats")
+        if kind == "parse":
+            messages = {_json(line["message"]) for line in lines}
+            all_messages |= messages
+            counts.append(f"{len(messages)} distinct messages")
+        print(f"{corpus_dir / kind / f'{name}.jsonl'}: {', '.join(counts)}")
     total = sum(len(lines) for lines in kept.values())
-    print(f"{corpus_dir}: {total} cases in the {len(kept)} {dataset} sets, {len(repeats)} left out as repeats")
+    print(
+        f"{corpus_dir}: {total} cases in the {len(kept)} {dataset} sets, {len(repeats)} left out as repeats, "
+        f"{len(all_messages)} distinct messages"
+    )
 
 
 def report_skipped(skipped: list[tuple[str, str]], lost: str = "case") -> None:
