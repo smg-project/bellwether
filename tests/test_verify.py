@@ -9,7 +9,9 @@ import json
 import re
 import socket
 import threading
+import tracemalloc
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -31,6 +33,10 @@ class FakeGateway:
         self.rejections: dict[str, tuple[int, str | bytes]] = {}
         self.appended_after: dict[str, str] = {}  # rid -> raw text another client appends after it
         self.received: list[dict] = []
+        # A prompt computed from the request instead of looked up by rid, and no record of what was received: a
+        # fake whose memory does not grow with the number of cases.
+        self.prompt_for: Callable[[dict], tuple[list[int], str]] | None = None
+        self.keep_received = True
         gateway = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -38,7 +44,8 @@ class FakeGateway:
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                gateway.received.append({"path": self.path, "body": body})
+                if gateway.keep_received:
+                    gateway.received.append({"path": self.path, "body": body})
                 status, payload = gateway.answer(body)
                 plain = isinstance(payload, bytes)
                 data = payload if plain else json.dumps(payload).encode()
@@ -67,6 +74,8 @@ class FakeGateway:
             if isinstance(message, bytes):
                 return status, message
             return status, {"error": {"type": "Bad Request", "code": "bad_request", "message": message, "param": None}}
+        if self.prompt_for is not None:
+            self.prompts = {rid: self.prompt_for(body)}
         ids, text = self.prompts.get(rid, ([], ""))
         if rid in self.prompts:
             line = {
@@ -470,6 +479,45 @@ def test_a_benchmark_set_stored_compressed_is_verified_like_a_plain_one(tmp_path
 
     assert [body["body"]["rid"] for body in gateway.received] == ["m1/render/bench-a", "m1/render/hello"]
     assert "render: 2 cases (2 match" in capsys.readouterr().out
+
+
+def test_memory_does_not_grow_with_the_number_of_cases(tmp_path, gateway):
+    # The prompt for "case <i>" is the ids from 1000 + i on: long enough that keeping each case would show.
+    def prompt(i: int) -> tuple[list[int], str]:
+        return list(range(1000 + i, 1300 + i)), f"<u>case {i}</u>"
+
+    gateway.prompt_for = lambda body: prompt(int(body["messages"][0]["content"].split()[1]))
+    gateway.keep_received = False
+    peaks = {}
+    for n in (20, 100, 400):  # the first run takes what a process allocates once
+        fixtures, out = tmp_path / f"fixtures-{n}", tmp_path / f"out-{n}"
+        (fixtures / "m1").mkdir(parents=True)
+        (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+        cases = {}
+        for i in range(n):
+            ids, text = prompt(i)
+            request = {"messages": [{"role": "user", "content": f"case {i}"}]}
+            reference = {"source": "hf-template", "input_ids": ids, "text": text}
+            case_id = f"m1/render/case-{i:04d}"
+            cases[case_id] = {
+                "id": case_id,
+                "kind": "render",
+                "model": "org/M1",
+                "request": request,
+                "reference": reference,
+            }
+        write_fixture_file(fixtures / "m1" / "render" / "bench.jsonl.zst", cases)
+        argv = ["--report", str(out / "report.json"), "--junit", str(out / "junit.xml")]
+        tracemalloc.start()
+        try:
+            assert verify(gateway, fixtures, *argv) == 0
+            peaks[n] = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert json.loads((out / "report.json").read_text())["summary"]["match"] == n
+
+    per_case = (peaks[400] - peaks[100]) / 300
+    assert per_case < 1024, f"the peak grows by {per_case:.0f} bytes for each case"
 
 
 def closed_port() -> int:

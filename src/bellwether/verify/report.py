@@ -1,12 +1,19 @@
-"""What a verify run concludes: which cases pass given the known differences, as JSON, JUnit XML and text."""
+"""What a verify run concludes: which cases pass given the known differences, as JSON, JUnit XML and text.
+
+Results are written as they come, so a run of any size holds one case at a time: each case to look at is printed at
+once, and the JSON report and the JUnit XML are put together at the end from temporary files.
+"""
 
 from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import IO
+from xml.sax.saxutils import quoteattr
 
 from bellwether import __version__
 from bellwether.manifest import Manifest
@@ -17,6 +24,7 @@ VERDICTS = ("match", "regression", "rejected", "missing")
 EXCUSABLE = ("regression", "rejected")
 LEADING_KEYS = ("id", "model", "set", "verdict", "passed", "known")
 WITHOUT_CASE = "listed, but there is no such case; remove the entry"
+JUNIT_COUNTS = (("failure", "failures"), ("error", "errors"), ("skipped", "skipped"))
 
 
 def load_known(path: Path) -> dict[str, str]:
@@ -31,65 +39,196 @@ def load_known(path: Path) -> dict[str, str]:
     return known
 
 
-def judge(results: list[dict], known: dict[str, str]) -> None:
-    """Mark each case passed or not.
+def judge(result: dict, known: dict[str, str]) -> None:
+    """Mark a case passed or not.
 
     A case passes when it matches and is not listed, or when it is a regression or rejected and is listed. A listed
     case that matches fails, so an entry goes as soon as SMG is fixed and the list cannot rot. A missing capture
     line fails even when listed: it is about the setup, which file is read and whether the ``rid`` reached the
     engine, not about how SMG renders.
     """
-    for result in results:
-        reason = known.get(result["id"])
-        result["known"] = reason
-        if result["verdict"] == "match":
-            result["passed"] = reason is None
-        else:
-            result["passed"] = reason is not None and result["verdict"] in EXCUSABLE
+    reason = known.get(result["id"])
+    result["known"] = reason
+    if result["verdict"] == "match":
+        result["passed"] = reason is None
+    else:
+        result["passed"] = reason is not None and result["verdict"] in EXCUSABLE
 
 
-def known_without_case(known: dict[str, str], manifests: list[Manifest], results: list[dict]) -> list[str]:
+def known_without_case(known: dict[str, str], manifests: list[Manifest], judged: set[str]) -> list[str]:
     """Listed ids in a verified model's render fixtures that name no case: the corpus dropped or renamed them.
 
-    Entries for other models or kinds are left alone; this run says nothing about them.
+    ``judged`` holds the listed ids the run judged. Entries for other models or kinds are left alone; this run says
+    nothing about them.
     """
     namespaces = tuple(f"{manifest.slug}/render/" for manifest in manifests)
-    ids = {result["id"] for result in results}
-    return sorted(case_id for case_id in known if case_id.startswith(namespaces) and case_id not in ids)
+    return sorted(case_id for case_id in known if case_id.startswith(namespaces) and case_id not in judged)
 
 
-def build(
-    results: list[dict],
-    without_case: list[str],
-    *,
-    url: str,
-    capture: Path,
-    known: Path | None,
-    manifests: list[Manifest],
-    without_cases: list[str],
-) -> dict:
-    passed = sum(result["passed"] for result in results)
-    summary = {"cases": len(results), **{verdict: 0 for verdict in VERDICTS}}
-    for result in results:
-        summary[result["verdict"]] += 1
-    provenance = {
+class Writer:
+    """The run's results, written as they come: text for each case to look at, and the JSON report and the JUnit XML
+    from temporary files when the run finishes.
+
+    Nothing is written to ``report`` or ``junit`` unless the run finishes.
+    """
+
+    def __init__(self, *, report: Path | None, junit: Path | None, kind: str = "render") -> None:
+        self.kind = kind
+        self.report, self.junit = report, junit
+        self.counts = dict.fromkeys(VERDICTS, 0)
+        self.passed = self.failed = 0
+        self._cases = _scratch() if report else None
+        self._suites: dict[str, _Suite] = {}
+
+    def __enter__(self) -> Writer:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        for scratch in [self._cases, *(suite.scratch for suite in self._suites.values())]:
+            if scratch is not None:
+                scratch.close()
+
+    def add(self, result: dict) -> None:
+        self.counts[result["verdict"]] += 1
+        if result["passed"]:
+            self.passed += 1
+        else:
+            self.failed += 1
+        if not (result["verdict"] == "match" and result["passed"]):
+            print(f"{result['verdict']} {result['id']}: {describe(result)}")
+        if self._cases is not None:
+            # The verdict and whether it passes first; the response body, which can be long, last.
+            entry = {
+                **{k: result[k] for k in LEADING_KEYS},
+                **{k: v for k, v in result.items() if k not in LEADING_KEYS},
+            }
+            self._cases.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        if self.junit:
+            self._suite(f"{result['model']} {self.kind}").add(self._testcase(result))
+
+    def finish(self, *, provenance: dict, known_without_case: list[str], models_without_cases: list[str]) -> dict:
+        """Print the totals, write the JSON report and the JUnit XML, and return the report without its cases."""
+        cases = self.passed + self.failed
+        written = {
+            "kind": self.kind,
+            "provenance": provenance,
+            "summary": {"cases": cases, **self.counts, "passed": self.passed, "failed": self.failed},
+            "passed": self.failed == 0 and not known_without_case,
+            "known_without_case": known_without_case,
+            "models_without_cases": models_without_cases,
+        }
+        for case_id in known_without_case:
+            print(f"known {case_id}: {WITHOUT_CASE}")
+        for model in models_without_cases:
+            print(f"{model}: no render cases")
+        counts = ", ".join(f"{self.counts[verdict]} {verdict}" for verdict in VERDICTS)
+        tally = f"{self.passed} pass, {self.failed} fail"
+        if known_without_case:
+            tally += f", {len(known_without_case)} listed without a case"
+        print(f"{self.kind}: {cases} cases ({counts}); {tally}; {'passed' if written['passed'] else 'failed'}")
+        if self.report:
+            self._write_json(written)
+        if self.junit:
+            self._write_junit(known_without_case)
+        return written
+
+    def _testcase(self, result: dict) -> ET.Element:
+        """One testcase: ``regression`` and ``missing`` are failures; ``rejected`` is an error, SMG's own error answer;
+        a listed known difference is skipped with its reason."""
+        classname = f"{result['id'].split('/')[0]}/{self.kind}/{result['set']}"
+        testcase = ET.Element("testcase", classname=classname, name=result["id"])
+        if result["passed"]:
+            if result["known"] is not None:
+                ET.SubElement(testcase, "skipped", message=f"known difference: {result['known']}")
+            return testcase
+        tag = "error" if result["verdict"] == "rejected" else "failure"
+        failure_type = "known-but-matches" if result["verdict"] == "match" else result["verdict"]
+        element = ET.SubElement(testcase, tag, type=failure_type, message=describe(result))
+        if result["verdict"] == "regression":
+            details = ("index", "lengths", "window", "text_equal", "text")
+            element.text = json.dumps({key: result[key] for key in details if key in result}, ensure_ascii=False)
+        return testcase
+
+    def _suite(self, name: str) -> _Suite:
+        suite = self._suites.get(name)
+        if suite is None:
+            suite = self._suites[name] = _Suite(name)
+        return suite
+
+    def _write_json(self, written: dict) -> None:
+        self.report.parent.mkdir(parents=True, exist_ok=True)
+        with self.report.open("w", encoding="utf-8") as out:
+            out.write("{\n")
+            for key, value in written.items():
+                out.write(f" {json.dumps(key)}: {json.dumps(value, ensure_ascii=False)},\n")
+            out.write(' "cases": [')
+            self._cases.seek(0)
+            for number, line in enumerate(self._cases):
+                out.write(("\n  " if number == 0 else ",\n  ") + line.rstrip("\n"))
+            out.write("\n ]\n}\n")
+
+    def _write_junit(self, known_without_case: list[str]) -> None:
+        suites = list(self._suites.values())
+        if known_without_case:
+            gone = _Suite("known differences")
+            for case_id in known_without_case:
+                testcase = ET.Element("testcase", classname="known differences", name=case_id)
+                ET.SubElement(testcase, "failure", type="known-without-case", message=WITHOUT_CASE)
+                gone.add(testcase)
+            suites.append(gone)
+        totals = {"tests": sum(suite.tests for suite in suites)}
+        for _, attribute in JUNIT_COUNTS:
+            totals[attribute] = sum(suite.counts[attribute] for suite in suites)
+        self.junit.parent.mkdir(parents=True, exist_ok=True)
+        with self.junit.open("w", encoding="utf-8") as out:
+            out.write("<?xml version='1.0' encoding='utf-8'?>\n")
+            out.write(f"<testsuites name={quoteattr(f'bellwether verify {self.kind}')}{_attributes(totals)}>\n")
+            for suite in suites:
+                suite.write(out)
+            out.write("</testsuites>\n")
+        for suite in suites:
+            suite.scratch.close()
+
+
+class _Suite:
+    """One JUnit testsuite, its testcases kept in a temporary file until the run finishes."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.tests = 0
+        self.counts = {attribute: 0 for _, attribute in JUNIT_COUNTS}
+        self.scratch = _scratch()
+
+    def add(self, testcase: ET.Element) -> None:
+        self.tests += 1
+        for tag, attribute in JUNIT_COUNTS:
+            self.counts[attribute] += testcase.find(tag) is not None
+        ET.indent(testcase, space="  ", level=2)
+        self.scratch.write("    " + ET.tostring(testcase, encoding="unicode") + "\n")
+
+    def write(self, out: IO[str]) -> None:
+        out.write(f"  <testsuite name={quoteattr(self.name)}{_attributes({'tests': self.tests, **self.counts})}>\n")
+        self.scratch.seek(0)
+        for line in self.scratch:
+            out.write(line)
+        out.write("  </testsuite>\n")
+
+
+def _attributes(counts: dict[str, int]) -> str:
+    return "".join(f' {name}="{value}"' for name, value in counts.items())
+
+
+def _scratch() -> IO[str]:
+    return tempfile.TemporaryFile("w+", encoding="utf-8")
+
+
+def provenance(*, url: str, capture: Path, known: Path | None, manifests: list[Manifest]) -> dict:
+    return {
         "bellwether": bellwether_version(),
         "smg": url,
         "capture": str(capture),
         "known": None if known is None else str(known),
         "manifests": [{"model": m.model, "revision": m.revision, "path": str(m.path)} for m in manifests],
-    }
-    return {
-        "kind": "render",
-        "provenance": provenance,
-        "summary": {**summary, "passed": passed, "failed": len(results) - passed},
-        "passed": passed == len(results) and not without_case,
-        "known_without_case": without_case,
-        "models_without_cases": without_cases,
-        # The verdict and whether it passes first; the response body, which can be long, last.
-        "cases": [
-            {**{k: r[k] for k in LEADING_KEYS}, **{k: r[k] for k in r if k not in LEADING_KEYS}} for r in results
-        ],
     }
 
 
@@ -113,72 +252,6 @@ def bellwether_version() -> dict:
 
 def _git(where: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(where), *args], capture_output=True, text=True, check=True).stdout.strip()
-
-
-def write_json(path: Path, report: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-
-
-def write_junit(path: Path, report: dict) -> None:
-    """One testcase per case, one suite per model.
-
-    ``regression`` and ``missing`` are failures; ``rejected`` is an error, SMG's own error answer; a listed known
-    difference is skipped with its reason. Known entries that name no case fail in a suite of their own.
-    """
-    kind = report["kind"]
-    root = ET.Element("testsuites", name=f"bellwether verify {kind}")
-    suites: dict[str, ET.Element] = {}
-    for case in report["cases"]:
-        name = f"{case['model']} {kind}"
-        suite = suites.get(name)
-        if suite is None:
-            suite = suites[name] = ET.SubElement(root, "testsuite", name=name)
-        classname = f"{case['id'].split('/')[0]}/{kind}/{case['set']}"
-        testcase = ET.SubElement(suite, "testcase", classname=classname, name=case["id"])
-        if case["passed"]:
-            if case["known"] is not None:
-                ET.SubElement(testcase, "skipped", message=f"known difference: {case['known']}")
-            continue
-        tag = "error" if case["verdict"] == "rejected" else "failure"
-        failure_type = "known-but-matches" if case["verdict"] == "match" else case["verdict"]
-        element = ET.SubElement(testcase, tag, type=failure_type, message=describe(case))
-        if case["verdict"] == "regression":
-            details = ("index", "lengths", "window", "text_equal", "text")
-            element.text = json.dumps({key: case[key] for key in details if key in case}, ensure_ascii=False)
-    if report["known_without_case"]:
-        suite = ET.SubElement(root, "testsuite", name="known differences")
-        for case_id in report["known_without_case"]:
-            testcase = ET.SubElement(suite, "testcase", classname="known differences", name=case_id)
-            ET.SubElement(testcase, "failure", type="known-without-case", message=WITHOUT_CASE)
-    for element in [*root, root]:
-        testcases = list(element.iter("testcase"))
-        element.set("tests", str(len(testcases)))
-        for tag, attribute in (("failure", "failures"), ("error", "errors"), ("skipped", "skipped")):
-            element.set(attribute, str(sum(testcase.find(tag) is not None for testcase in testcases)))
-    tree = ET.ElementTree(root)
-    ET.indent(tree)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tree.write(path, encoding="utf-8", xml_declaration=True)
-
-
-def lines(report: dict) -> list[str]:
-    """One line per case to look at, then the totals."""
-    out = [
-        f"{case['verdict']} {case['id']}: {describe(case)}"
-        for case in report["cases"]
-        if not (case["verdict"] == "match" and case["passed"])
-    ]
-    out += [f"known {case_id}: {WITHOUT_CASE}" for case_id in report["known_without_case"]]
-    out += [f"{model}: no render cases" for model in report["models_without_cases"]]
-    summary = report["summary"]
-    counts = ", ".join(f"{summary[verdict]} {verdict}" for verdict in VERDICTS)
-    tally = f"{summary['passed']} pass, {summary['failed']} fail"
-    if report["known_without_case"]:
-        tally += f", {len(report['known_without_case'])} listed without a case"
-    outcome = "passed" if report["passed"] else "failed"
-    out.append(f"{report['kind']}: {summary['cases']} cases ({counts}); {tally}; {outcome}")
-    return out
 
 
 def describe(result: dict) -> str:

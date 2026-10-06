@@ -5,6 +5,10 @@ client ``rid`` through as the engine request's ``request_id``, verbatim or, unde
 disaggregation, with a UUID after it, and the mock worker behind SMG writes every Generate request it
 receives to its capture file as one JSON line, so a case's capture line is found by its id and the
 ``input_ids`` on it are compared with ``reference.input_ids``.
+
+Cases go one at a time: the mock writes a request's line before the engine answers, so once SMG has answered a
+case, every line for it is in the file, and the lines written since the previous answer are the case's or another
+client's.
 """
 
 from __future__ import annotations
@@ -14,7 +18,6 @@ import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import BinaryIO
 
 import httpx
 
@@ -33,32 +36,77 @@ class CannotVerify(Exception):
     answer from SMG."""
 
 
-def verify(url: str, capture: Path, cases: list[tuple[Manifest, str, dict]]) -> list[dict]:
-    """Send every case, then join the capture file to the answers on ``request_id``."""
-    with open_capture(capture) as file:
-        start = file.seek(0, os.SEEK_END)
-        answers = []
-        # The environment's proxy settings are ignored: verify talks to the SMG it was given, with nothing in between.
-        with httpx.Client(timeout=TIMEOUT, trust_env=False) as client:
-            for manifest, _, case in cases:
-                try:
-                    answers.append(send(client, url, request_body(case, manifest.model)))
-                except (httpx.HTTPError, httpx.InvalidURL) as err:
-                    raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
-        captured = read_capture(file, capture, start, {case["id"] for _, _, case in cases})
-    results = []
-    for (manifest, set_name, case), (status, body) in zip(cases, answers, strict=True):
-        if status != 200:
-            # A non-200 is SMG's answer to the case, so it is a verdict, not an error of the run.
-            outcome = {"verdict": "rejected", "message": error_message(body)}
-        elif case["id"] not in captured:
-            outcome = {"verdict": "missing"}
-        else:
-            outcome = compare(case, captured[case["id"]])
-        results.append(
-            {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "status": status, "body": body}
-        )
-    return results
+class Capture:
+    """The mock's capture file, opened before the first request and read as it grows.
+
+    The mock creates the file when it starts and appends to it, so what is there at the start is an earlier run's.
+    Each read takes the complete lines written since the last one; the text after the last newline is a line still
+    being written, kept for the next read.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        try:
+            self._file = path.open("rb")
+        except OSError as err:
+            raise CannotVerify(f"cannot read the capture file {path}: {err.strerror or err}") from None
+        self._at = self._file.seek(0, os.SEEK_END)  # where the text not yet split into lines starts
+        self._pending = b""
+
+    def __enter__(self) -> Capture:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._file.close()
+
+    def lines(self) -> list[tuple[int, object]]:
+        """``(byte offset, line)`` for each complete line written since the last read; blank lines are skipped."""
+        *complete, self._pending = (self._pending + self._file.read()).split(b"\n")
+        found = []
+        for raw in complete:
+            at, self._at = self._at, self._at + len(raw) + 1
+            if not raw.strip():
+                continue
+            try:
+                found.append((at, json.loads(raw)))
+            except ValueError:
+                raise CannotVerify(
+                    f"{self.path}: the line at byte {at} is not JSON; is this the mock's capture file?"
+                ) from None
+        return found
+
+
+def client() -> httpx.Client:
+    """The HTTP client for one run. The environment's proxy settings are ignored: verify talks to the SMG it was
+    given, with nothing in between."""
+    return httpx.Client(timeout=TIMEOUT, trust_env=False)
+
+
+def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manifest, set_name: str, case: dict) -> dict:
+    """Send one case and judge it on the first capture line written for it since the previous case's answer."""
+    try:
+        status, body = send(http, url, request_body(case, manifest.model))
+    except (httpx.HTTPError, httpx.InvalidURL) as err:
+        raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
+    line = None
+    for at, candidate in capture.lines():
+        request_id = candidate.get("request_id") if isinstance(candidate, dict) else None
+        if line is not None or not carries(request_id, case["id"]):
+            continue
+        ids = candidate.get("input_ids")
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            raise CannotVerify(
+                f"{capture.path}: the line at byte {at} for {request_id} has no list of integer input_ids"
+            )
+        line = candidate
+    if status != 200:
+        # A non-200 is SMG's answer to the case, so it is a verdict, not an error of the run.
+        outcome = {"verdict": "rejected", "message": error_message(body)}
+    elif line is None:
+        outcome = {"verdict": "missing"}
+    else:
+        outcome = compare(case, line)
+    return {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "status": status, "body": body}
 
 
 def request_body(case: dict, model: str) -> dict:
@@ -75,8 +123,8 @@ def request_body(case: dict, model: str) -> dict:
     return body
 
 
-def send(client: httpx.Client, url: str, body: dict) -> tuple[int, object]:
-    response = client.post(
+def send(http: httpx.Client, url: str, body: dict) -> tuple[int, object]:
+    response = http.post(
         f"{url.rstrip('/')}/v1/chat/completions",
         content=json.dumps(body),
         headers={"content-type": "application/json"},
@@ -87,60 +135,17 @@ def send(client: httpx.Client, url: str, body: dict) -> tuple[int, object]:
         return response.status_code, response.text
 
 
-def open_capture(path: Path) -> BinaryIO:
-    """The capture file, opened before the first request so that one verify cannot read stops the run at once.
+def carries(request_id: object, case_id: str) -> bool:
+    """Whether a captured ``request_id`` is the case's: its id as sent, or with one prefill-decode suffix after it.
 
-    The mock creates it when it starts and appends to it, so what is there already is an earlier run's.
-    """
-    try:
-        return path.open("rb")
-    except OSError as err:
-        raise CannotVerify(f"cannot read the capture file {path}: {err.strerror or err}") from None
-
-
-def read_capture(file: BinaryIO, path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
-    """The first capture line for each wanted fixture id among the complete lines written since ``start``.
-
-    Lines for other request ids are other clients'. The text after the last newline is a line the mock is still
-    writing for one of them: every request this run sent was answered, and the mock writes a request's line
-    before the engine answers. A later line for a case is a retry or, under prefill-decode, the other leg's copy
-    of the request.
-    """
-    file.seek(start)
-    data = file.read()
-    found: dict[str, dict] = {}
-    end = start
-    for raw in data.split(b"\n")[:-1]:
-        at, end = end, end + len(raw) + 1
-        if not raw.strip():
-            continue
-        try:
-            line = json.loads(raw)
-        except ValueError:
-            raise CannotVerify(f"{path}: the line at byte {at} is not JSON; is this the mock's capture file?") from None
-        request_id = line.get("request_id") if isinstance(line, dict) else None
-        case_id = fixture_id(request_id, wanted)
-        if case_id is None or case_id in found:
-            continue
-        ids = line.get("input_ids")
-        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
-            raise CannotVerify(f"{path}: the line at byte {at} for {request_id} has no list of integer input_ids")
-        found[case_id] = line
-    return found
-
-
-def fixture_id(request_id: object, wanted: set[str]) -> str | None:
-    """The wanted fixture id a captured ``request_id`` carries, or None.
-
-    An id that is a wanted fixture id as it stands is that case's, so no line joins two cases; otherwise one
-    prefill-decode suffix is taken off its end.
+    The id as sent is tried first, so a case whose id ends in something like that suffix keeps its own lines.
     """
     if not isinstance(request_id, str):
-        return None
-    if request_id in wanted:
-        return request_id
+        return False
+    if request_id == case_id:
+        return True
     match = PREFILL_DECODE_ID.fullmatch(request_id)
-    return match[1] if match and match[1] in wanted else None
+    return match is not None and match[1] == case_id
 
 
 def compare(case: dict, line: dict) -> dict:

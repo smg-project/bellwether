@@ -4,6 +4,9 @@ Render cases are implemented: each request goes to SMG, and the mock worker behi
 token ids SMG sent in its capture file. The other kinds exit with status 2 until their milestone lands,
 so a script never mistakes a missing feature for a passing run.
 
+A run reads every set once before its first request, to stop on anything it cannot read, keeping only the case ids.
+It then sends, judges and writes one case at a time, so its memory does not grow with the number of cases.
+
 Exit status: 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict at all.
 """
 
@@ -35,32 +38,32 @@ def run(args: argparse.Namespace) -> int:
         return CANNOT_RUN
     try:
         manifests = select_manifests(args.fixtures, args.models)
-        cases, without_cases = render_cases(manifests, named=bool(args.models))
-        if not cases:
+        sets, without_cases = check_sets(manifests, named=bool(args.models))
+        if not sets:
             models = ", ".join(manifest.model for manifest in manifests)
             raise CannotVerify(f"no render fixtures under {args.fixtures} for {models}")
         known = report.load_known(args.known) if args.known else {}
-        results = render.verify(args.smg, args.capture, cases)
+        with (
+            render.Capture(args.capture) as capture,
+            render.client() as http,
+            report.Writer(report=args.report, junit=args.junit) as writer,
+        ):
+            judged: set[str] = set()  # the listed ids the run judged
+            for manifest, set_name, path in sets:
+                for _, case in read_cases(path):
+                    result = render.verify_case(http, args.smg, capture, manifest, set_name, case)
+                    report.judge(result, known)
+                    if result["known"] is not None:
+                        judged.add(result["id"])
+                    writer.add(result)
+            written = writer.finish(
+                provenance=report.provenance(url=args.smg, capture=args.capture, known=args.known, manifests=manifests),
+                known_without_case=report.known_without_case(known, manifests, judged),
+                models_without_cases=without_cases,
+            )
     except CannotVerify as err:
         print(f"bellwether verify: {err}", file=sys.stderr)
         return CANNOT_RUN
-    report.judge(results, known)
-    without_case = report.known_without_case(known, manifests, results)
-    written = report.build(
-        results,
-        without_case,
-        url=args.smg,
-        capture=args.capture,
-        known=args.known,
-        manifests=manifests,
-        without_cases=without_cases,
-    )
-    for line in report.lines(written):
-        print(line)
-    if args.report:
-        report.write_json(args.report, written)
-    if args.junit:
-        report.write_junit(args.junit, written)
     return 0 if written["passed"] else 1
 
 
@@ -80,24 +83,26 @@ def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]
     return manifests
 
 
-def render_cases(manifests: list[Manifest], *, named: bool) -> tuple[list[tuple[Manifest, str, dict]], list[str]]:
-    """Every render case of the given models, with its manifest and set name, in file order; and the models with none.
+def check_sets(manifests: list[Manifest], *, named: bool) -> tuple[list[tuple[Manifest, str, Path]], list[str]]:
+    """``(manifest, set, file)`` for each render set with a case, every one read whole; and the models with none.
 
-    A set is read in either form, plain or compressed (see ``cases``). A case id is a model's once: the join and the
-    known differences go by it. A model named with ``--model`` must have a case; any other model without one is
-    named in the report.
+    A set is read in either form, plain or compressed (see ``cases``), and only the case ids are kept. A case id is a
+    model's once: the join and the known differences go by it. A model named with ``--model`` must have a case; any
+    other model without one is named in the report.
     """
-    cases, without = [], []
+    sets, without = [], []
     for manifest in manifests:
         seen: dict[str, str] = {}  # case id -> its set
         for name, path in render_sets(manifest):
+            before = len(seen)
             for number, case in read_cases(path):
                 if case["id"] in seen:
                     raise CannotVerify(f"{path}:{number}: {case['id']} is already a case of the {seen[case['id']]} set")
                 seen[case["id"]] = name
-                cases.append((manifest, name, case))
+            if len(seen) > before:
+                sets.append((manifest, name, path))
         if not seen:
             if named:
                 raise CannotVerify(f"no render fixtures under {manifest.path.parent} for {manifest.model}")
             without.append(manifest.model)
-    return cases, without
+    return sets, without

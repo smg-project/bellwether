@@ -26,7 +26,8 @@ from bellwether.unpack import set_files
 
 from .render import CannotVerify
 
-CHUNK = 1 << 20  # bytes read from a set file at a time
+CHUNK = 1 << 16  # plain bytes read from a set file at a time, in either form
+HEAD = max(len(LFS_POINTER_PREFIX), 18)  # enough for a Git LFS pointer's first line and any zstd frame header
 SUFFIXES = {"plain": ".jsonl", "zstd": COMPRESSED_SUFFIX}  # sets.toml's form -> the set file's suffix
 
 
@@ -97,14 +98,16 @@ def _lines(path: Path) -> Iterator[bytes]:
 
 
 def _plain_chunks(path: Path) -> Iterator[bytes]:
-    """The file's plain content, decompressing a ``.jsonl.zst`` set as it is read.
+    """The file's plain content, ``CHUNK`` bytes at a time, decompressing a ``.jsonl.zst`` set as it is read.
 
-    zstd's stream reader takes a file cut short for a shorter one, so each frame is decompressed on its own and must
-    reach its end.
+    zstd's stream reader takes a file cut short for a shorter one, so a set must be what ``record`` writes, one frame
+    that declares its content size, and the plain bytes must come to that size. What one compressed byte expands to
+    depends on the data, so the reads are bounded by what they return, not by what they consume.
     """
     try:
         with path.open("rb") as raw:
-            if raw.read(len(LFS_POINTER_PREFIX)) == LFS_POINTER_PREFIX:
+            head = raw.read(HEAD)
+            if head.startswith(LFS_POINTER_PREFIX):
                 command = lfs_pull_command([path], repository_root(path))
                 raise CannotVerify(f"{path} is a Git LFS pointer; fetch it first: {command}")
             raw.seek(0)
@@ -112,15 +115,16 @@ def _plain_chunks(path: Path) -> Iterator[bytes]:
                 while chunk := raw.read(CHUNK):
                     yield chunk
                 return
-            frame = zstandard.ZstdDecompressor().decompressobj()
-            while chunk := raw.read(CHUNK):
-                while chunk:
-                    if frame.eof:  # the bytes after a frame's end start the next frame
-                        frame = zstandard.ZstdDecompressor().decompressobj()
-                    yield frame.decompress(chunk)
-                    chunk = frame.unused_data if frame.eof else b""
-            if not frame.eof:
-                raise CannotVerify(f"{path} ends inside a zstd frame: the set is cut short")
+            declared = zstandard.frame_content_size(head)
+            if declared < 0:
+                raise CannotVerify(f"{path}: its zstd frame does not declare its content size, as record's always do")
+            reader = zstandard.ZstdDecompressor().stream_reader(raw)  # one frame
+            plain = 0
+            while chunk := reader.read(CHUNK):
+                plain += len(chunk)
+                yield chunk
+            if plain != declared:
+                raise CannotVerify(f"{path} is cut short: {plain} of the {declared} plain bytes its frame declares")
     except zstandard.ZstdError as err:
         raise CannotVerify(f"{path} is not a zstd stream verify can read: {err}") from None
     except OSError as err:

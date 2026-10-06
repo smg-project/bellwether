@@ -222,7 +222,9 @@ request, and nothing in them is passed over: a set Git LFS has not fetched stops
 command that fetches it, and so does a set `sets.toml` lists that the checkout lacks, a set that is not
 zstd or is cut short, a line that is not a case with a request and reference ids, and a case id in two
 of a model's sets. A model named with `--model` must have render cases; any other model without them is
-named in the report.
+named in the report. That first read keeps only the case ids; the cases are then sent, judged and
+written one at a time, so a run's memory does not grow with its number of cases, and the JSON report and
+the JUnit XML are put together when the run finishes.
 
 | Verdict | Meaning |
 |---|---|
