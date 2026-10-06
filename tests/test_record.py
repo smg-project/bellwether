@@ -8,6 +8,7 @@ import subprocess
 import pytest
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
+from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record import sets as set_tables
@@ -1020,3 +1021,53 @@ def test_unpack_model_writes_and_fetches_that_model_only(tmp_path, tiny_model, m
     assert asked == []
     assert sorted(p.name for p in out.iterdir()) == ["tiny-chat"]
     assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == ["bench-x.jsonl", "common.jsonl"]
+
+
+def test_unpack_again_drops_a_set_the_fixtures_no_longer_have(tmp_path, tiny_model, monkeypatch):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+    (tmp_path / "corpus" / "render" / "extra.jsonl").unlink()
+    assert main(record_argv(tmp_path, tiny_model)) == 0
+
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out)]) == 0
+
+    assert not (out / "tiny-chat" / "render" / "extra.jsonl").exists()
+    assert (out / "tiny-chat" / "render" / "common.jsonl").is_file()
+
+
+def test_unpack_refuses_to_write_over_the_fixtures_it_reads(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    fixtures = tmp_path / "fixtures"
+    before = (fixtures / "tiny-chat" / "render" / "common.jsonl").read_bytes()
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(fixtures)]) == 1
+    assert "--out" in capsys.readouterr().err
+    assert (fixtures / "tiny-chat" / "render" / "common.jsonl").read_bytes() == before
+
+
+def test_unpack_model_names_the_known_models_when_none_matches(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out), "--model", "acme/None"]) == 1
+    assert "acme/None" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_fetch_pulls_in_batches_that_stay_under_the_argument_limit(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr("bellwether.unpack.repository_root", lambda path: tmp_path)
+    monkeypatch.setattr("bellwether.unpack.subprocess.run", lambda argv, cwd: calls.append(argv))
+    paths = [tmp_path / "fixtures" / "m" / "render" / f"set-{i:05d}-{'x' * 40}.jsonl.zst" for i in range(3000)]
+    unpack_module.fetch(paths)
+    includes = [argv[argv.index("--include") + 1] for argv in calls]
+    assert len(calls) > 1
+    assert all(len(include.encode()) < 100_000 for include in includes)
+    assert sorted(p for include in includes for p in include.split(",")) == sorted(
+        p.relative_to(tmp_path).as_posix() for p in paths
+    )

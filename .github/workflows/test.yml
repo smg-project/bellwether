@@ -23,9 +23,14 @@ jobs:
       - run: uv run bellwether import bfcl --check
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - name: Benchmark sets are committed as Git LFS pointers
+        run: git lfs fsck --pointers
       - name: Fetch the benchmark sets this pull request changes
         if: github.event_name == 'pull_request'
+        shell: bash
         run: |
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- 'fixtures/**/*.jsonl.zst' | paste -sd, -)
-          if [ -n "$changed" ]; then git lfs pull --include "$changed" --exclude ""; fi
+          set -euo pipefail
+          # 400 paths per pull keeps each --include argument well under Linux's 131,072-byte cap.
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- 'fixtures/**/*.jsonl.zst' \
+            | xargs -r -n 400 sh -c 'git lfs pull --include "$(printf "%s," "$@" | sed "s/,$//")" --exclude ""' sh
       - run: uv run pytest -q

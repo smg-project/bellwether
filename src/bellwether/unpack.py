@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from bellwether.manifest import KINDS, Manifest, load_manifest
+from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest
 from bellwether.record import sets as set_tables
 from bellwether.record.fixtures import (
     COMPRESSED_SUFFIX,
@@ -25,11 +25,15 @@ from bellwether.record.fixtures import (
     repository_root,
 )
 
+# Linux caps one command-line argument at 131,072 bytes; a full re-record changes thousands of sets.
+INCLUDE_BYTES = 100_000
+
 
 def selected(fixtures: Path, model: str | None) -> list[Manifest]:
-    """The manifest of every model under ``fixtures``, or of ``model`` only."""
-    manifests = [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
-    return [manifest for manifest in manifests if model is None or manifest.model == model]
+    """The manifest of every model under ``fixtures``, or of ``model`` only, which must have one."""
+    if model is not None:
+        return [find_manifest(fixtures, model)]
+    return [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
 
 
 def set_files(manifest: Manifest) -> list[tuple[str, str, Path]]:
@@ -49,15 +53,32 @@ def fetch(paths: list[Path]) -> None:
     """``git lfs pull`` of exactly these sets, run from the root of the checkout that holds them. Nothing is raised:
     without git-lfs, a network or a checkout, the sets stay pointers, and the caller names them."""
     root = repository_root(paths[0])
-    if root is not None:
-        subprocess.run(["git", "lfs", "pull", "--include", lfs_include(paths, root), "--exclude", ""], cwd=root)
+    if root is None:
+        return
+    batch: list[Path] = []
+    size = 0
+    for path in paths:
+        item = len(lfs_include([path], root).encode()) + 1
+        if batch and size + item > INCLUDE_BYTES:
+            subprocess.run(["git", "lfs", "pull", "--include", lfs_include(batch, root), "--exclude", ""], cwd=root)
+            batch, size = [], 0
+        batch.append(path)
+        size += item
+    if batch:
+        subprocess.run(["git", "lfs", "pull", "--include", lfs_include(batch, root), "--exclude", ""], cwd=root)
 
 
 def unpack(fixtures: Path, out: Path, model: str | None = None) -> list[Path]:
+    """Write each selected model's tree under ``out``, replacing what an earlier unpack left there, so a set the
+    fixtures no longer have does not stay behind for a consumer that reads every ``*.jsonl``."""
+    manifests = selected(fixtures, model)
+    refuse_out_over_fixtures(out, manifests)
     written: list[Path] = []
-    for manifest in selected(fixtures, model):
+    for manifest in manifests:
         target_dir = out / manifest.slug
-        target_dir.mkdir(parents=True, exist_ok=True)
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True)
         for name in ("manifest.toml", set_tables.FILE):
             if (manifest.path.parent / name).is_file():
                 shutil.copyfile(manifest.path.parent / name, target_dir / name)
@@ -69,8 +90,21 @@ def unpack(fixtures: Path, out: Path, model: str | None = None) -> list[Path]:
     return written
 
 
+def refuse_out_over_fixtures(out: Path, manifests: list[Manifest]) -> None:
+    """Unpacking replaces each model's tree under ``out``; with ``out`` the fixtures directory, that would delete the
+    fixtures it reads."""
+    for manifest in manifests:
+        if (out / manifest.slug).resolve() == manifest.path.parent.resolve():
+            raise ValueError(f"--out {out} is the fixtures directory itself; unpack writes a separate tree")
+
+
 def run(args: argparse.Namespace) -> int:
-    manifests = selected(args.fixtures, args.model)
+    try:
+        manifests = selected(args.fixtures, args.model)
+        refuse_out_over_fixtures(args.out, manifests)
+    except (FileNotFoundError, ValueError) as err:
+        print(f"bellwether unpack: {err}", file=sys.stderr)
+        return 1
     pointers = [path for manifest in manifests for _, _, path in set_files(manifest) if is_lfs_pointer(path)]
     if pointers:
         fetch(pointers)
