@@ -54,13 +54,14 @@ message, the template renders it as the final assistant turn, and the text betwe
 prompt and the end-of-turn token is the output.
 
 The template gets every assistant message, the request's history and the final turn alike, as vLLM
-gives it to a template (`_postprocess_messages` in `vllm/entrypoints/chat_utils.py` at 1ad5182b): a
-call's arguments that are missing, null or empty become `{}`, a string is decoded whatever JSON it
-holds, and an empty `tool_calls` is dropped. SGLang differs: at 7d22b7a8 it rejects a string that is
-not a JSON object, except under Kimi-K3's encoding, and leaves missing or null arguments as they are.
-That difference is recorded here, not decided. A parse case's own call must carry its arguments as a
-JSON object string, the one a parser returns: that is a rule of the corpus, not of an engine. A
-template that cannot take an object fails the case, which is reported as a finding.
+gives it to a template (`_postprocess_messages` in `vllm/entrypoints/chat_utils.py` at v0.31.0, the
+release whose image bellwether pins): a call's arguments become the object they decode to, anything
+that does not decode to a JSON object becomes `{}`, and an empty `tool_calls` is dropped. SGLang
+differs: at 7d22b7a8 it rejects a string that is not a JSON object, except under Kimi-K3's encoding,
+and leaves missing or null arguments as they are. That difference is recorded here, not decided. A
+parse case's own call must carry its arguments as a JSON object string, the one a parser returns:
+that is a rule of the corpus, not of an engine. A template that cannot take an object fails the
+case, which is reported as a finding.
 
 A line carries `request` (what a replay sends to SMG),
 `tools`, `output_ids` (the output's tokens, the end-of-turn token excluded), `output_pieces` (the text

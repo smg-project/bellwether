@@ -414,11 +414,12 @@ def test_roundtrip_reports_arguments_that_are_not_a_json_object(tiny_model):
         ([], {}),
         ("{}", {}),
         ('{"a": 1}', {"a": 1}),
-        ('["a"]', ["a"]),
-        ('"x"', "x"),
-        ("2", 2),
+        ('["a"]', {}),
+        ('"x"', {}),
+        ("2", {}),
+        ("{a", {}),
         ({"a": 1}, {"a": 1}),
-        (["a"], ["a"]),
+        (["a"], {}),
     ],
 )
 def test_a_history_call_reaches_the_template_with_the_arguments_vllm_gives_it(arguments, given):
@@ -437,12 +438,6 @@ def test_an_empty_tool_calls_list_is_dropped_as_vllm_drops_it():
     message = {"role": "assistant", "content": "Hi", "tool_calls": []}
     assert as_vllm_gives_it(message) == {"role": "assistant", "content": "Hi"}
     assert message["tool_calls"] == []
-
-
-def test_a_history_call_whose_arguments_are_not_json_fails_the_case_as_it_fails_in_vllm():
-    message = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "f", "arguments": "{a"}}]}
-    with pytest.raises(json.JSONDecodeError):
-        as_vllm_gives_it(message)
 
 
 def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(items_model):
