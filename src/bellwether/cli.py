@@ -158,8 +158,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--known",
         type=Path,
         metavar="PATH",
-        help='known differences, a TOML table of "<fixture id>" = "<reason>": a listed case passes while it '
-        "is a regression or rejected and fails once it matches",
+        help="known differences: a TOML table per fixture id with the verdict SMG is known to give (regression, or "
+        "rejected with SMG's error code), a reason and an issue link; a listed case passes while it has exactly "
+        "that outcome and fails on any other",
     )
     verify.add_argument("--report", type=Path, metavar="PATH", help="write the JSON report here")
     verify.add_argument("--junit", type=Path, metavar="PATH", help="write a JUnit XML report here")

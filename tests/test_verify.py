@@ -186,6 +186,16 @@ CASES = {
 }
 # What SMG appends to a rid under prefill-decode disaggregation: a UUIDv7, a fresh one for each attempt.
 PD_SUFFIX = "-0199b9d4-6a52-7c3e-8f21-{:012x}"
+ISSUE = "https://github.com/smg-project/smg/issues/1"
+
+
+def write_known(path, entries: dict[str, dict]) -> None:
+    """A known-differences file: one table per fixture id, each with the issue unless the entry gives its own."""
+    text = ""
+    for case_id, entry in entries.items():
+        text += f"[{json.dumps(case_id)}]\n"
+        text += "".join(f"{key} = {json.dumps(value)}\n" for key, value in {"issue": ISSUE, **entry}.items())
+    path.write_text(text)
 
 
 def verify(gateway, fixtures, *extra) -> int:
@@ -334,7 +344,11 @@ def test_only_smgs_refusal_of_the_request_is_rejected(tmp_path, gateway, capsys,
     fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
     gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
     gateway.rejections["m1/render/hello"] = (status, body)
-    known.write_text('"m1/render/hello" = "SMG refuses it"\n')  # an answer about the setup is never excused
+    if verdict == "rejected":
+        code = smg_answer(status, body)[1]["error"]["code"]
+    else:
+        code = "bad_request"  # an answer about the setup is never excused, even listed as a refusal
+    write_known(known, {"m1/render/hello": {"verdict": "rejected", "code": code, "reason": "SMG refuses it"}})
 
     assert verify(gateway, fixtures, "--known", str(known), "--report", str(report)) == (
         0 if verdict == "rejected" else 1
@@ -433,57 +447,126 @@ def test_a_capture_line_joins_one_case_only(tmp_path, gateway, prefill_decode):
     assert verdicts == {"m1/render/hello": "missing", f"m1/render/{twin}": "match"}
 
 
-def test_listed_known_differences_pass_while_they_differ_or_are_rejected(tmp_path, gateway, capsys):
+def test_a_listed_case_passes_while_it_has_the_outcome_its_entry_states(tmp_path, gateway, capsys):
     fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
     cases = write_model(fixtures, "m1", "org/M1", CASES)
+    write_model(fixtures, "m2", "org/M2", {"hello": (HELLO, [5, 6], "h")})
     gateway.serve(cases)
     gateway.prompts["m1/render/hello"] = ([10, 11], "<u>Hi.</u><a>")
     gateway.rejections["m1/render/tools"] = (400, "tool definitions need a name")
-    known.write_text(
-        '"m1/render/hello" = "SMG drops the period"\n'
-        '"m1/render/tools" = "SMG requires a function name"\n'
-        '"m2/render/hello" = "another model, not verified in this run"\n'
-        '"m1/parse/hello" = "another kind, not verified in this run"\n'
+    write_known(
+        known,
+        {
+            "m1/render/hello": {"verdict": "regression", "reason": "SMG drops the period"},
+            "m1/render/tools": {"verdict": "rejected", "code": "bad_request", "reason": "SMG requires a name"},
+            "m2/render/hello": {"verdict": "regression", "reason": "another model, not verified in this run"},
+            "m1/parse/hello": {"verdict": "regression", "reason": "another kind, not verified in this run"},
+        },
     )
 
-    assert verify(gateway, fixtures, "--known", str(known), "--report", str(report)) == 0
+    assert verify(gateway, fixtures, "--model", "org/M1", "--known", str(known), "--report", str(report)) == 0
+
+    written = json.loads(report.read_text())
+    results = {case["id"]: case for case in written["cases"]}
+    hello, tools = results["m1/render/hello"], results["m1/render/tools"]
+    assert (hello["verdict"], hello["passed"]) == ("regression", True)
+    assert hello["known"] == {"issue": ISSUE, "verdict": "regression", "reason": "SMG drops the period"}
+    assert (tools["verdict"], tools["code"], tools["passed"]) == ("rejected", "bad_request", True)
+    assert [results["m1/render/budget"][key] for key in ("verdict", "known", "passed")] == ["match", None, True]
+    assert written["known_outside_run"] == ["m1/parse/hello", "m2/render/hello"]
+    out = capsys.readouterr().out
+    assert f"known: SMG drops the period ({ISSUE})" in out
+    assert "2 listed known differences are for cases this run does not verify" in out
+
+
+@pytest.mark.parametrize(
+    "entry, answer",
+    [
+        ({"verdict": "regression"}, "match"),
+        ({"verdict": "regression"}, "rejected"),
+        ({"verdict": "rejected", "code": "bad_request"}, "regression"),
+        ({"verdict": "rejected", "code": "bad_request"}, "rejected for another code"),
+        ({"verdict": "rejected", "code": 400}, "rejected"),
+        ({"verdict": "regression"}, "missing"),
+        ({"verdict": "rejected", "code": "bad_request"}, "measurement_failed"),
+    ],
+    ids=["fixed", "now refused", "now sent", "other code", "code of another type", "missing", "measurement failed"],
+)
+def test_a_listed_case_with_any_other_outcome_fails(tmp_path, gateway, capsys, entry, answer):
+    fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    if answer == "rejected":
+        gateway.rejections["m1/render/hello"] = (400, "message content cannot be empty")
+    elif answer == "rejected for another code":
+        gateway.rejections["m1/render/hello"] = (400, smg_error(400, "invalid_tool", "tool definitions need a name"))
+    elif answer == "regression":
+        gateway.prompts["m1/render/hello"] = ([10, 11], "<u>Hi.</u><a>")
+    elif answer == "missing":
+        del gateway.prompts["m1/render/hello"]
+    elif answer == "measurement_failed":
+        gateway.rejections["m1/render/hello"] = (503, smg_error(503, "no_available_workers", "No available workers"))
+    write_known(known, {"m1/render/hello": {**entry, "reason": "SMG differs here"}})
+
+    assert verify(gateway, fixtures, "--known", str(known), "--report", str(report)) == 1
 
     results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
-    assert [results["m1/render/hello"][key] for key in ("verdict", "known", "passed")] == [
-        "regression",
-        "SMG drops the period",
-        True,
-    ]
-    assert [results["m1/render/tools"][key] for key in ("verdict", "known", "passed")] == [
-        "rejected",
-        "SMG requires a function name",
-        True,
-    ]
-    assert [results["m1/render/budget"][key] for key in ("verdict", "known", "passed")] == ["match", None, True]
-    assert "known: SMG drops the period" in capsys.readouterr().out
+    assert results["m1/render/hello"]["passed"] is False
+    assert [results[case_id]["passed"] for case_id in ("m1/render/budget", "m1/render/tools")] == [True, True]
+    listed = entry["verdict"] + (f" {entry['code']}" if "code" in entry else "")
+    line = next(line for line in capsys.readouterr().out.splitlines() if "m1/render/hello:" in line)
+    assert f"listed as a known {listed}" in line
+    if answer == "match":
+        assert "remove the entry" in line
 
 
-def test_a_listed_case_that_matches_or_is_missing_or_does_not_exist_fails(tmp_path, gateway, capsys):
+def test_a_listed_id_that_can_name_no_case_fails_the_run_on_its_own(tmp_path, gateway, capsys):
     fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
-    cases = write_model(fixtures, "m1", "org/M1", CASES)
-    gateway.serve(cases)
-    del gateway.prompts["m1/render/tools"]
-    known.write_text(
-        '"m1/render/hello" = "fixed in SMG since"\n'
-        '"m1/render/tools" = "a missing capture line is the setup, not a difference"\n'
-        '"m1/render/renamed" = "a case the corpus no longer has"\n'
-    )
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    gone = ["m1/render/renamed", "m9/render/hello", "m1/rendr/hello", "hello"]
+    write_known(known, {case_id: {"verdict": "regression", "reason": "listed long ago"} for case_id in gone})
 
     assert verify(gateway, fixtures, "--known", str(known), "--report", str(report)) == 1
 
     written = json.loads(report.read_text())
-    results = {case["id"]: case for case in written["cases"]}
-    assert [results["m1/render/hello"][key] for key in ("verdict", "passed")] == ["match", False]
-    assert [results["m1/render/tools"][key] for key in ("verdict", "passed")] == ["missing", False]
-    assert written["known_without_case"] == ["m1/render/renamed"]
+    assert all(case["passed"] for case in written["cases"])
+    assert (written["passed"], written["known_without_case"], written["known_outside_run"]) == (False, sorted(gone), [])
     out = capsys.readouterr().out
-    assert "m1/render/hello" in out and "remove the entry" in out
-    assert "m1/render/renamed" in out
+    assert all(f"known {case_id}: listed, but there is no such case" in out for case_id in gone)
+
+
+@pytest.mark.parametrize(
+    "entry, message",
+    [
+        ('"m1/render/hello" = "SMG drops the period"', "is not a table"),
+        ('["m1/render/hello"]\nverdict = "regression"\nreason = "SMG drops the period"', "issue"),
+        ('["m1/render/hello"]\nverdict = "regression"\nreason = "x"\nissue = "#12"', "issue"),
+        (f'["m1/render/hello"]\nverdict = "missing"\nreason = "x"\nissue = "{ISSUE}"', "verdict"),
+        (f'["m1/render/hello"]\nverdict = "rejected"\nreason = "x"\nissue = "{ISSUE}"', "code"),
+        (f'["m1/render/hello"]\nverdict = "regression"\ncode = 400\nreason = "x"\nissue = "{ISSUE}"', "code"),
+        (f'["m1/render/hello"]\nverdict = "regression"\nreason = ""\nissue = "{ISSUE}"', "reason"),
+        (f'["m1/render/hello"]\nverdict = "regression"\nreason = "x"\nissue = "{ISSUE}"\nwhy = "y"', "why"),
+    ],
+    ids=[
+        "a reason only",
+        "no issue",
+        "no issue link",
+        "a setup verdict",
+        "no code",
+        "a stray code",
+        "no reason",
+        "a stray key",
+    ],
+)
+def test_a_known_entry_states_its_verdict_its_reason_and_its_issue(tmp_path, gateway, capsys, entry, message):
+    fixtures, known = tmp_path / "fixtures", tmp_path / "known.toml"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    known.write_text(entry + "\n")
+
+    assert verify(gateway, fixtures, "--known", str(known)) == 2
+
+    err = capsys.readouterr().err
+    assert str(known) in err and "m1/render/hello" in err and message in err
+    assert gateway.received == []
 
 
 def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(tmp_path, gateway):
@@ -495,7 +578,13 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
     gateway.rejections["m1/render/tools"] = (400, "tool definitions need a name")
     del gateway.prompts["m2/render/hello"]
     gateway.rejections["m2/render/bye"] = (400, "goodbyes are refused")
-    known.write_text('"m2/render/bye" = "SMG refuses goodbyes"\n"m2/render/gone" = "a case the corpus dropped"\n')
+    write_known(
+        known,
+        {
+            "m2/render/bye": {"verdict": "rejected", "code": "bad_request", "reason": "SMG refuses goodbyes"},
+            "m2/render/gone": {"verdict": "regression", "reason": "a case the corpus dropped"},
+        },
+    )
     argv = ["--known", str(known), "--report", str(out / "report.json"), "--junit", str(out / "junit.xml")]
 
     assert verify(gateway, fixtures, *argv) == 1
@@ -784,7 +873,7 @@ def test_a_run_stopped_partway_reports_what_was_answered_and_names_what_was_not_
     else:
         gateway.prompts["m1/render/tools"] = (None, "<t>Weather?")
         message = "has no list of integer input_ids"
-    known.write_text('"m2/render/bye" = "a listed case the run did not reach"\n')
+    write_known(known, {"m2/render/bye": {"verdict": "rejected", "code": "bad_request", "reason": "not reached"}})
     argv = ["--known", str(known), "--report", str(out / "report.json"), "--junit", str(out / "junit.xml")]
 
     assert verify(gateway, fixtures, *argv) == 2

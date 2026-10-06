@@ -58,10 +58,12 @@ def run(args: argparse.Namespace) -> int:
                 if model not in served:
                     raise CannotVerify(f"SMG serves no model {model}; it serves {', '.join(sorted(served)) or 'none'}")
             listed = send(sets, http, args.smg, capture, known, writer)
+            without_case, outside_run = report.known_without_case(known, args.fixtures, manifests, listed)
             written = writer.finish(
                 provenance=report.provenance(url=args.smg, capture=args.capture, known=args.known, manifests=manifests),
                 capture=capture.counts(),
-                known_without_case=report.known_without_case(known, manifests, listed),
+                known_without_case=without_case,
+                known_outside_run=outside_run,
                 models_without_cases=without_cases,
             )
     except CannotVerify as err:
@@ -78,7 +80,7 @@ def send(
     http: httpx.Client,
     url: str,
     capture: render.Capture,
-    known: dict[str, str],
+    known: dict[str, dict],
     writer: report.Writer,
 ) -> set[str]:
     """Send, judge and write every case, one at a time, and return the listed ids among them.

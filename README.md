@@ -72,7 +72,7 @@ catches up.
 | manifest | per-model file: revision, authority order, SMG and engine parser names |
 | chunk plan | how an output token stream is cut into engine chunks for a streaming replay |
 | capture | the mock worker's record of each request SMG sends it, one JSON line per request |
-| known difference | a case where SMG is known to differ from the reference, listed with its reason for `verify --known` |
+| known difference | a case where SMG is known to differ from the reference, listed for `verify --known` with the outcome SMG gives on it, the reason and the issue |
 
 ## Status
 
@@ -243,17 +243,29 @@ about the setup, so no known difference excuses them. Before the first case, `ve
 `/v1/models` for the models it serves; a model with cases that SMG does not list stops the run, as does
 an answer other than SMG's list (a 404 there usually means `--smg` ends in `/v1`).
 
-`--known PATH` lists SMG's known differences as a TOML table of `"<fixture id>" = "<reason>"`. A listed
-case passes while it is a regression or rejected and fails once it matches, and a listed id that names
-no case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
-status is 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such
-model, a manifest or a set verify cannot read, a capture file verify cannot open, no answer from SMG, a
-model it does not serve) or stops before its last case. After the first request, a case left without a
-verdict (no answer from SMG, a capture line verify cannot read, a set that cannot be read again) stops
-the sending: the cases answered so far are judged and reported, and the report names the case the run
-stopped at and every case it did not send. A case is judged against its reference alone for now: telling
-an `engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once
-they are recorded.
+`--known PATH` lists SMG's known differences, one TOML table per fixture id stating the outcome SMG is
+known to give, why, and the issue that tracks it; bellwether ships no such list:
+
+```toml
+["qwen3-8b/render/some-case"]
+verdict = "rejected"   # or "regression"
+code = "bad_request"   # a rejected entry's: SMG's error code, or 400 for its validation errors
+reason = "what SMG does on this case, and why it is not fixed yet"
+issue = "https://github.com/smg-project/smg/issues/NNN"
+```
+
+A listed case passes while it has exactly that outcome and fails on any other: a match, so the entry
+goes as soon as SMG is fixed; another verdict or code; or an outcome about the setup. A listed id that
+can name no case fails the run: one that is not a fixture id, one whose slug no manifest has, or a
+render id of a verified model that the run did not find. Ids of models or kinds the run does not verify
+are counted and listed in the report, so the list cannot go stale. The exit status is 0 when every case
+passes, 1 when one does not, and 2 when the run gives no verdict (no such model, a manifest or a set
+verify cannot read, a capture file verify cannot open, no answer from SMG, a model it does not serve) or
+stops before its last case. After the first request, a case left without a verdict (no answer from SMG,
+a capture line verify cannot read, a set that cannot be read again) stops the sending: the cases
+answered so far are judged and reported, and the report names the case the run stopped at and every case
+it did not send. A case is judged against its reference alone for now: telling an `engine_defect` or
+`engines_split` from a `regression` needs the engine witnesses, which come once they are recorded.
 
 ## Layout
 

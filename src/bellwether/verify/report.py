@@ -7,6 +7,7 @@ once, and the JSON report and the JUnit XML are put together at the end from tem
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 import tomllib
@@ -24,46 +25,89 @@ VERDICTS = ("match", "regression", "rejected", "missing", "measurement_failed")
 EXCUSABLE = ("regression", "rejected")
 SETUP = ("missing", "measurement_failed")  # verdicts about the setup, never excused
 LEADING_KEYS = ("id", "model", "set", "verdict", "passed", "known")
+ENTRY_KEYS = {"verdict", "code", "reason", "issue"}
+FIXTURE_ID = re.compile(r"(?P<slug>[a-z0-9.-]+)/(?P<kind>render|parse|tokenize|detokenize)/[a-z0-9-]+")  # the schema's
 WITHOUT_CASE = "listed, but there is no such case; remove the entry"
 JUNIT_COUNTS = (("failure", "failures"), ("error", "errors"), ("skipped", "skipped"))
 
 
-def load_known(path: Path) -> dict[str, str]:
-    """Known differences: a TOML table mapping a fixture id to the reason SMG is expected to differ on it."""
+def load_known(path: Path) -> dict[str, dict]:
+    """Known differences: one TOML table per fixture id, stating what SMG is known to do on that case.
+
+    ``verdict`` is ``regression`` or ``rejected``, the verdicts about the case; ``missing`` and
+    ``measurement_failed`` are about the setup and are never known differences. A ``rejected`` entry gives the
+    ``code`` SMG refuses the case with, a string or the number 400 as SMG answers it. ``reason`` says why, and
+    ``issue`` links the issue that tracks it. A key verify does not read is refused, so a misspelt one cannot pass
+    unseen.
+    """
     try:
         known = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as err:
         raise CannotVerify(f"{path}: {err}") from None
-    bad = sorted(key for key, reason in known.items() if not isinstance(reason, str) or not reason.strip())
-    if bad:
-        raise CannotVerify(f'{path}: each entry is "<fixture id>" = "<reason>"; not so for {", ".join(bad)}')
+    for case_id, entry in known.items():
+        problem = _entry_problem(entry)
+        if problem is not None:
+            raise CannotVerify(f"{path}: {case_id} {problem}")
     return known
 
 
-def judge(result: dict, known: dict[str, str]) -> None:
+def _entry_problem(entry: object) -> str | None:
+    if not isinstance(entry, dict):
+        return 'is not a table: an entry is ["<fixture id>"] with a verdict, a reason and an issue'
+    stray = sorted(set(entry) - ENTRY_KEYS)
+    if stray:
+        return f"has keys verify does not read: {', '.join(stray)}"
+    if entry.get("verdict") not in EXCUSABLE:
+        return f"has no verdict of {' or '.join(EXCUSABLE)}; one about the setup is never a known difference"
+    code = entry.get("code")
+    if entry["verdict"] == "rejected" and not (isinstance(code, str) or type(code) is int):
+        return "is rejected without the code SMG refuses it with"
+    if entry["verdict"] != "rejected" and "code" in entry:
+        return "has a code, which only a rejected entry carries"
+    if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
+        return "has no reason"
+    if not isinstance(entry.get("issue"), str) or not entry["issue"].startswith("https://"):
+        return "has no issue, a link starting with https://"
+    return None
+
+
+def judge(result: dict, known: dict[str, dict]) -> None:
     """Mark a case passed or not.
 
-    A case passes when it matches and is not listed, or when it is a regression or rejected and is listed. A listed
-    case that matches fails, so an entry goes as soon as SMG is fixed and the list cannot rot. A missing capture
-    line and a failed measurement fail even when listed: they are about the setup (which file is read, whether the
-    ``rid`` reached the engine, what answered), not about how SMG renders.
+    A case that is not listed passes when it matches. A listed case passes only while it has the outcome its entry
+    states: the verdict, and for ``rejected`` the code. Any other outcome fails: a match, so an entry goes as soon
+    as SMG is fixed; another verdict or code, so a changed failure is looked at again; and ``missing`` or a failed
+    measurement, which are about the setup (which file is read, whether the ``rid`` reached the engine, what
+    answered), not about how SMG renders.
     """
-    reason = known.get(result["id"])
-    result["known"] = reason
-    if result["verdict"] == "match":
-        result["passed"] = reason is None
+    entry = known.get(result["id"])
+    result["known"] = entry
+    if entry is None:
+        result["passed"] = result["verdict"] == "match"
     else:
-        result["passed"] = reason is not None and result["verdict"] in EXCUSABLE
+        result["passed"] = result["verdict"] == entry["verdict"] and result.get("code") == entry.get("code")
 
 
-def known_without_case(known: dict[str, str], manifests: list[Manifest], judged: set[str]) -> list[str]:
-    """Listed ids in a verified model's render fixtures that name no case: the corpus dropped or renamed them.
+def known_without_case(
+    known: dict[str, dict], fixtures: Path, manifests: list[Manifest], listed: set[str]
+) -> tuple[list[str], list[str]]:
+    """The listed ids that name no case, and those for cases this run does not verify.
 
-    ``judged`` holds the listed ids the run judged. Entries for other models or kinds are left alone; this run says
-    nothing about them.
+    ``listed`` holds the listed ids among the run's cases. Any other id names no case when it is not a fixture id,
+    when no manifest under ``fixtures`` has its slug (a misspelt slug, a model whose manifest is gone), or when it is
+    a render id of a verified model, which the corpus dropped or renamed. The rest, render ids of models not
+    verified in this run and ids of other kinds, are counted and listed but not judged.
     """
-    namespaces = tuple(f"{manifest.slug}/render/" for manifest in manifests)
-    return sorted(case_id for case_id in known if case_id.startswith(namespaces) and case_id not in judged)
+    slugs = {path.parent.name for path in fixtures.glob("*/manifest.toml")}
+    verified = {manifest.slug for manifest in manifests}
+    without, outside = [], []
+    for case_id in sorted(set(known) - listed):
+        found = FIXTURE_ID.fullmatch(case_id)
+        if found is None or found["slug"] not in slugs or (found["slug"] in verified and found["kind"] == "render"):
+            without.append(case_id)
+        else:
+            outside.append(case_id)
+    return without, outside
 
 
 class Writer:
@@ -132,7 +176,13 @@ class Writer:
             self._suite(f"{model} {self.kind}").add(testcase)
 
     def finish(
-        self, *, provenance: dict, capture: dict, known_without_case: list[str], models_without_cases: list[str]
+        self,
+        *,
+        provenance: dict,
+        capture: dict,
+        known_without_case: list[str],
+        known_outside_run: list[str],
+        models_without_cases: list[str],
     ) -> dict:
         """Print the totals, write the JSON report and the JUnit XML, and return the report without its cases."""
         cases = self.passed + self.failed
@@ -145,10 +195,13 @@ class Writer:
             "stopped": self.stopped,
             "capture": capture,
             "known_without_case": known_without_case,
+            "known_outside_run": known_outside_run,
             "models_without_cases": models_without_cases,
         }
         for case_id in known_without_case:
             print(f"known {case_id}: {WITHOUT_CASE}")
+        if known_outside_run:
+            print(f"{len(known_outside_run)} listed known differences are for cases this run does not verify")
         for model in models_without_cases:
             print(f"{model}: no render cases")
         lines = f"capture: {capture['lines']} lines written during the run, {capture['joined']} joined a case"
@@ -179,7 +232,9 @@ class Writer:
         )
         if result["passed"]:
             if result["known"] is not None:
-                ET.SubElement(testcase, "skipped", message=f"known difference: {result['known']}")
+                entry = result["known"]
+                message = f"known {_outcome(entry)}: {entry['reason']} ({entry['issue']})"
+                ET.SubElement(testcase, "skipped", message=message)
             return testcase
         tag = "error" if result["verdict"] in SETUP else "failure"
         failure_type = "known-but-matches" if result["verdict"] == "match" else result["verdict"]
@@ -322,11 +377,20 @@ def describe(result: dict) -> str:
         detail = "matches"
     if result["verdict"] in ("match", "regression") and result["status"] != 200:
         detail = f"{detail}; SMG then answered HTTP {result['status']}: {result['message']}".lstrip("; ")
-    if result["known"] is not None:
+    entry = result["known"]
+    if entry is not None:
         if result["passed"]:
-            detail += f"; known: {result['known']}"
+            detail += f"; known: {entry['reason']} ({entry['issue']})"
         elif result["verdict"] == "match":
-            detail += f", but it is listed as a known difference ({result['known']}); remove the entry"
+            detail += f", but it is listed as a known {_outcome(entry)} ({entry['reason']}); remove the entry"
+        elif result["verdict"] in SETUP:
+            words = result["verdict"].replace("_", " ")
+            detail += f"; listed as a known {_outcome(entry)}, but {words} is about the setup"
         else:
-            detail += f"; listed as a known difference, but {result['verdict'].replace('_', ' ')} is about the setup"
+            detail += f"; listed as a known {_outcome(entry)}, which this is not ({entry['issue']})"
     return detail
+
+
+def _outcome(entry: dict) -> str:
+    """What a known-difference entry states: its verdict, and the code of a refusal."""
+    return f"{entry['verdict']} {entry['code']}" if entry["verdict"] == "rejected" else entry["verdict"]
