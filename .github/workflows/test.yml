@@ -16,8 +16,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev
-      # The pinned files (the BFCL wheel, GSM8K's files at their commit) are named and hashed in the importers, so the
-      # key changes whenever a pin does.
+      # The pinned files (the BFCL wheel and the LICENSE at the commit it was built from, GSM8K's files at their commit)
+      # are named and hashed in the importers, so the key changes whenever a pin does.
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/datasets
