@@ -132,9 +132,12 @@ def test_a_file_the_hub_serves_with_other_bytes_is_downloaded_once_more_and_refu
 
 
 def test_fetch_hashes_the_whole_file_not_its_first_mebibyte(tmp_path, hub):
+    rows = b"a" * 2**20 + b"rows"
+    hub.files[FILE] = rows
+    assert hf.fetch(REPO, REVISION, FILE, sha(rows), cache=tmp_path / "cache").read_bytes() == rows
     hub.files[FILE] = b"a" * 2**20 + b"tampered"
     with pytest.raises(ValueError, match="is not the pinned"):
-        hf.fetch(REPO, REVISION, FILE, sha(b"a" * 2**20 + b"rows"), cache=tmp_path / "cache")
+        hf.fetch(REPO, REVISION, FILE, sha(rows), cache=tmp_path / "other")
 
 
 @pytest.mark.parametrize("revision", ["main", "v1.0", "a" * 39, "a" * 41, "A" * 40, "g" * 40])
