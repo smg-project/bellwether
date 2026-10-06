@@ -44,7 +44,7 @@ together.
 
 | Dataset | Sets | Source | License | Attribution |
 |---|---|---|---|---|
-| BFCL | `bfcl-<category>` for 16 of the 17 categories of smg's weekly run. The 13 single-turn categories: 3635 render cases, one per row except 6 `live_irrelevance` rows that repeat an earlier case; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them), with 2233 distinct messages among them. Three multi_turn categories, `bfcl-multi-turn-{base,miss-func,miss-param}`, first turn only: 481 render cases, one per row except 119 that repeat an earlier case; 309 parse cases, one per row whose first turn has a ground-truth call (175 miss_func and miss_param rows have none) except 116 that repeat an earlier case, with 163 distinct messages among them. The import names every row it gives no parse case | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import; the wheel has no LICENSE file, so the import copies `LICENSE` from `github:ShishirPatil/gorilla@6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`, the commit the wheel was built from (sha256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`), to `corpus/licenses/bfcl-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
+| BFCL | `bfcl-<category>` for the 17 categories of smg's weekly run. The 13 single-turn categories: 3635 render cases, one per row except 6 `live_irrelevance` rows that repeat an earlier case; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them), with 2233 distinct messages among them. The four multi_turn categories, `bfcl-multi-turn-{base,miss-func,miss-param,long-context}`, first turn only: 484 render cases, one per row except 316 that repeat an earlier case; 315 parse cases, one per row whose first turn has a ground-truth call (175 miss_func and miss_param rows have none) except 310 that repeat an earlier case, with 166 distinct messages among them. The import names every row it gives no parse case | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import; the wheel has no LICENSE file, so the import copies `LICENSE` from `github:ShishirPatil/gorilla@6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`, the commit the wheel was built from (sha256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`), to `corpus/licenses/bfcl-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
 | GSM8K | `gsm8k-train` and `gsm8k-test`: 7473 and 1319 render cases, one per row; `gsm8k-<split>-reasoning-content` and `gsm8k-<split>-content`: the same rows as parse cases, one set per message shape (no row of the pinned files is left out: every row is usable, and no case repeats an earlier one; all 17584 messages are distinct) | `github:openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c`; sha256 `17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465` (`grade_school_math/data/train.jsonl`), `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` (`grade_school_math/data/test.jsonl`), `86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b` (`LICENSE`) | MIT, checked against the LICENSE file's sha256 on every import and copied to `corpus/licenses/gsm8k-LICENSE` | Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
@@ -60,22 +60,22 @@ passed by position takes the parameter of the class method's `def`, as BFCL's ex
 imported yet: each of their requests carries the results of the earlier calls, which only BFCL's own simulators
 produce, and whether to run them is a decision for later.
 
-The three multi_turn sets repeat cases, and the rule for repeats leaves out 119 of their 600 render cases and 116 of
-their 425 parse cases, in the order the import builds them (base, miss_func, miss_param):
+The four multi_turn sets repeat cases, and the rule for repeats leaves out 316 of their 800 render cases and 310 of
+their 625 parse cases, in the order the import builds them (base, miss_func, miss_param, long_context):
 
 | Set | Render cases | Left out as repeats | Parse cases | Left out as repeats |
 |---|---|---|---|---|
 | `bfcl-multi-turn-base` | 199 | 1 | 199 | 1 |
 | `bfcl-multi-turn-miss-func` | 199 | 1 | 105 | 1 |
 | `bfcl-multi-turn-miss-param` | 83 | 117 | 5 | 114 |
+| `bfcl-multi-turn-long-context` | 3 | 197 | 6 | 194 |
 
 In base and in miss_func, row 43's first turn repeats row 40's. miss_func holds a function back in every row, so none
 of its first requests is base's, while 117 of miss_param's 200 first requests and 114 of its 119 parse cases equal
-base's.
-
-The fourth multi_turn category, long_context, is left out for size. Its first turns would add 200 render and 200 parse
-cases, 9.8 MB, taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB a source may keep as plain JSON Lines
-(`docs/benchmark-sets.md`, Storage).
+base's. long_context sets BFCL's simulators up with long contents (`long_context=True`), which changes what the calls
+return in later turns, not what the first request asks: 195 of its first requests and 191 of its parse cases equal
+base's, and 2 and 3 more equal miss_param's. It keeps the first turns of rows 151, 154 and 197, and the parse cases of
+those and of rows 38, 41 and 46, whose first requests are base's but whose ground-truth calls differ.
 
 A GSM8K case is one grade school math problem. Its request is the question as a single user turn, with no system
 prompt, tools or sampling parameters. Its parse cases take the assistant message from the published answer, the worked

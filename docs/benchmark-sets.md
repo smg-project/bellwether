@@ -158,28 +158,25 @@ rows have a ground truth, and 76 Java and JavaScript rows and 5 rows no built ca
 render-only. Six `live_irrelevance` rows repeat an earlier case and are left out (one rule for
 repeats, in `corpus_sets`).
 
-The weekly run's multi_turn categories base, miss_func and miss_param are imported for their
-first turn, as `bfcl-multi-turn-<category>`. The request is the first one the handler sends for a
-row: the turn's messages and no system message, with the functions of the row's classes as
-tools, less those `missed_function` holds back for a later turn. The functions come from the
-class-to-file map in the wheel's source, parsed with `ast`, and go through the same language hint
-and `convert_to_tool`. The parse message is the turn's ground-truth calls in order: each call
+The weekly run's four multi_turn categories, base, miss_func, miss_param and long_context, are
+imported for their first turn, as `bfcl-multi-turn-<category>`. The request is the first one the
+handler sends for a row: the turn's messages and no system message, with the functions of the row's
+classes as tools, less those `missed_function` holds back for a later turn. The functions come from
+the class-to-file map in the wheel's source, parsed with `ast`, and go through the same language
+hint and `convert_to_tool`. The parse message is the turn's ground-truth calls in order: each call
 string is parsed with `ast`, a value passed by position takes the parameter of the class method's
 `def`, read from the class's source with `ast` (BFCL's executor runs the call on the class, and
-`purchase_insurance`'s doc lists two of its parameters the other way round), and each call is
-held to the same checker rules. That gives 600 render cases and 425 parse cases before the rule for
+`purchase_insurance`'s doc lists two of its parameters the other way round), and each call is held
+to the same checker rules. That gives 800 render cases and 625 parse cases before the rule for
 repeats; the 175 miss_func and miss_param rows whose first turn has no ground-truth call stay
 render-only. Later turns wait for a decision: each of their requests carries the results of the
 earlier calls, which only BFCL's simulators produce.
 
-The rule for repeats leaves out 119 of those render cases and 116 of those parse cases, so the three
-sets hold 481 and 309: 117 of miss_param's first requests and 114 of its 119 parse cases equal
-base's, and in base and in miss_func row 43 repeats row 40 (`corpus/README.md` has the counts per
-set). The 309 parse cases carry 163 distinct messages.
-
-long_context is left out for size. Its first turns would add 200 render and 200 parse cases, 9.8 MB,
-taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB at which a source moves to the
-fixtures' form (Storage).
+The rule for repeats leaves out 316 of those render cases and 310 of those parse cases, so the four
+sets hold 484 and 315: 117 of miss_param's first requests and 114 of its 119 parse cases equal
+base's, in base and in miss_func row 43 repeats row 40, and long_context, whose rows differ from
+base's in what the simulators return in later turns, keeps 3 render and 6 parse cases
+(`corpus/README.md` has the counts per set). The 315 parse cases carry 166 distinct messages.
 
 ## Recording
 
@@ -308,7 +305,7 @@ All-model figures, from the 45-model probe (BFCL single-turn alone):
 - **Git's packing:** the plain files of all 45 pack into 61 MB, because the same requests recur in
   every model's files. But a checkout still writes every byte, so the working tree would be several
   gigabytes now and tens of gigabytes later, before GSM8K and tau2 add theirs.
-- **The BFCL corpus:** 36.8 MB plain and 1.2 MB packed now, with the multi_turn first turns and
+- **The BFCL corpus:** 37.0 MB plain and 1.2 MB packed now, with the multi_turn first turns and
   without repeats; the single-turn sets alone are 17.9 MB plain, 0.8 MB packed.
 
 Decision:

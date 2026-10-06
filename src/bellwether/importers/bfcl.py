@@ -1,5 +1,5 @@
 """BFCL's categories as corpus sets, as smg's weekly run sends them: each single-turn row, and the first turn of each
-multi_turn row (``CATEGORIES`` says why multi_turn_long_context is left out).
+multi_turn row.
 
 The data comes from the ``bfcl-eval`` wheel that smg's weekly run pins, read as a zip: nothing from it is
 installed and none of its code runs. The weekly run uses BFCL's function-calling mode through
@@ -59,8 +59,7 @@ FILE_MAPPING = "MULTI_TURN_FUNC_DOC_FILE_MAPPING"
 CLASS_MAPPING = "CLASS_FILE_PATH_MAPPING"
 TEMPERATURE = 0.001
 # The categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order: 13 single-turn, then
-# multi_turn ones, of which the first turn is imported. multi_turn_long_context is left out for size: its first turns
-# would take the BFCL corpus past the 50 MB a source may keep as plain JSON Lines (corpus/README.md has the figures).
+# the four multi_turn ones, of which the first turn is imported.
 CATEGORIES = (
     "simple_python",
     "simple_java",
@@ -78,6 +77,7 @@ CATEGORIES = (
     "multi_turn_base",
     "multi_turn_miss_func",
     "multi_turn_miss_param",
+    "multi_turn_long_context",
 )
 
 # bfcl_eval/constants/type_mappings.py, GORILLA_TO_OPENAPI

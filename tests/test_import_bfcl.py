@@ -906,29 +906,3 @@ def test_the_command_leaves_out_a_multi_turn_first_turn_that_repeats_an_earlier_
     assert f"{corpus}: 4 cases in the 4 BFCL sets, 2 left out as repeats, 2 distinct messages" in out
     for path in (render, parse):
         assert [case.name for case in read_cases(path)] == ["bfcl-multi-turn-miss-param-1"]
-
-
-# The categories smg's weekly run sends, in its order (.github/workflows/nightly-bfcl.yml in smg).
-WEEKLY = (
-    "simple_python",
-    "simple_java",
-    "simple_javascript",
-    "multiple",
-    "parallel",
-    "parallel_multiple",
-    "irrelevance",
-    "live_simple",
-    "live_multiple",
-    "live_parallel",
-    "live_parallel_multiple",
-    "live_irrelevance",
-    "live_relevance",
-    "multi_turn_base",
-    "multi_turn_miss_func",
-    "multi_turn_miss_param",
-    "multi_turn_long_context",
-)
-
-
-def test_the_import_takes_the_weekly_categories_in_order_but_leaves_long_context_out():
-    assert bfcl.CATEGORIES == tuple(category for category in WEEKLY if category != "multi_turn_long_context")

@@ -17,8 +17,7 @@ BFCL's own handler sends: it runs ``OpenAICompletionsHandler.inference`` on the 
 stops it at its first request with a stub in place of the API call, so nothing reaches a model or the network. It also
 compares the tools with ``convert_to_tool`` directly, and runs BFCL's ``multi_turn_checker`` on each first-turn parse
 case's calls, decoded as the handler decodes a model's tool calls, against the first turn of the ground truth.
-multi_turn categories named after the wheel are checked in place of those, so one the import does not write yet
-can be checked too:
+multi_turn categories named after the wheel are checked in place of all four:
 
     $SCRUB /tmp/bfcl-check/bin/python scripts/bfcl_equivalence.py "$WHEEL" multi_turn_long_context
 """
