@@ -49,9 +49,9 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 82.7 MB of plain JSON
+# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 81.6 MB of plain JSON
 # Lines, past the 50 MB one source's sets may take (corpus_sets.LIMIT, which write enforces); every second row makes
-# 44.7 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
+# 44.2 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
 # equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
 # repeats one of func_calling_singleturn's.
 STRIDE = 2
@@ -272,10 +272,11 @@ def _tools(field: str) -> list[dict]:
 
 
 def _request(messages: list[dict], tools: list[dict]) -> dict:
+    """The messages, and the row's tools when it has any. ``add_generation_prompt`` is left to its default, true, as
+    every other imported set leaves it, so a request another importer also writes is the same JSON."""
     request: dict = {"messages": list(messages)}
     if tools:
         request["tools"] = tools
-    request["add_generation_prompt"] = True
     return request
 
 

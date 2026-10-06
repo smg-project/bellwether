@@ -202,7 +202,9 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
     history = [user, made, *results, {"role": "assistant", **answer}, again]
 
     def request(messages):
-        return {"messages": messages, "tools": [WEATHER], "add_generation_prompt": True}
+        # No add_generation_prompt: the oracles add the generation prompt when a request does not say otherwise, and a
+        # request that sets the default differs by its bytes from another importer's that does not.
+        return {"messages": messages, "tools": [WEATHER]}
 
     def origin(turn, written=False):
         found = {
@@ -284,7 +286,7 @@ def test_a_row_without_tools_sends_none_and_keeps_its_system_message():
     turns = [("system", plain), ("human", "Hi"), ("gpt", "Hello!")]
     render, parse = hermes.row_cases(row(*turns, tools="null"), 3, "glaive_func_calling")
     messages = [{"role": "system", "content": plain}, {"role": "user", "content": "Hi"}]
-    assert render[0]["request"] == {"messages": messages, "add_generation_prompt": True}
+    assert render[0]["request"] == {"messages": messages}
     assert parse[0]["request"] == render[0]["request"] and parse[0]["message"] == {"content": "Hello!"}
 
 
