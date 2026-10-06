@@ -107,25 +107,50 @@ The single-turn categories give 3641 render cases and 2501 parse cases per check
 
 ## Recording
 
-`record` stays the recorder. The probe covered 63 current checkpoints (gpt-oss set aside); 45 of
-them load and record BFCL's render cases, and the parse and storage figures here are for those 45.
-It found two things the round-trip oracle has to learn, both declared per model in the manifest.
-Each lands as its own change, and each shows that the existing fixtures come out byte-identical.
+`record` stays the recorder, and every case is recorded from two sources of truth, neither of which
+needs a model (Simo, 2026-10-06, #23):
 
-- **How the template takes tool-call arguments.**
-  - Most current templates iterate the arguments as an object: Qwen3.5 to 3.8, GLM, MiniMax, Step,
-    Hy4, Gemma 4, Muse-Glimmer and others. DeepSeek's concatenate them as a string.
-  - The manifest says `tool_call_arguments = "object"` (the default) or `"string"`. Qwen3-8B's
-    fixtures come out byte-identical either way.
-  - With objects, and strings for DeepSeek, 26 of the 45 models record all 2501 parse cases; with
-    strings alone, 11 do.
-  - Both engines turn the arguments into an object before rendering: vLLM in
-    `vllm/entrypoints/chat_utils.py:1931` (1ad5182b), SGLang in `parse_tool_call_arguments`,
-    `python/sglang/srt/entrypoints/openai/serving_chat.py:126` (7d22b7a8). So they hand
-    DeepSeek's templates a form those templates cannot take: a request whose history carries a
-    DeepSeek tool call fails to render, the shape behind smg #2783. That stays a finding, reported
-    with the render cases. The manifest setting only says how the reference renders the round
-    trip; it does not hide the finding.
+- **Hugging Face:** transformers' `apply_chat_template` with the checkpoint's own tokenizer and
+  template. It gives the prompt ids for render and, through the round trip, the output text and ids
+  for parse.
+- **vLLM:** `vllm launch render <model>`, the GPU-less server in vLLM's official image at a pinned
+  tag.
+  - `POST /v1/chat/completions/render` gives a request's prompt ids, with the sampling parameters
+    vLLM would use.
+  - `POST /v1/chat/completions/derender` gives the text and the parsed message for output ids, whole
+    or one chunk per call.
+
+  It runs on Linux: under colima on the Mac that records, or on a Linux runner, with the image tag
+  in the provenance. vLLM also encodes the models that ship no chat template (DeepSeek V3.2 and V4,
+  Kimi-K3, Inkling, Mistral), which Hugging Face cannot render.
+
+When the two agree, the case is settled. When they disagree, the line records both results and the
+disagreement becomes an issue, one per kind. Nothing in bellwether is configured to make them agree:
+no per-model setting, and no adjustment of either side. Recording vLLM's results needs witness
+results in the case schema; today a witness carries only its version and image. That schema change
+waits for Simo's approval.
+
+What the probe over 63 current checkpoints settles this way (gpt-oss set aside; 45 of them load and
+record BFCL's render cases, and the parse figures here are for those 45):
+
+- **Tool-call arguments go to the template as an object,** as vLLM and SGLang pass them: vLLM in
+  `vllm/entrypoints/chat_utils.py:1931` (1ad5182b), SGLang in `parse_tool_call_arguments`,
+  `python/sglang/srt/entrypoints/openai/serving_chat.py:126` (7d22b7a8). Most current templates
+  iterate them. With objects, 24 of the 45 record all 2501 parse cases; with the JSON string, 11 do.
+  DeepSeek's templates (R1, V3, V3.1) concatenate a string and fail on an object. That is a finding
+  (#27), and the vLLM recording shows whether the engine fails the same way.
+- **The end of the assistant turn** is not a rule of bellwether's. The round trip cuts the output at
+  the tokenizer's end-of-sequence token, which many templates do not write:
+  - `<|eot|>` (Muse-Glimmer), `<|endofassistant|>` (dots3), `<|im_end|>` (ERNIE, MiniCPM5),
+    `</assistant>` (Laguna);
+  - GLM closes a turn with no marker at all;
+  - Inkling's tokenizer has no end-of-sequence token.
+
+  For these, the output ends where vLLM would stop: at the first of the stop tokens its render
+  reports for the model. Derender says what vLLM makes of those ids, Hugging Face's reading of them
+  is recorded beside it, and a disagreement is an issue. GLM-5.3-Flash comes first, as the only one
+  of the four weekly models without parse cases.
+
 - **The reference's arguments string.**
   - For templates that write JSON, it is the bytes in the output.
   - For tagged formats, it is the canonical JSON a parser builds from the tags. Whether that is the
@@ -135,17 +160,6 @@ Each lands as its own change, and each shows that the existing fixtures come out
     When it is false for a template that writes JSON, the reference still holds the canonical
     string, and each such template is reported as its own kind.
   - When engine witnesses land for a tagged format, each engine's argument string is kept per case.
-- **Where the assistant turn ends.** The oracle cuts the output at the tokenizer's end-of-sequence
-  token, but many templates close a turn with their own marker:
-  - `<|eot|>` (Muse-Glimmer), `<|endofassistant|>` (dots3), `<|im_end|>` (ERNIE, MiniCPM5),
-    `</assistant>` (Laguna);
-  - GLM closes a turn with no marker at all: generation stops at the next role tag;
-  - Inkling's tokenizer has no end-of-sequence token.
-
-  The output ends at the first of the model's own stop tokens (its generation config) found in the
-  rendered turn, or at the turn's end when there is none, and the manifest records which.
-  GLM-5.3-Flash is the first to fix, as the only one of the four weekly models without parse cases.
-
 Rejections are never silent. A case the reference cannot take is reported with its reason, every
 checkpoint's row carries its recorded and rejected counts, and each kind of rejection gets an issue.
 The probe's open kinds:
@@ -249,21 +263,31 @@ hand-written) as a table or JSON, read from the `sets.toml` files. The README ca
 Each step is its own pull request.
 
 1. The BFCL importer, its corpus sets, and `count`.
-2. The argument form, per model in the manifest, with the existing fixtures re-recorded
-   byte-identical.
-3. The end-of-turn rule, likewise, with GLM-5.3-Flash's parse cases first.
-4. `bellwether models` and the committed list.
-5. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
-6. Tier 1: groups and manifests, its recorded sets, and the per-model table.
-7. Tiers 2 and 3 in batches, with the extra work in tier order: a vendor-code oracle (DeepSeek V3.2
-   and V4-Flash, Kimi-K3), tokenizers that need `tiktoken` or custom code, gated models, and a
-   reference for templates that drop the tool list.
-8. The next sources, from BFCL multi_turn on; #19's `tool_choice` cases are built from the BFCL
+2. Tool-call arguments given as an object, as the engines pass them, with the existing fixtures
+   re-recorded byte-identical.
+3. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
+4. vLLM as the second source:
+   - `record --oracle vllm` against the pinned image: render, and derender whole and per chunk;
+   - witness results in the case schema;
+   - the comparison that opens one issue per kind of disagreement;
+   - tier 1 first.
+5. Tier 1 recorded from both sources: groups and manifests, its recorded sets, and the per-model
+   table.
+6. The end of a turn from vLLM's stop tokens: GLM-5.3-Flash first, then the other templates the
+   probe found.
+7. `bellwether models` and the committed list.
+8. Tiers 2 and 3 in batches, with the extra work in tier order: tokenizers that need `tiktoken` or
+   custom code, gated models, and a reference for templates that drop the tool list. vLLM covers the
+   models with no chat template (DeepSeek V3.2 and V4, Kimi-K3).
+9. The next sources, from BFCL multi_turn on; #19's `tool_choice` cases are built from the BFCL
    import.
 
 ## Questions for Simo
 
-1. The organization's Git LFS allowance, and whether to buy more when the sets pass it.
+1. Answered (2026-10-06): Git LFS goes ahead, and Simo raises the organization's allowance if the
+   sets pass it.
 2. `arguments_verbatim` on parse lines, a case-schema addition (#24).
 3. The two scope assumptions: multimodal chat models are in, with text-only cases; embedding,
    reranking and classification models are out.
+4. Witness results in the case schema: vLLM's prompt ids for render, and its text and message for
+   parse, whole and per chunk.
