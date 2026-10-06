@@ -203,10 +203,10 @@ Decision:
 
 What it costs:
 
-- **Storage:** about 2.3 MB per group for BFCL single-turn, a projected 0.6 GB for 250 groups.
-  With BFCL multi_turn, GSM8K and tau2, an estimated 1.5 to 2 GB per full recording. LFS keeps every version
-  in history, so each full re-record adds about as much again; re-records follow an oracle or
-  environment change, a few a year.
+- **Storage:** about 2.3 MB per group for BFCL single-turn, a projected 0.6 GB for 250 groups. With
+  BFCL multi_turn, GSM8K and tau2, an estimated 1.5 to 2 GB per full recording. LFS keeps every
+  version in history, so each full re-record adds about as much again; re-records follow an oracle
+  or environment change, a few a year.
 - **Bandwidth:** the weekly check downloads nothing, and a pull request downloads only the sets it
   changes. CI caches the LFS objects it uses, keyed by their pointers, so an unchanged set is not
   fetched twice.
