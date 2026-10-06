@@ -10,8 +10,8 @@ reasoning-content-calls.
 The cases are built by the two importers' builders from their pinned sources, the BFCL wheel and GSM8K's test file,
 never from the committed corpus, so ``--check`` depends on the pins alone. BFCL's parse cases of ``CATEGORIES`` are
 interleaved, one from each category in turn, so that every category is among the first cases; GSM8K's rows stay in file
-order. The i-th BFCL case is paired with the i-th GSM8K row, the shorter list cycled, for at most ``SIZE`` pairs, and
-pair i gives case i of every set, so the six sets hold the same pairs:
+order. The i-th BFCL case is paired with the i-th GSM8K row for ``SIZE`` pairs, and a side with fewer stops the import
+rather than give an item twice. Pair i gives case i of every set, so the six sets hold the same pairs:
 
 - the request and the calls are the BFCL case's, so the calls answer the request; the sets without calls keep the
   request and its tools, since a model may answer without calling;
@@ -103,11 +103,16 @@ def interleave(lists: list[list]) -> list:
 
 
 def pair(calls: list, texts: list, size: int) -> list[tuple]:
-    """The i-th call with the i-th text, the shorter list cycled, for at most ``size`` pairs."""
-    if not calls or not texts:
-        raise ValueError(f"nothing to pair: {len(calls)} BFCL parse cases and {len(texts)} GSM8K rows")
-    count = min(size, max(len(calls), len(texts)))
-    return [(calls[index % len(calls)], texts[index % len(texts)]) for index in range(count)]
+    """The i-th BFCL case with the i-th text, for ``size`` pairs.
+
+    A side with fewer than ``size`` stops the import rather than give an item twice: a text paired with two requests is
+    no repeat to ``corpus_sets.leave_out_repeats``, so it would pass unnoticed.
+    """
+    if len(calls) < size or len(texts) < size:
+        raise ValueError(
+            f"{size} pairs need {size} BFCL parse cases and {size} GSM8K rows; there are {len(calls)} and {len(texts)}"
+        )
+    return list(zip(calls[:size], texts[:size], strict=True))
 
 
 def set_name(shape: str) -> str:

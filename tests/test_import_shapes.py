@@ -17,16 +17,21 @@ def test_the_calls_interleave_their_categories_one_case_at_a_time():
     assert shapes.interleave([[], ["p0"]]) == ["p0"]
 
 
-def test_pairs_go_by_index_and_cycle_the_shorter_list_up_to_the_size():
-    assert shapes.pair(["c0", "c1", "c2"], ["t0"], size=10) == [("c0", "t0"), ("c1", "t0"), ("c2", "t0")]
-    assert shapes.pair(["c0"], ["t0", "t1"], size=10) == [("c0", "t0"), ("c0", "t1")]
+def test_pairs_go_by_index_up_to_the_size():
     assert shapes.pair(["c0", "c1", "c2"], ["t0", "t1"], size=2) == [("c0", "t0"), ("c1", "t1")]
+    assert shapes.pair(["c0", "c1"], ["t0", "t1", "t2"], size=2) == [("c0", "t0"), ("c1", "t1")]
 
 
-def test_pairing_refuses_a_side_with_nothing_to_pair():
-    for calls, texts in [([], ["t0"]), (["c0"], []), ([], [])]:
-        with pytest.raises(ValueError, match="nothing to pair"):
-            shapes.pair(calls, texts, size=10)
+def test_a_side_shorter_than_the_size_is_refused_rather_than_used_twice():
+    for cases, texts, there_are in [
+        (["c0"], ["t0", "t1"], "1 and 2"),
+        (["c0", "c1"], ["t0"], "2 and 1"),
+        ([], [], "0 and 0"),
+    ]:
+        with pytest.raises(
+            ValueError, match=f"2 pairs need 2 BFCL parse cases and 2 GSM8K rows; there are {there_are}"
+        ):
+            shapes.pair(cases, texts, size=2)
 
 
 CALLS = [{"type": "function", "function": {"name": "ping", "arguments": "{}"}}]
@@ -106,16 +111,19 @@ TICKETS_STEPS = "They sold 2,000 tickets, then 125 more."
 TICKETS_LAST = "They sold 2,000 + 125 = <<2000+125=2125>>2,125 tickets."
 JANET = {"question": "How much does Janet make?", "answer": f"{JANET_STEPS}\n{JANET_LAST}\n#### 18"}
 TICKETS = {"question": "How many tickets?", "answer": f"{TICKETS_STEPS}\n{TICKETS_LAST}\n#### 2,125"}
-TEST_FILE = jsonl([JANET, TICKETS])
+ROSES_STEPS = "Each bunch holds 12 roses, so 3 bunches hold 3 * 12 = <<3*12=36>>36 roses."
+ROSES_LAST = "She gives away 36 - 6 = <<36-6=30>>30 roses."
+ROSES = {"question": "How many roses does she give away?", "answer": f"{ROSES_STEPS}\n{ROSES_LAST}\n#### 30"}
+# Three rows for the three BFCL parse cases of MEMBERS, so the default three pairs use each side once.
+TEST_FILE = jsonl([JANET, TICKETS, ROSES])
 
 
 def build(
-    tmp_path, monkeypatch, size: int | None = None, members=MEMBERS, test_file: bytes = TEST_FILE, skipped=None
+    tmp_path, monkeypatch, size: int = 3, members=MEMBERS, test_file: bytes = TEST_FILE, skipped=None
 ) -> dict[tuple[str, str], list[dict]]:
-    """The sets from the fake wheel and ``test_file``, the categories it holds, and ``size`` pairs when given."""
+    """The sets from the fake wheel and ``test_file``, for the categories it holds and ``size`` pairs."""
     monkeypatch.setattr(shapes, "CATEGORIES", ("simple_python", "parallel"))
-    if size is not None:
-        monkeypatch.setattr(shapes, "SIZE", size)
+    monkeypatch.setattr(shapes, "SIZE", size)
     with zipfile.ZipFile(fake_wheel(tmp_path, members=members)) as wheel:
         return shapes.build_sets(wheel, test_file, skipped=skipped)
 
@@ -192,7 +200,7 @@ def test_every_set_holds_the_same_pairs_in_its_own_shape(tmp_path, monkeypatch):
     for (_, name), lines in sets.items():
         assert [line["name"] for line in lines] == [f"{name}-0", f"{name}-1", f"{name}-2"]
         rows = [tuple(part["row"] for part in line["origin"]["parts"]) for line in lines]
-        assert rows == [("simple_python_0", 0), ("parallel_0", 1), ("simple_python_1", 0)]
+        assert rows == [("simple_python_0", 0), ("parallel_0", 1), ("simple_python_1", 2)]
         assert [line["request"]["messages"][0]["content"] for line in lines] == [
             "Order a Café ☕",
             "Tea and coffee",
@@ -203,7 +211,7 @@ def test_every_set_holds_the_same_pairs_in_its_own_shape(tmp_path, monkeypatch):
         "content": TICKETS_LAST,
         "tool_calls": [call("tea"), call("coffee")],
     }
-    assert sets[("parse", "shapes-reasoning")][2]["message"] == {"reasoning_content": JANET_STEPS, "content": ""}
+    assert sets[("parse", "shapes-reasoning")][2]["message"] == {"reasoning_content": ROSES_STEPS, "content": ""}
     assert sets[("parse", "shapes-content")][1]["message"] == {"content": TICKETS_LAST}
 
 
@@ -226,9 +234,9 @@ def test_the_reasoning_and_the_content_are_the_solution_split_at_its_last_line()
 def test_a_gsm8k_row_whose_solution_gives_no_reasoning_is_left_out_with_its_reason(tmp_path, monkeypatch):
     one_line = {"question": "How many?", "answer": "Two and two make <<2+2=4>>4.\n#### 4"}
     skipped: list[tuple[str, str]] = []
-    sets = build(tmp_path, monkeypatch, test_file=jsonl([JANET, one_line, TICKETS]), skipped=skipped)
+    sets = build(tmp_path, monkeypatch, test_file=jsonl([JANET, one_line, TICKETS, ROSES]), skipped=skipped)
     for lines in sets.values():
-        assert [line["origin"]["parts"][1]["row"] for line in lines] == [0, 2, 0]
+        assert [line["origin"]["parts"][1]["row"] for line in lines] == [0, 2, 3]
     assert skipped == [("GSM8K test row 1", "the solution has no text before its last line")]
 
 
@@ -254,6 +262,13 @@ def test_build_sets_leaves_repeats_out_through_the_shared_rule_and_names_them(tm
 
 def test_the_size_caps_every_set(tmp_path, monkeypatch):
     assert [len(lines) for lines in build(tmp_path, monkeypatch, size=2).values()] == [2, 2, 2, 2, 2, 2]
+
+
+def test_a_source_with_fewer_usable_rows_than_the_pairs_stops_the_import(tmp_path, monkeypatch):
+    # Three GSM8K rows, but one gives no reasoning: two texts for three pairs.
+    one_line = {"question": "How many?", "answer": "Two and two make <<2+2=4>>4.\n#### 4"}
+    with pytest.raises(ValueError, match="3 pairs need 3 BFCL parse cases and 3 GSM8K rows; there are 3 and 2"):
+        build(tmp_path, monkeypatch, test_file=jsonl([JANET, one_line, TICKETS]))
 
 
 NO_JUICE = "the ground truth calls Cafe.juice, which the row does not define"
@@ -288,13 +303,13 @@ def test_a_bfcl_row_with_no_parse_case_and_the_cases_after_the_pairs_are_left_ou
 def test_the_gsm8k_rows_after_the_pairs_are_left_out_as_one_run(tmp_path, monkeypatch):
     more = [
         {"question": f"Q{row}?", "answer": f"Add 0.\nSo {row} + 0 = <<{row}+0={row}>>{row}\n#### {row}"}
-        for row in (2, 3)
+        for row in (3, 4)
     ]
     skipped: list[tuple[str, str]] = []
     build(tmp_path, monkeypatch, size=2, test_file=TEST_FILE + jsonl(more), skipped=skipped)
     assert skipped == [
         ("BFCL simple_python_1", "after the first 2 pairs"),
-        ("2 GSM8K test rows, 2 to 3", "after the first 2 pairs"),
+        ("3 GSM8K test rows, 2 to 4", "after the first 2 pairs"),
     ]
 
 
@@ -343,7 +358,7 @@ def test_the_written_cases_read_back_and_count_under_shapes(tmp_path, monkeypatc
         assert [[part["row"] for part in case.origin["parts"]] for case in cases] == [
             ["simple_python_0", 0],
             ["parallel_0", 1],
-            ["simple_python_1", 0],
+            ["simple_python_1", 2],
         ]
     (fixtures / "m1").mkdir(parents=True)
     (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
@@ -454,10 +469,18 @@ def test_the_command_stops_on_a_category_without_parse_cases_and_writes_nothing(
 
 
 def test_the_command_leaves_out_and_names_each_case_that_repeats_an_earlier_one(tmp_path, monkeypatch, capsys):
-    # One parse case per category, cycled against four rows whose solutions come twice each: every case comes twice.
-    members = {**MEMBERS, f"{DATA}/BFCL_v4_simple_python.json": MEMBERS[f"{DATA}/BFCL_v4_simple_python.json"][:1]}
-    members[f"{DATA}/possible_answer/BFCL_v4_simple_python.json"] = [bfcl_answer("simple_python_0", "Café ☕")]
+    # Each category's two rows ask the same and are answered the same, and the four GSM8K rows hold two solutions twice:
+    # pairs 2 and 3 repeat pairs 0 and 1 in every set.
+    members = {
+        f"{DATA}/BFCL_v4_simple_python.json": [bfcl_row(f"simple_python_{i}", "Tea") for i in range(2)],
+        f"{DATA}/possible_answer/BFCL_v4_simple_python.json": [
+            bfcl_answer(f"simple_python_{i}", "tea") for i in range(2)
+        ],
+        f"{DATA}/BFCL_v4_parallel.json": [bfcl_row(f"parallel_{i}", "Coffee") for i in range(2)],
+        f"{DATA}/possible_answer/BFCL_v4_parallel.json": [bfcl_answer(f"parallel_{i}", "coffee") for i in range(2)],
+    }
     serve(tmp_path, monkeypatch, members=members, test_file=jsonl([JANET, TICKETS, JANET, TICKETS]))
+    monkeypatch.setattr(shapes, "SIZE", 4)
     corpus = tmp_path / "corpus"
     assert main(["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
     out = capsys.readouterr().out.splitlines()
@@ -471,3 +494,11 @@ def test_the_command_leaves_out_and_names_each_case_that_repeats_an_earlier_one(
         "shapes-content-0",
         "shapes-content-1",
     ]
+
+
+def test_the_command_stops_when_a_source_has_fewer_cases_than_the_pairs_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch)
+    monkeypatch.setattr(shapes, "SIZE", 4)
+    with pytest.raises(ValueError, match="4 pairs need 4 BFCL parse cases and 4 GSM8K rows; there are 3 and 3"):
+        main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)])
+    assert not (tmp_path / "corpus").exists()

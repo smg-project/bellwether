@@ -108,16 +108,16 @@ A message shape is which parts an assistant message holds, in the order a model 
 a parser meets every shape: BFCL's parse cases hold calls alone, GSM8K's reasoning and content alone. Each set is named
 by the parts of its shape in order. `bellwether import shapes` builds the cases with the two importers' builders from
 the pinned files, never from the committed sets, so its `--check` depends on the pins alone. BFCL's parse cases of its
-eight Python categories with calls (`simple_python`, `multiple`, `parallel`, `parallel_multiple` and the four live
-ones) are interleaved, one from each category in turn, and the i-th is paired with the i-th GSM8K test row, the shorter
-list cycled, for at most 1000 pairs (`SIZE` in `src/bellwether/importers/shapes.py`). At the pins that is 160 cases from
-each of the six larger categories, the 16 of `live_parallel` and the 24 of `live_parallel_multiple`, with test rows 0
-to 999, so neither list cycles. A category with no parse case stops the import. The import prints every row it reads
-and does not use, with its reason: the five BFCL rows of these categories that have no parse case, by name (two of
-them, `live_simple_106-63-0` and `live_simple_112-68-0`, fall inside the range the pairs use), then the parse cases of
-each category and the GSM8K rows that come after the 1000 pairs, one run each (1346 parse cases, and test rows 1000 to
-1318). A case that repeats an earlier one is left out and named, as in every import; across the six sets none does, so
-each keeps its 1000 cases. Pair i is case i of every set (`shapes-content-calls-7`):
+eight Python categories with calls (`simple_python`, `multiple`, `parallel`, `parallel_multiple` and the four live ones)
+are interleaved, one from each category in turn, and the i-th is paired with the i-th GSM8K test row, for 1000 pairs
+(`SIZE` in `src/bellwether/importers/shapes.py`); a source with fewer stops the import rather than give a case or a text
+twice. At the pins that is 160 cases from each of the six larger categories, the 16 of `live_parallel` and the 24 of
+`live_parallel_multiple`, with test rows 0 to 999. A category with no parse case stops the import. The import prints
+every row it reads and does not use, with its reason: the five BFCL rows of these categories that have no parse case, by
+name (two of them, `live_simple_106-63-0` and `live_simple_112-68-0`, fall inside the range the pairs use), then the
+parse cases of each category and the GSM8K rows that come after the 1000 pairs, one run each (1346 parse cases, and test
+rows 1000 to 1318). A case that repeats an earlier one is left out and named, as in every import; across the six sets
+none does, so each keeps its 1000 cases. Pair i is case i of every set (`shapes-content-calls-7`):
 
 - the request and the calls are the BFCL case's; the shapes without calls keep the request and its tools, since a
   model may answer without calling;
