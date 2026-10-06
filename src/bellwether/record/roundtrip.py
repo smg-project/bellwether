@@ -16,11 +16,16 @@ authority, which nothing here invokes.
 The output follows the generation prompt, so a request that asks for no generation prompt or for
 the final message to be continued cannot be recorded this way and is rejected.
 
-The template gets every tool call's arguments as an object, in the request's history as in the final turn, decoded
-from the corpus's JSON string, which is what vLLM (``vllm/entrypoints/chat_utils.py``, for every assistant message)
-and SGLang (``parse_tool_call_arguments``) give it. A template that cannot
-take an object (DeepSeek's concatenate the string) fails the case: that is a finding about the template and the
-engines, reported, never worked around. The reference message keeps the JSON string.
+The template gets every assistant message, the request's history and the final turn alike, as vLLM
+gives it to a template (``_postprocess_messages`` in ``vllm/entrypoints/chat_utils.py`` at 1ad5182b):
+a call's arguments that are missing, null or empty become ``{}``, a string is decoded whatever JSON
+it holds, and an empty ``tool_calls`` is dropped. SGLang differs: at 7d22b7a8
+(``normalize_assistant_tool_call_arguments``) it rejects a string that is not a JSON object, except
+under Kimi-K3's encoding, and leaves missing or null arguments as they are. That difference is
+recorded here, not decided. A parse case's own call must carry its arguments as a JSON object string,
+the one a parser returns: that is a rule of the corpus, not of an engine. A template that cannot take
+an object (DeepSeek's concatenate the string) fails the case: that is a finding about the template
+and the engines, reported, never worked around. The reference message keeps the JSON string.
 
 Next to the ids the oracle records the text each token contributes under the tokenizer's incremental
 decode (``DecodeStream``), the pieces a replay feeds with each id: a token that does not complete a
@@ -65,12 +70,11 @@ class RoundtripOracle:
                 "a parse case's request must end at the generation prompt; `add_generation_prompt: false` and "
                 "`continue_final_message` cannot be recorded by the round trip"
             )
-        messages = [
-            with_object_arguments(m, history=True) if m.get("role") == "assistant" else m for m in request["messages"]
-        ]
+        messages = [as_vllm_gives_it(m) if m.get("role") == "assistant" else m for m in request["messages"]]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
-        turn = {"role": "assistant", **with_object_arguments(message)}
+        check_parse_call_arguments(message)
+        turn = {"role": "assistant", **as_vllm_gives_it(message)}
         rendered = self.tokenizer.apply_chat_template(
             [*messages, turn], tokenize=False, add_generation_prompt=False, **kwargs
         )
@@ -98,24 +102,46 @@ class RoundtripOracle:
         return self.renderer.provenance()
 
 
-def with_object_arguments(message: dict, history: bool = False) -> dict:
-    """A copy of the message whose calls carry their arguments as objects, as the engines give them to templates.
+def as_vllm_gives_it(message: dict) -> dict:
+    """A copy of an assistant message as vLLM gives it to the template.
 
-    In the history, a call already given as an object passes as it is; the final message must carry the JSON string
-    a parser returns.
+    This mirrors ``_postprocess_messages`` in ``vllm/entrypoints/chat_utils.py`` at 1ad5182b: an empty ``tool_calls``
+    is dropped; a call's arguments that are missing, null or empty become ``{}``; a string is decoded whatever JSON it
+    holds, JSON ``null`` giving ``{}``; an object or an array passes as it is. A string that is not JSON raises, as it
+    does there.
     """
-    if not message.get("tool_calls"):
+    tool_calls = message.get("tool_calls")
+    if not isinstance(tool_calls, list):
         return message
     message = copy.deepcopy(message)
+    if not tool_calls:
+        del message["tool_calls"]
+        return message
     for call in message["tool_calls"]:
+        function = call["function"]
+        arguments = function.get("arguments")
+        if not arguments:
+            function["arguments"] = {}
+        elif not isinstance(arguments, (dict, list)):
+            value = json.loads(arguments)
+            function["arguments"] = {} if value is None else value
+    return message
+
+
+def check_parse_call_arguments(message: dict) -> None:
+    """The corpus's rule for a parse case: each call carries its arguments as the JSON object string a parser returns.
+
+    vLLM would give the template ``{}`` for no arguments, or another JSON value as it is; a case that relies on either
+    states no string for a parser to return, so it is reported, not recorded.
+    """
+    for call in message.get("tool_calls") or []:
         arguments = call["function"].get("arguments")
-        if history and isinstance(arguments, dict):
-            continue
         try:
             value = json.loads(arguments)
         except (TypeError, json.JSONDecodeError):
             value = None
         if not isinstance(value, dict):
-            raise ValueError(f"a call's arguments must be a JSON object, to give the template an object: {arguments!r}")
-        call["function"]["arguments"] = value
-    return message
+            raise ValueError(
+                "a parse case's call must carry its arguments as a JSON object string (a rule of the corpus): "
+                f"{arguments!r}"
+            )

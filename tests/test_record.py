@@ -11,7 +11,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
-from bellwether.record.roundtrip import RoundtripOracle
+from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -397,11 +397,68 @@ def test_a_template_that_cannot_take_object_arguments_fails_the_case(concat_mode
 
 
 def test_roundtrip_reports_arguments_that_are_not_a_json_object(tiny_model):
+    # A rule of the corpus, not an engine's: a parse case's call carries the JSON object string a parser returns.
     oracle = RoundtripOracle(str(tiny_model), "local")
-    for arguments in ('["a"]', "not json"):
+    for arguments in ('["a"]', "not json", "", None):
         call = {"type": "function", "function": {"name": "f", "arguments": arguments}}
         with pytest.raises(ValueError, match="a JSON object"):
             oracle.render_output({"messages": [user("Go")]}, {"content": "", "tool_calls": [call]})
+
+
+@pytest.mark.parametrize(
+    ("arguments", "given"),
+    [
+        ("", {}),
+        (None, {}),
+        ("null", {}),
+        ([], {}),
+        ("{}", {}),
+        ('{"a": 1}', {"a": 1}),
+        ('["a"]', ["a"]),
+        ('"x"', "x"),
+        ("2", 2),
+        ({"a": 1}, {"a": 1}),
+        (["a"], ["a"]),
+    ],
+)
+def test_a_history_call_reaches_the_template_with_the_arguments_vllm_gives_it(arguments, given):
+    call = {"type": "function", "function": {"name": "f", "arguments": arguments}}
+    message = {"role": "assistant", "content": "", "tool_calls": [call]}
+    assert as_vllm_gives_it(message)["tool_calls"][0]["function"]["arguments"] == given
+    assert call["function"]["arguments"] == arguments
+
+
+def test_a_history_call_without_arguments_reaches_the_template_with_an_empty_object():
+    message = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "f"}}]}
+    assert as_vllm_gives_it(message)["tool_calls"][0]["function"]["arguments"] == {}
+
+
+def test_an_empty_tool_calls_list_is_dropped_as_vllm_drops_it():
+    message = {"role": "assistant", "content": "Hi", "tool_calls": []}
+    assert as_vllm_gives_it(message) == {"role": "assistant", "content": "Hi"}
+    assert message["tool_calls"] == []
+
+
+def test_a_history_call_whose_arguments_are_not_json_fails_the_case_as_it_fails_in_vllm():
+    message = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "f", "arguments": "{a"}}]}
+    with pytest.raises(json.JSONDecodeError):
+        as_vllm_gives_it(message)
+
+
+def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(items_model):
+    empty = {"type": "function", "function": {"name": "get_time", "arguments": ""}}
+    request = {
+        "messages": [
+            user("Time?"),
+            {"role": "assistant", "content": "", "tool_calls": [empty]},
+            {"role": "tool", "content": "noon"},
+            user("And the weather in Paris?"),
+        ]
+    }
+    out = RoundtripOracle(str(items_model), "local").render_output(
+        request, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
 
 
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):

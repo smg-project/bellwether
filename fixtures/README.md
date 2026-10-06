@@ -50,9 +50,19 @@ from it.
 ## Parse lines
 
 `record --kind parse --oracle reference` records the round trip: the corpus states the assistant
-message (every call's arguments, in the request's history as in the message, are given to the template as an object,
-as vLLM and SGLang give them; a template that cannot take an object fails the case, which is reported as a finding), the template renders it as the final assistant turn, and the text between the generation
-prompt and the end-of-turn token is the output. A line carries `request` (what a replay sends to SMG),
+message, the template renders it as the final assistant turn, and the text between the generation
+prompt and the end-of-turn token is the output.
+
+The template gets every assistant message, the request's history and the final turn alike, as vLLM
+gives it to a template (`_postprocess_messages` in `vllm/entrypoints/chat_utils.py` at 1ad5182b): a
+call's arguments that are missing, null or empty become `{}`, a string is decoded whatever JSON it
+holds, and an empty `tool_calls` is dropped. SGLang differs: at 7d22b7a8 it rejects a string that is
+not a JSON object, except under Kimi-K3's encoding, and leaves missing or null arguments as they are.
+That difference is recorded here, not decided. A parse case's own call must carry its arguments as a
+JSON object string, the one a parser returns: that is a rule of the corpus, not of an engine. A
+template that cannot take an object fails the case, which is reported as a finding.
+
+A line carries `request` (what a replay sends to SMG),
 `tools`, `output_ids` (the output's tokens, the end-of-turn token excluded), `output_pieces` (the text
 each of those tokens contributes under the tokenizer's incremental decode, tokenizers' `DecodeStream`:
 a token that does not complete a character contributes an empty piece and the token that completes it
