@@ -66,7 +66,7 @@ together.
 | SWE-bench Verified | `swebench-verified` (render), `swebench-verified-call` and `swebench-verified-content` (parse): 482 cases each, one per row outside pylint, except 8 whose patch carries code under other terms (below) | `hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3`, `data/test-00000-of-00001.parquet`, sha256 `030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25` | each row's code: its repository's license at the row's base commit, read from the repository's license file there and copied to `corpus/licenses/` (below); none is established for the issue texts | SWE-bench, Jimenez et al. 2024, Princeton NLP: https://github.com/SWE-bench/SWE-bench; Verified, OpenAI |
 | SWE-bench test | `swebench-test`, `swebench-test-call` and `swebench-test-content`: 1697 cases each, one per test row outside pylint that is not a Verified row, except 50 whose patch carries code under other terms. All 500 Verified rows are test rows, equal in every column the import reads, so each goes where its Verified row goes: imported once, as Verified, or left out with it. The 225 rows of the `dev` split, from six other repositories (astroid's under the LGPL among them), are not imported: the benchmark is the test split, and those repositories' licenses are not in the table | `hf:datasets/SWE-bench/SWE-bench@c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2`, `data/test-00000-of-00001.parquet`, sha256 `d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567` | as above | as above |
 | SWE-bench, copyleft | the rows from pylint-dev/pylint, kept apart: `swebench-verified-copyleft`, `swebench-verified-call-copyleft` and `swebench-verified-content-copyleft` (10 cases each); `swebench-test-copyleft`, `swebench-test-call-copyleft` and `swebench-test-content-copyleft` (47 each) | the two files above | GPL-2.0-or-later, copied as above | as above |
-| glaive-function-calling-v2 | `glaive-v2-00` to `glaive-v2-02`, a sample: every 31st row by index, 3644 of the 112960 rows, giving 8507 render and 11481 parse cases (40.1 MB); 725 rows across the file have no case, 21 of them in the sample (the import names them with their reasons) | `hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac`, file `glaive-function-calling-v2.json`, sha256 `e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad` | Apache-2.0, checked in the front matter of the dataset card (`README.md`, sha256 `39c78f1f56b86fcd159cadeb8feda8a9333db6ef5ca0ce6830731ac3c666838e`) on every import | Glaive AI: https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2 (synthetic chats; the card names no generator) |
+| glaive-function-calling-v2 | `glaive-v2-00` to `glaive-v2-02`, a sample: every 31st row by index, 3644 of the 112960 rows, giving 8507 render and 11481 parse cases (40.1 MB); 725 rows across the file have no case, 21 of them in the sample (the import names them with their reasons) | `hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac`, file `glaive-function-calling-v2.json`, sha256 `e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad`; the License copy from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84` (`content/licenses/LICENSE-2.0.txt`), sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` | Apache-2.0, checked in the front matter of the dataset card (`README.md`, sha256 `39c78f1f56b86fcd159cadeb8feda8a9333db6ef5ca0ce6830731ac3c666838e`) on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt) to `corpus/licenses/glaive-v2-LICENSE`, which `--check` checks | Glaive AI: https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2 (synthetic chats; the card names no generator) |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -119,8 +119,11 @@ writes the gorilla repository's root `LICENSE`, pinned by commit and sha256, to 
 is the one the wheel was built from: the wheel's 183 files under `bfcl_eval/` are that commit's, byte for byte, and
 BFCL's publish workflow names a build of `main` by its UTC date, with a serial after the day's first commit, so
 `2026.3.23` is the first commit of 2026-03-23, and its only one. `berkeley-function-call-leaderboard/` has no LICENSE
-of its own, and the repository has no NOTICE file. The copies sit outside the `render/` and `parse/` directories the
-recorder reads, and each carries its importer's prefix.
+of its own, and the repository has no NOTICE file. The glaive-v2 sets carry the dataset's chats and function
+definitions, and the dataset ships no LICENSE or NOTICE file, only `license: apache-2.0` in its card, so
+`bellwether import glaive-v2` writes the License as the Apache Software Foundation publishes it, pinned by commit and
+sha256, to `glaive-v2-LICENSE`. The copies sit outside the `render/` and `parse/` directories the recorder reads, and
+each carries its importer's prefix.
 
 A message shape is which parts an assistant message holds, in the order a model writes them: reasoning
 (`reasoning_content`), content and calls (`tool_calls`). A shapes case combines GSM8K's text with BFCL's calls, so that
@@ -325,13 +328,13 @@ hand-written sets otherwise.
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` (`--cache`) and downloads them on a miss. It then
 needs PyPI to still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from
 PyPI does not, and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL
-import copies, the License the Hermes import copies and the license files the SWE-bench import copies are read from
-`raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that commit.
-`bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The Hermes and SWE-bench
-files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under `huggingface/`, so a
-cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their sha256 on every read,
-and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history or a deleted dataset
-would end.
+import copies, the License the Hermes and glaive-v2 imports copy and the license files the SWE-bench import copies are
+read from `raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that
+commit. `bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The Hermes and
+SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under
+`huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their
+sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history
+or a deleted dataset would end.
 
 `bellwether import glaive-v2 --check` reads the pinned file through the Hugging Face cache (`~/.cache/huggingface/hub`)
 and downloads it on a miss; with `HF_HUB_OFFLINE=1` it reads the cache only. CI caches the file by revision.

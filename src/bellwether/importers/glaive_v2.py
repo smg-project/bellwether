@@ -20,9 +20,10 @@ license. A row becomes OpenAI chat messages:
 
 Each assistant turn is a parse case, and each user turn an assistant answers a render case. The whole file maps to about
 1.2 GB of plain JSON Lines, so the corpus holds a sample, every ``STEP``-th row by index, until a compressed corpus form
-lands. A row these rules cannot map has no case, and the import names it with its reason. Beyond the standard library,
-this module imports only what it shares with the other importers: the reader of pinned Hugging Face files (``hf``) and
-the set writer (``corpus_sets``).
+lands. A row these rules cannot map has no case, and the import names it with its reason. The dataset ships no LICENSE
+file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this
+module imports only what it shares with the other importers: the readers of pinned Hugging Face and GitHub files
+(``hf``, ``github``) and the set writer (``corpus_sets``).
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import corpus_sets, hf
+from . import corpus_sets, github, hf
 
 REPO = "glaiveai/glaive-function-calling-v2"
 REVISION = "e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac"
@@ -43,6 +44,15 @@ DATA_SHA256 = "e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad"
 LICENSE = "Apache-2.0"
 CARD_SHA256 = "39c78f1f56b86fcd159cadeb8feda8a9333db6ef5ca0ce6830731ac3c666838e"  # the dataset card, hf.CARD
 CARD_LICENSE = "apache-2.0"  # the license in the reviewed card's front matter; LICENSE is its SPDX name
+# Apache-2.0 4(a) asks that a copy of the License go with the work, and the dataset ships no LICENSE or NOTICE file, so
+# the import copies the License as the Apache Software Foundation publishes it (https://www.apache.org/licenses/
+# LICENSE-2.0.txt, the same bytes), from the foundation's website repository at the one commit that file has.
+LICENSE_OWNER, LICENSE_REPO = "apache", "www-site"
+LICENSE_COMMIT = "01b1be9fbc5cd93b6794f5653a58b9b863807f84"
+LICENSE_PATH = "content/licenses/LICENSE-2.0.txt"
+LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+# Where the import writes that copy, under the corpus root.
+LICENSE_COPY = "licenses/glaive-v2-LICENSE"
 DATASET = "glaive-v2"
 # The sample is every STEP-th row by index. The whole file maps to 1,235 MB of corpus; 31 keeps 40.1 MB of it, under
 # corpus_sets.LIMIT, the 50 MB a source may keep plain.
@@ -291,23 +301,35 @@ def build_sets(
     return sets
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``glaive-v2-*`` files the sample no longer writes."""
-    return corpus_sets.write(sets, corpus_dir, f"{DATASET}-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the License copy, and remove ``glaive-v2-*`` set files the sample no longer writes."""
+    return corpus_sets.write(sets, corpus_dir, f"{DATASET}-", {LICENSE_COPY: license_text})
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "slice of the glaive-v2 sample")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
+    files = {LICENSE_COPY: license_text}
+    return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "slice of the glaive-v2 sample", files)
+
+
+def check_license_text(text: bytes) -> None:
+    """Refuse a License text whose heading is not the Apache License 2.0's, so a pin moved to another text cannot pass
+    on its new hash alone."""
+    if text.split()[:4] != [b"Apache", b"License", b"Version", b"2.0,"]:
+        source = f"{LICENSE_OWNER}/{LICENSE_REPO}@{LICENSE_COMMIT} {LICENSE_PATH}"
+        raise ValueError(f"{source}: not the Apache License 2.0; review it before importing")
 
 
 def run(args: argparse.Namespace) -> int:
     hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, cache=args.cache)
+    pin = (LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256)
+    license_text = github.fetch(*pin, cache=args.cache).read_bytes()
+    check_license_text(license_text)
     rows = json.loads(hf.fetch(REPO, REVISION, DATA, DATA_SHA256, cache=args.cache).read_bytes())
     skipped: list[tuple[int, str]] = []
     sets = build_sets(rows, step=STEP, set_size=SET_SIZE, skipped=skipped)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(sets, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -321,7 +343,7 @@ def run(args: argparse.Namespace) -> int:
         f" {counts['render']} render and {counts['parse']} parse cases"
     )
     report_skipped(skipped)
-    write_sets(sets, args.corpus)
+    write_sets(sets, args.corpus, license_text)
     return 0
 
 

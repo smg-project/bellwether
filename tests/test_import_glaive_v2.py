@@ -1,12 +1,13 @@
 import hashlib
 import json
 import re
+from types import SimpleNamespace
 
 import huggingface_hub
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import glaive_v2, hf
+from bellwether.importers import github, glaive_v2, hf
 
 LEAD_IN = "SYSTEM: You are a helpful assistant with access to the following functions. Use them if required -"
 
@@ -471,12 +472,21 @@ def test_a_set_holds_whole_rows_and_no_more_cases_of_either_kind_than_the_set_si
     assert glaive_v2.build_sets([BROKEN], step=1, set_size=3) == {}
 
 
+# The opening of the Apache License 2.0 as the Apache Software Foundation publishes it.
+APACHE = b"\n                                 Apache License\n                           Version 2.0, January 2004\n"
+
+
 def test_written_sets_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
     sets, corpus = glaive_v2.build_sets([ROW_25475], step=1, set_size=10), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "glaive-v2-07"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
-    glaive_v2.write_sets(sets, corpus)
+    written = glaive_v2.write_sets(sets, corpus, APACHE)
+    kinds = ("parse", "render")
+    assert written == [
+        *(corpus / kind / "glaive-v2-00.jsonl" for kind in kinds),
+        corpus / "licenses" / "glaive-v2-LICENSE",
+    ]
     assert sorted(path.name for path in (corpus / "render").iterdir()) == [
         "bfcl-simple-python.jsonl",
         "common.jsonl",
@@ -486,11 +496,11 @@ def test_written_sets_check_clean_and_a_changed_missing_or_stale_file_is_reporte
     text = (corpus / "parse" / "glaive-v2-00.jsonl").read_bytes().decode("utf-8")
     assert "étudiant" in text and text.endswith("\n")
     assert [json.loads(line) for line in text.split("\n")[:-1]] == sets[("parse", "glaive-v2-00")]
-    assert glaive_v2.check_sets(sets, corpus) == []
+    assert glaive_v2.check_sets(sets, corpus, APACHE) == []
     (corpus / "parse" / "glaive-v2-00.jsonl").write_text("{}\n")
     (corpus / "render" / "glaive-v2-00.jsonl").unlink()
     (corpus / "render" / "glaive-v2-09.jsonl").write_text("{}\n")
-    assert glaive_v2.check_sets(sets, corpus) == [
+    assert glaive_v2.check_sets(sets, corpus, APACHE) == [
         f"{corpus / 'parse' / 'glaive-v2-00.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: missing",
         f"{corpus / 'render' / 'glaive-v2-09.jsonl'}: no slice of the glaive-v2 sample writes it",
@@ -521,11 +531,12 @@ def asked(cache) -> list[tuple]:
     return [(repo, "README.md", pinned), (repo, "glaive-function-calling-v2.json", pinned)]
 
 
-def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD) -> list:
-    """``hf_hub_download`` as the Hub's cache answers it, with these rows as the data file and ``card`` as the card.
+def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD, license_text: bytes = APACHE) -> SimpleNamespace:
+    """``hf_hub_download`` as the Hub's cache answers it, with these rows as the data file and ``card`` as the card, and
+    ``github.fetch`` serving ``license_text``.
 
-    The importer's pins are set to these files' sha256, so ``hf.fetch`` passes them; the list returned collects each
-    download's arguments.
+    The importer's pins are set to these files' sha256, so ``hf.fetch`` passes them. Returns the downloads asked for:
+    ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256).
     """
     files = {"README.md": card.encode("utf-8"), "glaive-function-calling-v2.json": json.dumps(rows).encode("utf-8")}
     for pin, filename in (("CARD_SHA256", "README.md"), ("DATA_SHA256", "glaive-function-calling-v2.json")):
@@ -540,18 +551,28 @@ def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD) -> list:
         return str(path)
 
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
-    return downloads
+    fetched: list = []
+
+    def fetch(owner, repo, commit, path, sha256, cache=None):
+        fetched.append((owner, repo, commit, path, sha256))
+        served = tmp_path / "github" / path
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_bytes(license_text)
+        return served
+
+    monkeypatch.setattr(github, "fetch", fetch)
+    return SimpleNamespace(hub=downloads, github=fetched)
 
 
 def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
-    downloads = serve(monkeypatch, tmp_path, [chat_row("a"), BROKEN, chat_row("b"), chat_row("c")])
+    served = serve(monkeypatch, tmp_path, [chat_row("a"), BROKEN, chat_row("b"), chat_row("c")])
     monkeypatch.setattr(glaive_v2, "STEP", 2)
     corpus, cache = tmp_path / "corpus", tmp_path / "cache"
     argv = ["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(cache)]
     assert main([*argv, "--check"]) == 1
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
-    assert downloads == asked(cache) * 3
+    assert served.hub == asked(cache) * 3
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 2 cases" in out
     assert [line["name"] for line in map(json.loads, (corpus / "parse" / "glaive-v2-00.jsonl").open())] == [
@@ -573,14 +594,14 @@ def test_the_command_names_the_rows_it_refuses_by_reason_across_the_whole_file(t
 
 
 def test_the_command_refuses_a_card_under_another_license_and_writes_nothing(tmp_path, monkeypatch):
-    downloads = serve(monkeypatch, tmp_path, [chat_row("a")], card=CARD.replace("apache-2.0", "mit"))
+    served = serve(monkeypatch, tmp_path, [chat_row("a")], card=CARD.replace("apache-2.0", "mit"))
     refused = (
         "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac README.md:"
         " the card's license is 'mit', not the reviewed 'apache-2.0'; review it before importing"
     )
     with pytest.raises(ValueError, match=re.escape(refused)):
         main(["import", "glaive-v2", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")])
-    assert downloads == asked(tmp_path / "cache")[:1]
+    assert served.hub == asked(tmp_path / "cache")[:1]
     assert not (tmp_path / "corpus").exists()
 
 
@@ -590,5 +611,39 @@ def test_the_command_refuses_a_data_file_that_is_not_the_pinned_one_and_writes_n
     # hf.fetch downloads a file that is not the pinned one once more, then refuses it by its path.
     refused = re.escape(f"{tmp_path / 'hub' / 'glaive-function-calling-v2.json'}: sha256 ")
     with pytest.raises(ValueError, match=refused + "[0-9a-f]{64} is not the pinned 0{64}"):
+        main(["import", "glaive-v2", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")])
+    assert not (tmp_path / "corpus").exists()
+
+
+def test_the_command_writes_the_apache_license_next_to_the_sets(tmp_path, monkeypatch):
+    served = serve(monkeypatch, tmp_path, [chat_row("a")])
+    corpus = tmp_path / "corpus"
+    assert main(["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]) == 0
+    assert (corpus / "licenses" / "glaive-v2-LICENSE").read_bytes() == APACHE
+    # The dataset ships no LICENSE or NOTICE file; its card names apache-2.0, so the copy is the License as the Apache
+    # Software Foundation publishes it, from its website's repository at the one commit that file has.
+    commit, sha256 = "01b1be9fbc5cd93b6794f5653a58b9b863807f84", glaive_v2.LICENSE_SHA256
+    assert served.github == [("apache", "www-site", commit, "content/licenses/LICENSE-2.0.txt", sha256)]
+    assert sha256 == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    serve(monkeypatch, tmp_path, [chat_row("a")])
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "glaive-v2-LICENSE"
+    argv = ["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
+    assert main(argv) == 0
+    copy.unlink()
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
+
+
+def test_the_command_refuses_a_license_text_that_is_not_the_apache_license_and_writes_nothing(tmp_path, monkeypatch):
+    serve(monkeypatch, tmp_path, [chat_row("a")], license_text=b"MIT License\n\nCopyright (c) 2024\n")
+    with pytest.raises(ValueError, match="not the Apache License 2.0; review it before importing"):
         main(["import", "glaive-v2", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")])
     assert not (tmp_path / "corpus").exists()
