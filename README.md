@@ -135,12 +135,20 @@ uv run bellwether record --model Qwen/Qwen3-8B --kind parse --oracle reference
 
 Each case under `corpus/parse/` states the assistant message (content, reasoning, tool calls) the
 output must parse to. The checkpoint's template renders it as the final assistant turn after the
-generation prompt; the text in between is the output, its token ids the engine chunks a replay feeds,
-and the fixture carries the chunk plans (fixed sizes, every two-way split for short outputs, thirty
-seeded random plans). A template that does not extend the generation prompt when the turn is appended
-(DeepSeek-R1 never renders `<think>`) cannot be this oracle for that case; the case is reported and
-not recorded, and the run exits 1. Recording it is left to the manifest's next authority, the engine
-witnesses, which nothing here invokes.
+generation prompt; the turn up to where generation stops, at the first of vLLM's stop ids, is the
+output, its token ids the engine chunks a replay feeds, and the fixture carries the chunk plans (fixed
+sizes, every two-way split for short outputs, thirty seeded random plans) and the stop id that ends
+the output (`end_of_turn`). A template that does not extend the generation prompt when the turn is
+appended (DeepSeek-R1 never renders `<think>`) cannot be this oracle for that case; the case is
+reported and not recorded, and the run exits 1. Recording it is left to the manifest's next authority,
+the engine witnesses, which nothing here invokes. `fixtures/README.md` has the rules.
+
+The stop ids come from the checkpoint's `generation_config.json`, so `record --kind parse` needs that
+file cached at the manifest's revision, or known to be absent: offline, transformers would take a
+file that is merely not cached for one the repository does not ship. The run stops with an error
+naming the file and the command that fetches it,
+`hf download <model> generation_config.json --revision <sha>`, which leaves the hub cache's
+`.no_exist` marker when the repository has no such file.
 
 ## The list of models
 
