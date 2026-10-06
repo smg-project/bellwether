@@ -149,7 +149,9 @@ weekly run pins (2026.3.23).
 - **Determinism.** A re-import reproduces the corpus byte for byte, and CI checks that it does.
 - **License.** BFCL is Apache-2.0 (the wheel's metadata and the gorilla repository).
   `corpus/README.md` lists each imported dataset with its license and attribution, and a dataset's
-  license is checked before its sets land.
+  license is checked before its sets land. The wheel holds no LICENSE file, so the import copies the
+  repository's, at the commit the wheel was built from, to `corpus/licenses/bfcl-LICENSE`, and
+  `--check` compares the copy as it does a set.
 
 The single-turn categories give 3635 render cases and 2420 parse cases per checkpoint group: 2501
 rows have a ground truth, and 76 Java and JavaScript rows and 5 rows no built call answers stay

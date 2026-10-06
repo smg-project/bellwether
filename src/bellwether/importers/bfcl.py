@@ -5,8 +5,9 @@ installed and none of its code runs. The weekly run uses BFCL's function-calling
 ``OpenAICompletionsHandler``, so a request is the case's messages plus the functions turned into tools the way
 that handler does: BFCL's language hint and Java/JavaScript rewrite (``_func_doc_language_specific_pre_processing``
 in ``bfcl_eval/utils.py``), then ``convert_to_tool`` for OpenAI chat completions (``bfcl_eval/model_handler/utils.py``).
-This module, like the set writer it shares with the other importers (``corpus_sets``), imports nothing beyond the
-standard library.
+The wheel has no LICENSE file, so the import copies the gorilla repository's, fetched by the commit the wheel was built
+from. This module, like the set writer and the fetcher it shares with the other importers (``corpus_sets``,
+``github``), imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from bellwether import jsonl
 
-from . import corpus_sets
+from . import corpus_sets, github
 
 PROJECT = "bfcl-eval"
 VERSION = "2026.3.23"
@@ -30,6 +31,18 @@ SHA256 = "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
 LICENSE = "Apache-2.0"
 METADATA_LICENSE = "Apache 2.0"  # the License field of the reviewed wheel's METADATA; LICENSE is its SPDX name
 SOURCE = f"pypi:{PROJECT}=={VERSION}"
+# Apache-2.0 4(a) asks that a copy of the License go with the work, and the wheel has none, so the import copies the
+# repository's root LICENSE at the commit the wheel was built from. The wheel's 183 files under bfcl_eval/ are that
+# commit's, byte for byte, and BFCL's publish workflow names a build of main by its UTC date, with a serial after the
+# day's first commit: 2026.3.23 is the first commit of 2026-03-23, and its only one. berkeley-function-call-leaderboard/
+# has no LICENSE of its own, and the repository has no NOTICE file for 4(d) to carry.
+OWNER = "ShishirPatil"
+REPO = "gorilla"
+COMMIT = "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8"
+LICENSE_FILE = "LICENSE"
+LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+# Where the import writes the pinned LICENSE, under the corpus root.
+LICENSE_COPY = "licenses/bfcl-LICENSE"
 DATA = "bfcl_eval/data"
 TEMPERATURE = 0.001
 # The single-turn categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order.
@@ -342,14 +355,14 @@ def build_sets(
     return sets
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``bfcl-*`` files no category writes any more."""
-    return corpus_sets.write(sets, corpus_dir, "bfcl-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the pinned LICENSE, and remove ``bfcl-*`` set files no category writes any more."""
+    return corpus_sets.write(sets, corpus_dir, "bfcl-", {LICENSE_COPY: license_text})
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "bfcl-", "BFCL category")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the LICENSE copy, that differs from a fresh import; empty when none does."""
+    return corpus_sets.check(sets, corpus_dir, "bfcl-", "BFCL category", {LICENSE_COPY: license_text})
 
 
 def check_license(wheel: zipfile.ZipFile) -> None:
@@ -369,16 +382,28 @@ def check_license(wheel: zipfile.ZipFile) -> None:
         )
 
 
+def check_license_file(text: bytes) -> None:
+    """Refuse a LICENSE file whose heading is not the Apache License 2.0's.
+
+    ``github.fetch`` holds the file to its pinned sha256. The heading is checked as well, as GSM8K's is, so that moving
+    the pins to a commit whose LICENSE is no longer Apache-2.0 cannot pass on an updated hash alone.
+    """
+    if text.split()[:4] != [b"Apache", b"License", b"Version", b"2.0,"]:
+        raise ValueError(f"{LICENSE_FILE} at {COMMIT}: not the Apache License 2.0; review it before importing")
+
+
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
+    license_text = github.fetch(OWNER, REPO, COMMIT, LICENSE_FILE, LICENSE_SHA256, cache=args.cache).read_bytes()
+    check_license_file(license_text)
     skipped: list[tuple[str, str]] = []
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
         check_license(wheel)
         sets = build_sets(wheel, skipped=skipped)
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(kept, args.corpus)
+        problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -386,5 +411,5 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     corpus_sets.report("BFCL", sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped(skipped, "parse case")
-    write_sets(kept, args.corpus)
+    write_sets(kept, args.corpus, license_text)
     return 0

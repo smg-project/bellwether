@@ -4,7 +4,7 @@ import zipfile
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import bfcl, pypi
+from bellwether.importers import bfcl, github, pypi
 from bellwether.record.corpus import read_cases
 
 WHEEL = "pkg-1.0-py3-none-any.whl"
@@ -328,41 +328,103 @@ def test_two_rows_with_one_case_name_stop_the_import(tmp_path):
         bfcl.build_sets(wheel, categories=("simple_python",))
 
 
+# The heading of the Apache License 2.0, laid out as the gorilla repository's LICENSE lays it out.
+APACHE = b"                                 Apache License\n                           Version 2.0, January 2004\n"
+# The LICENSE the import copies: the gorilla repository's root LICENSE at the commit the wheel was built from.
+LICENSE_PIN = (
+    "ShishirPatil",
+    "gorilla",
+    "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+    "LICENSE",
+    "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+)
+
+
 def test_written_sets_check_clean_and_a_changed_or_stale_file_is_reported(tmp_path):
     sets, corpus = build(tmp_path), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
     (corpus / "render" / "common.jsonl").write_text("{}\n")
     (corpus / "render" / "bfcl-old.jsonl").write_text("{}\n")
-    bfcl.write_sets(sets, corpus)
+    bfcl.write_sets(sets, corpus, APACHE)
     assert not (corpus / "render" / "bfcl-old.jsonl").exists()
     assert (corpus / "render" / "common.jsonl").read_text() == "{}\n"
     text = (corpus / "render" / "bfcl-simple-python.jsonl").read_bytes().decode("utf-8")
     assert "Café ☕" in text and text.endswith("\n")
-    assert bfcl.check_sets(sets, corpus) == []
+    assert bfcl.check_sets(sets, corpus, APACHE) == []
     (corpus / "parse" / "bfcl-simple-python.jsonl").write_text("{}\n")
     (corpus / "render" / "bfcl-stale.jsonl").write_text("{}\n")
-    assert bfcl.check_sets(sets, corpus) == [
+    assert bfcl.check_sets(sets, corpus, APACHE) == [
         f"{corpus / 'parse' / 'bfcl-simple-python.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'bfcl-stale.jsonl'}: no BFCL category writes it",
     ]
 
 
-def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
-    path = fake_wheel(
+def serve_pins(tmp_path, monkeypatch, wheel, license_text: bytes = APACHE) -> None:
+    """Stand in for both pinned fetches, so tests never touch the network: the wheel, and the LICENSE it lacks."""
+    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: wheel)
+
+    def fetch(owner, repo, commit, path, sha256, cache):
+        assert (owner, repo, commit, path, sha256) == LICENSE_PIN
+        served = tmp_path / "served" / path
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_bytes(license_text)
+        return served
+
+    monkeypatch.setattr(github, "fetch", fetch)
+
+
+def simple_wheel(tmp_path):
+    return fake_wheel(
         tmp_path,
         {
             "bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE],
             "bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json": [ANSWER],
         },
     )
+
+
+def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python",))
-    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    serve_pins(tmp_path, monkeypatch, simple_wheel(tmp_path))
     corpus = tmp_path / "corpus"
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 1
     assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'bfcl-simple-python.jsonl'}: 1 cases" in out
+
+
+def test_the_command_writes_the_pinned_license_next_to_the_sets(tmp_path, monkeypatch):
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python",))
+    serve_pins(tmp_path, monkeypatch, simple_wheel(tmp_path))
+    corpus = tmp_path / "corpus"
+    assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
+    assert (corpus / "licenses" / "bfcl-LICENSE").read_bytes() == APACHE
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python",))
+    serve_pins(tmp_path, monkeypatch, simple_wheel(tmp_path))
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "bfcl-LICENSE"
+    argv = ["import", "bfcl", "--corpus", str(corpus)]
+    assert main(argv) == 0
+    copy.unlink(missing_ok=True)
+    assert main([*argv, "--check"]) == 1
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_bytes(APACHE + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
+
+
+def test_the_command_refuses_a_license_file_that_is_not_the_apache_license_and_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python",))
+    serve_pins(tmp_path, monkeypatch, simple_wheel(tmp_path), license_text=b"MIT License\n\nCopyright (c) 2021\n")
+    with pytest.raises(ValueError, match="not the Apache License 2.0"):
+        main(["import", "bfcl", "--corpus", str(tmp_path / "corpus")])
+    assert not (tmp_path / "corpus").exists()
 
 
 def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_they_repeat(
@@ -378,7 +440,7 @@ def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_th
         },
     )
     monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python", "irrelevance"))
-    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    serve_pins(tmp_path, monkeypatch, path)
     corpus = tmp_path / "corpus"
     assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
@@ -456,7 +518,7 @@ def test_the_command_names_every_row_it_gives_no_parse_case(tmp_path, monkeypatc
         },
     )
     monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_java",))
-    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    serve_pins(tmp_path, monkeypatch, path)
     assert main(["import", "bfcl", "--corpus", str(tmp_path / "corpus")]) == 0
     out = capsys.readouterr().out
     assert f"no parse case for 5 row(s) ({', '.join(ids)}): {bfcl.NOT_STRINGS}" in out
