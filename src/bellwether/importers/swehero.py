@@ -55,8 +55,8 @@ CALLS_OUTSIDE_A_TURN = "a message other than an assistant turn carries calls"
 NO_TURN = "no assistant turn's request fits under the cap"
 
 
-class Refused(ValueError):
-    """A row the import leaves out: named under its reason, with a detail."""
+class Unusable(ValueError):
+    """A SWE-Hero row that cannot become a case: the import names it under its reason, with a detail."""
 
     def __init__(self, reason: str, detail: str) -> None:
         super().__init__(f"{reason}: {detail}")
@@ -109,8 +109,8 @@ def _not_json(constant: str):
 def openai_call(call: dict, index: int) -> dict:
     """One call of the assistant turn at ``index`` in OpenAI's key order, its arguments the JSON string the data holds.
 
-    A call whose arguments are not a JSON object string refuses the row: it would go into every later request. The
-    string must be JSON as RFC 8259 has it, so ``NaN`` and the infinities, which Python's json reads, refuse it too.
+    A call whose arguments are not a JSON object string makes the row unusable: it would go into every later request.
+    The string must be JSON as RFC 8259 has it, so ``NaN`` and the infinities, which Python's json reads, do as well.
     """
     function = call["function"]
     arguments = function["arguments"]
@@ -119,7 +119,7 @@ def openai_call(call: dict, index: int) -> dict:
     except ValueError:
         value = None
     if not isinstance(value, dict):
-        raise Refused(NOT_AN_OBJECT, f"message {index} calls {function['name']}")
+        raise Unusable(NOT_AN_OBJECT, f"message {index} calls {function['name']}")
     return {"id": call["id"], "type": call["type"], "function": {"name": function["name"], "arguments": arguments}}
 
 
@@ -127,11 +127,11 @@ def messages_for(trajectory: list[dict]) -> list[dict]:
     """The trajectory as OpenAI chat messages, each tool message carrying the id of the call it answers.
 
     The data's tool messages carry no id: the k-th tool message after an assistant turn answers that turn's k-th call.
-    A turn the conversation goes on past must be followed by exactly one result per call, or the row is refused; the
+    A turn the conversation goes on past must be followed by exactly one result per call, or the row is unusable; the
     last turn may have none, since the episode ends with its call (every trajectory in the shard ends with ``finish``).
     Keys come in OpenAI's order rather than the shard's alphabetical struct order, and ``tool_calls`` is kept on
     assistant turns that make calls only, since parquet gives every message the field and fills it with null. Calls on
-    any other message refuse the row: the request has no place for them, and dropping them would change the
+    any other message make the row unusable: the request has no place for them, and dropping them would change the
     conversation.
     """
     messages: list[dict] = []
@@ -140,15 +140,15 @@ def messages_for(trajectory: list[dict]) -> list[dict]:
     for index, item in enumerate(trajectory):
         role = item["role"]
         if role != "assistant" and item["tool_calls"]:
-            raise Refused(CALLS_OUTSIDE_A_TURN, f"message {index} is a {role} message with calls")
+            raise Unusable(CALLS_OUTSIDE_A_TURN, f"message {index} is a {role} message with calls")
         if role == "tool":
             if answered == len(calls):
-                raise Refused(UNPAIRED, f"message {index} is a tool result with no call to answer")
+                raise Unusable(UNPAIRED, f"message {index} is a tool result with no call to answer")
             messages.append({"role": "tool", "tool_call_id": calls[answered], "content": item["content"]})
             answered += 1
             continue
         if answered != len(calls):
-            raise Refused(UNPAIRED, f"message {opened} makes {len(calls)} call(s) and {answered} result(s) follow")
+            raise Unusable(UNPAIRED, f"message {opened} makes {len(calls)} call(s) and {answered} result(s) follow")
         calls, answered = [], 0
         message = {"role": role, "content": item["content"]}
         if role == "assistant" and item["tool_calls"]:
@@ -156,7 +156,7 @@ def messages_for(trajectory: list[dict]) -> list[dict]:
             calls, opened = [call["id"] for call in item["tool_calls"]], index
         messages.append(message)
     if 0 < answered < len(calls):
-        raise Refused(UNPAIRED, f"message {opened} makes {len(calls)} call(s) and {answered} result(s) follow")
+        raise Unusable(UNPAIRED, f"message {opened} makes {len(calls)} call(s) and {answered} result(s) follow")
     return messages
 
 
@@ -238,28 +238,29 @@ def case_lines(number: int, row: dict, messages: list[dict], turn: int, tools: l
 
 
 def build_sets(
-    rows: Iterable[dict], tools: list[dict], refused: list[tuple[int, str, str]] | None = None
+    rows: Iterable[dict], tools: list[dict], skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: a render and a parse case for each chosen turn of each sampled row.
 
-    Every row is checked: one refused (its repository's license, its results, its arguments) is appended to
-    ``refused`` with its reason and detail, sampled or not. A sampled row that gives no turn is appended too.
+    Every row is checked, sampled or not: an unusable one (its repository's license, its results, its arguments) is
+    appended to ``skipped`` as ``("shard <n> row <row>: <detail>", <reason>)``, the pair ``corpus_sets.report_skipped``
+    prints. A sampled row that gives no turn is appended too.
     """
-    refused = [] if refused is None else refused
+    skipped = [] if skipped is None else skipped
     render, parse = [], []
     for number, row in enumerate(rows):
         try:
             if row["license"] not in REPOSITORY_LICENSES:
-                raise Refused(LICENSE_NOT_ALLOWED, str(row["license"]))
+                raise Unusable(LICENSE_NOT_ALLOWED, str(row["license"]))
             messages = messages_for(row["trajectory"])
-        except Refused as err:
-            refused.append((number, err.reason, err.detail))
+        except Unusable as err:
+            skipped.append((f"shard {SHARD} row {number}: {err.detail}", err.reason))
             continue
         if number % STRIDE:
             continue
         chosen = turns(messages, tools, MAX_REQUEST_BYTES)
         if not chosen:
-            refused.append((number, NO_TURN, no_turn(messages, tools)))
+            skipped.append((f"shard {SHARD} row {number}: {no_turn(messages, tools)}", NO_TURN))
         for turn in chosen:
             render_line, parse_line = case_lines(number, row, messages, turn, tools)
             render.append(render_line)
@@ -277,14 +278,6 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
     return corpus_sets.check(sets, corpus_dir, "swehero-", "SWE-Hero shard")
 
 
-def refusal_report(refused: list[tuple[int, str, str]]) -> list[str]:
-    """One line per reason, with how many rows it refused and every one of them, each with its detail."""
-    by_reason: dict[str, list[str]] = {}
-    for number, reason, detail in refused:
-        by_reason.setdefault(reason, []).append(f"{number}: {detail}")
-    return [f"refused {len(rows)} row(s) ({', '.join(rows)}): {reason}" for reason, rows in by_reason.items()]
-
-
 def run(args: argparse.Namespace) -> int:
     def fetch(name: str) -> Path:
         return hf.fetch(REPO, REVISION, name, FILES[name], cache=args.cache)
@@ -292,19 +285,17 @@ def run(args: argparse.Namespace) -> int:
     # The card's license is checked before the shard is downloaded.
     hf.check_card_license(REPO, REVISION, FILES[hf.CARD], CARD_LICENSE, cache=args.cache)
     tools = check_tools(json.loads(fetch(TOOLS_FILE).read_text(encoding="utf-8")))
-    refused: list[tuple[int, str, str]] = []
-    sets = build_sets(read_rows(fetch(SHARD_FILE)), tools, refused)
+    skipped: list[tuple[str, str]] = []
+    sets = build_sets(read_rows(fetch(SHARD_FILE)), tools, skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(kept, args.corpus)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the SWE-Hero sets equal a fresh import of {SOURCE} {SHARD_FILE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        size = len(corpus_sets.text(lines).encode("utf-8"))
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases, {size / 1e6:.1f} MB")
-    for line in refusal_report(refused):
-        print(line)
-    write_sets(sets, args.corpus)
+    corpus_sets.report("SWE-Hero", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped)
+    write_sets(kept, args.corpus)
     return 0

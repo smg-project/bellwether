@@ -159,12 +159,12 @@ def test_an_assistant_turn_without_calls_has_no_tool_calls_key():
         (TRAJECTORY[:6], "message 4 makes 2 call(s) and 1 result(s) follow"),
     ],
 )
-def test_a_row_whose_results_do_not_pair_with_its_calls_is_refused(trajectory, detail):
+def test_a_row_whose_results_do_not_pair_with_its_calls_is_unusable(trajectory, detail):
     # TRAJECTORY itself ends with a call no result answers, as every trajectory in the shard ends with `finish`:
     # the last turn may end the conversation, but a turn the conversation goes on past needs one result per call.
-    with pytest.raises(swehero.Refused) as refused:
+    with pytest.raises(swehero.Unusable) as unusable:
         swehero.messages_for(trajectory)
-    assert (refused.value.reason, refused.value.detail) == (swehero.UNPAIRED, detail)
+    assert (unusable.value.reason, unusable.value.detail) == (swehero.UNPAIRED, detail)
 
 
 @pytest.mark.parametrize(
@@ -181,22 +181,22 @@ def test_a_row_whose_results_do_not_pair_with_its_calls_is_refused(trajectory, d
         '{"timeout": -Infinity}',
     ],
 )
-def test_a_call_whose_arguments_are_not_a_json_object_string_refuses_the_row(arguments):
+def test_a_call_whose_arguments_are_not_a_json_object_string_makes_the_row_unusable(arguments):
     bad = item("assistant", "", call("call-x", "execute_bash", arguments))
-    with pytest.raises(swehero.Refused) as refused:
+    with pytest.raises(swehero.Unusable) as unusable:
         swehero.messages_for([*TRAJECTORY[:2], bad, item("tool", "x"), *TRAJECTORY[4:]])
-    assert (refused.value.reason, refused.value.detail) == (swehero.NOT_AN_OBJECT, "message 2 calls execute_bash")
+    assert (unusable.value.reason, unusable.value.detail) == (swehero.NOT_AN_OBJECT, "message 2 calls execute_bash")
 
 
 @pytest.mark.parametrize("index, role", [(0, "system"), (1, "user"), (3, "tool")])
-def test_a_row_with_calls_on_a_message_that_is_not_an_assistant_turn_is_refused(index, role):
+def test_a_row_with_calls_on_a_message_that_is_not_an_assistant_turn_is_unusable(index, role):
     # OpenAI's request has no place for them, and dropping them would change the conversation.
     trajectory = list(TRAJECTORY)
     trajectory[index] = {**TRAJECTORY[index], "tool_calls": [call("call-x", "execute_bash", '{"command": "ls"}')]}
-    with pytest.raises(swehero.Refused) as refused:
+    with pytest.raises(swehero.Unusable) as unusable:
         swehero.messages_for(trajectory)
     detail = f"message {index} is a {role} message with calls"
-    assert (refused.value.reason, refused.value.detail) == (swehero.CALLS_OUTSIDE_A_TURN, detail)
+    assert (unusable.value.reason, unusable.value.detail) == (swehero.CALLS_OUTSIDE_A_TURN, detail)
 
 
 LONG = [
@@ -324,31 +324,31 @@ def test_whitespace_at_the_edges_of_every_message_is_kept():
     assert [line["message"]["content"] for line in sets[PARSE]] == ["Let me look.\n\n", "Done. \n\n"]
 
 
-def test_one_row_in_stride_is_sampled_and_every_refused_row_is_named_with_its_reason(monkeypatch):
+def test_one_row_in_stride_is_sampled_and_every_unusable_row_is_named_with_its_reason(monkeypatch):
     monkeypatch.setattr(swehero, "STRIDE", 2)
     rows = [row(number) for number in range(5)]
     rows[1]["trajectory"] = TRAJECTORY[:6]
     rows[2]["license"] = "GPL-3.0"
     rows[3]["license"] = None
-    refused: list = []
-    sets = swehero.build_sets(rows, TOOLS, refused)
+    skipped: list = []
+    sets = swehero.build_sets(rows, TOOLS, skipped)
     assert sorted({line["origin"]["row"] for line in sets[RENDER]}) == [0, 4]
     names = [f"swehero-13-{number}-{turn}" for number in (0, 4) for turn in (2, 4, 7)]
     assert [line["name"] for line in sets[RENDER]] == names
     assert [line["name"] for line in sets[PARSE]] == names
-    assert refused == [
-        (1, swehero.UNPAIRED, "message 4 makes 2 call(s) and 1 result(s) follow"),
-        (2, swehero.LICENSE_NOT_ALLOWED, "GPL-3.0"),
-        (3, swehero.LICENSE_NOT_ALLOWED, "None"),
+    assert skipped == [
+        ("shard 13 row 1: message 4 makes 2 call(s) and 1 result(s) follow", swehero.UNPAIRED),
+        ("shard 13 row 2: GPL-3.0", swehero.LICENSE_NOT_ALLOWED),
+        ("shard 13 row 3: None", swehero.LICENSE_NOT_ALLOWED),
     ]
 
 
 def test_rows_under_each_reviewed_repository_license_are_kept(monkeypatch):
     monkeypatch.setattr(swehero, "STRIDE", 1)
     licenses = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"]
-    refused: list = []
-    sets = swehero.build_sets([row(number, license) for number, license in enumerate(licenses)], TOOLS, refused)
-    assert refused == []
+    skipped: list = []
+    sets = swehero.build_sets([row(number, license) for number, license in enumerate(licenses)], TOOLS, skipped)
+    assert skipped == []
     assert sorted({(line["origin"]["row"], line["origin"]["repository_license"]) for line in sets[PARSE]}) == list(
         enumerate(licenses)
     )
@@ -357,12 +357,12 @@ def test_rows_under_each_reviewed_repository_license_are_kept(monkeypatch):
 def test_a_sampled_row_that_gives_no_turn_is_named(monkeypatch):
     monkeypatch.setattr(swehero, "STRIDE", 2)
     monkeypatch.setattr(swehero, "MAX_REQUEST_BYTES", 100)
-    refused: list = []
-    assert swehero.build_sets([row(), row(1), row(2, trajectory=TRAJECTORY[:2])], TOOLS, refused) == {}
+    skipped: list = []
+    assert swehero.build_sets([row(), row(1), row(2, trajectory=TRAJECTORY[:2])], TOOLS, skipped) == {}
     first = size(swehero.messages_for(TRAJECTORY), 2)
-    assert refused == [
-        (0, swehero.NO_TURN, f"the first assistant turn's request has {first} bytes"),
-        (2, swehero.NO_TURN, "the trajectory has no assistant turn"),
+    assert skipped == [
+        (f"shard 13 row 0: the first assistant turn's request has {first} bytes", swehero.NO_TURN),
+        ("shard 13 row 2: the trajectory has no assistant turn", swehero.NO_TURN),
     ]
 
 
@@ -462,8 +462,9 @@ def test_the_command_reads_the_pinned_files_under_its_cache_then_writes_and_chec
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: 3 cases" in out
-    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: 3 cases" in out
+    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: 3 cases, 3 distinct messages\n" in out
+    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: 3 cases\n" in out
+    assert f"{corpus}: 6 cases in the 2 SWE-Hero sets, 0 left out as repeats, 3 distinct messages\n" in out
     assert f"{corpus}: the SWE-Hero sets equal a fresh import" in out
     at_the_pin = {
         "repo_type": "dataset",
@@ -491,11 +492,35 @@ def test_a_tools_file_not_in_openai_shape_stops_the_import_before_the_shard_is_f
     assert [filename for _, filename, _ in downloads] == [hf.CARD, swehero.TOOLS_FILE]
 
 
-def test_the_command_names_every_refused_row(tmp_path, monkeypatch, capsys):
+def test_the_command_names_every_row_it_leaves_out_in_the_words_of_the_other_imports(tmp_path, monkeypatch, capsys):
     rows = [row(number, "GPL-3.0") for number in range(51)] + [row(51, trajectory=TRAJECTORY[:6]), row(52)]
     serve(tmp_path, monkeypatch, rows)
     assert main(["import", "swehero", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")]) == 0
     out = capsys.readouterr().out
-    every = ", ".join(f"{number}: GPL-3.0" for number in range(51))
-    assert f"refused 51 row(s) ({every}): {swehero.LICENSE_NOT_ALLOWED}" in out
-    assert f"refused 1 row(s) (51: message 4 makes 2 call(s) and 1 result(s) follow): {swehero.UNPAIRED}" in out
+    every = ", ".join(f"shard 13 row {number}: GPL-3.0" for number in range(51))
+    assert f"no case for 51 row(s) ({every}): {swehero.LICENSE_NOT_ALLOWED}\n" in out
+    unpaired = "shard 13 row 51: message 4 makes 2 call(s) and 1 result(s) follow"
+    assert f"no case for 1 row(s) ({unpaired}): {swehero.UNPAIRED}\n" in out
+
+
+def test_the_command_leaves_out_a_case_that_repeats_an_earlier_one_and_counts_distinct_messages(
+    tmp_path, monkeypatch, capsys
+):
+    # Two trajectories of one task open with the same system prompt and issue, so the requests of their first turns
+    # are the same: the second render case repeats the first. Their parse cases differ, by the turn each expects; the
+    # later turns, whose requests differ, expect the same messages, which the report counts once.
+    monkeypatch.setattr(swehero, "STRIDE", 1)
+    other = [*TRAJECTORY[:2], item("assistant", "Let me read it.", call("call-a", "execute_bash", '{"command": "ls"}'))]
+    serve(tmp_path, monkeypatch, [row(0), row(1, trajectory=[*other, *TRAJECTORY[3:]])])
+    corpus = tmp_path / "corpus"
+    argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    assert "no case swehero-13-1-2: it repeats swehero-13-0-2\n" in out
+    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: 6 cases, 4 distinct messages\n" in out
+    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: 5 cases, 1 left out as repeats\n" in out
+    assert f"{corpus}: 11 cases in the 2 SWE-Hero sets, 1 left out as repeats, 4 distinct messages\n" in out
+    render = [case.name for case in read_cases(corpus / "render" / "swehero-13.jsonl")]
+    assert render == ["swehero-13-0-2", "swehero-13-0-4", "swehero-13-0-7", "swehero-13-1-4", "swehero-13-1-7"]
+    assert len(read_cases(corpus / "parse" / "swehero-13.jsonl")) == 6
+    assert main([*argv, "--check"]) == 0
