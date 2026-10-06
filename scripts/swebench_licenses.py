@@ -12,8 +12,8 @@ declare it in its packaging metadata at every base commit.
 
 The repositories are cloned bare into the directory given, or used as they are when already there. The table is
 written to ``src/bellwether/importers/swebench_licenses.json``; ``--check`` compares instead, and exits 1 on a
-difference. Reading the rows needs the pinned parquet files in the Hugging Face cache (``HF_HUB_OFFLINE=1`` reads them
-offline).
+difference. Reading the rows needs the pinned parquet files in the importers' cache, ``~/.cache/bellwether/datasets``
+(``HF_HUB_OFFLINE=1`` reads them offline).
 
 ``--terms`` prints, for every row, the license and copyright statements in each file its patch touches (the whole file
 at the base commit) and in the patch's own lines, leaving out each repository's own standard header lines (``OWN``):

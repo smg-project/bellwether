@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import corpus_sets, github, hf, swebench
+from bellwether.importers import corpus_sets, github, hf, pinned, swebench
 
 CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 COMMIT = "d26b2424437dabeeca94d7900b37d2df4410da0c"
@@ -278,7 +278,7 @@ CARD = "---\ndataset_info:\n  features:\n  - name: patch\n---\n\nlicense: mit, i
 
 VERIFIED_ORIGIN = {
     "dataset": "swebench",
-    "source": "hf://datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3",
+    "source": "hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3",
     "sha256": "030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25",
     "file": "data/test-00000-of-00001.parquet",
 }
@@ -356,7 +356,7 @@ def test_sets_per_family_and_form_with_copyleft_rows_in_their_own_sets():
     assert tested["notes"] == "SWE-bench test django__django-10097"
     assert tested["origin"] == {
         "dataset": "swebench",
-        "source": "hf://datasets/SWE-bench/SWE-bench@c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2",
+        "source": "hf:datasets/SWE-bench/SWE-bench@c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2",
         "sha256": "d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567",
         "file": "data/test-00000-of-00001.parquet",
         "row": "django__django-10097",
@@ -476,11 +476,11 @@ def test_written_sets_and_license_copies_check_clean_and_a_changed_missing_or_st
     (corpus / "licenses" / DJANGO_COPY).write_text(MIT)
     (corpus / "licenses" / PYLINT_COPY).unlink()
     assert swebench.check_sets(sets, corpus, files) == [
+        f"{corpus / 'licenses' / DJANGO_COPY}: differs from a fresh import",
+        f"{corpus / 'licenses' / PYLINT_COPY}: missing",
         f"{corpus / 'parse' / 'swebench-verified-call.jsonl'}: differs from a fresh import",
         f"{corpus / 'parse' / 'swebench-verified-content-copyleft.jsonl'}: missing",
         f"{corpus / 'render' / 'swebench-stale.jsonl'}: no SWE-bench set writes it",
-        f"{corpus / 'licenses' / DJANGO_COPY}: differs from a fresh import",
-        f"{corpus / 'licenses' / PYLINT_COPY}: missing",
     ]
 
 
@@ -499,8 +499,8 @@ def fake_hub(tmp_path, verified: list[dict], test: list[dict], cards: dict[str, 
         files[(source.dataset_id, "README.md")] = card
     calls: list[tuple] = []
 
-    def fetch(repo, revision, filename, sha256):
-        calls.append((repo, revision, filename, sha256))
+    def fetch(repo, revision, filename, sha256, cache=pinned.CACHE):
+        calls.append((repo, revision, filename, sha256, cache))
         return files[(repo, filename)]
 
     return fetch, calls
@@ -523,7 +523,7 @@ def fake_licenses(tmp_path, monkeypatch, texts: dict[str, str]) -> list[tuple]:
         served[(repository, COMMIT, "LICENSE", sha256)].parent.mkdir(parents=True, exist_ok=True)
         served[(repository, COMMIT, "LICENSE", sha256)].write_text(text)
 
-    def fetch(owner, repo, commit, path, sha256, cache=github.CACHE):
+    def fetch(owner, repo, commit, path, sha256, cache=pinned.CACHE):
         calls.append((owner, repo, commit, path, sha256))
         return served[(f"{owner}/{repo}", commit, path, sha256)]
 
@@ -534,34 +534,43 @@ def fake_licenses(tmp_path, monkeypatch, texts: dict[str, str]) -> list[tuple]:
 
 def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, monkeypatch, capsys):
     empty = row(instance_id="django__django-1", patch="")
-    fetch, calls = fake_hub(tmp_path, [row(), PYLINT, empty], [row(), row(instance_id="django__django-10097")])
+    tested = row(instance_id="django__django-10097", problem_statement="Another issue.\n")
+    # The same request and patch as django__django-11099: each of its cases repeats one of that row's.
+    repeat = row(instance_id="django__django-10098")
+    fetch, calls = fake_hub(tmp_path, [row(), PYLINT, empty], [row(), tested, repeat])
     monkeypatch.setattr(hf, "fetch", fetch)
     fetched = fake_licenses(tmp_path, monkeypatch, {"django/django": BSD_3, "pylint-dev/pylint": GPL_2})
-    corpus = tmp_path / "corpus"
-    assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 1
+    corpus, cache = tmp_path / "corpus", tmp_path / "cache"
+    command = ["import", "swebench", "--corpus", str(corpus), "--cache", str(cache)]
+    assert main([*command, "--check"]) == 1
     err = capsys.readouterr().err
     assert f"{corpus / 'render' / 'swebench-verified.jsonl'}: missing" in err
     assert f"{corpus / 'licenses' / DJANGO_COPY}: missing" in err
-    assert main(["import", "swebench", "--corpus", str(corpus)]) == 0
+    assert main(command) == 0
     assert (corpus / "licenses" / DJANGO_COPY).read_text() == BSD_3
     assert (corpus / "licenses" / PYLINT_COPY).read_text() == GPL_2
-    assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 0
-    out = capsys.readouterr().out
-    assert f"{corpus / 'render' / 'swebench-verified.jsonl'}: 1 cases" in out
-    assert f"{corpus / 'parse' / 'swebench-verified-call-copyleft.jsonl'}: 1 cases" in out
-    assert f"{corpus / 'render' / 'swebench-test.jsonl'}: 1 cases" in out
-    assert "no cases for 1 row(s) (django__django-1): the patch is empty" in out
-    assert (
-        "1 SWE-bench test row(s) are also SWE-bench Verified rows; each is imported once, in the Verified sets" in out
-    )
-    assert f"{corpus}: the SWE-bench sets equal a fresh import" in out
-    cards = {(s.dataset_id, s.revision, "README.md", s.card_sha256) for s in swebench.SOURCES}
-    rows = {(s.dataset_id, s.revision, s.file, s.sha256) for s in swebench.SOURCES}
+    assert main([*command, "--check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    for line in (
+        "no case swebench-test-django-django-10098: it repeats swebench-verified-django-django-11099",
+        "no case swebench-test-call-django-django-10098: it repeats swebench-verified-call-django-django-11099",
+        f"{corpus / 'render' / 'swebench-verified.jsonl'}: 1 cases",
+        f"{corpus / 'render' / 'swebench-test.jsonl'}: 1 cases, 1 left out as repeats",
+        f"{corpus / 'parse' / 'swebench-test-call.jsonl'}: 1 cases, 1 left out as repeats, 1 distinct messages",
+        f"{corpus / 'parse' / 'swebench-verified-call-copyleft.jsonl'}: 1 cases, 1 distinct messages",
+        f"{corpus}: 9 cases in the 9 SWE-bench sets, 3 left out as repeats, 2 distinct messages",
+        "no case for 1 row(s) (django__django-1): the patch is empty",
+        "1 SWE-bench test row(s) are also SWE-bench Verified rows; each is imported once, in the Verified sets",
+    ):
+        assert line in out
+    assert out[-1].startswith(f"{corpus}: the SWE-bench sets equal a fresh import of hf:datasets/")
+    cards = {(s.dataset_id, s.revision, "README.md", s.card_sha256, cache) for s in swebench.SOURCES}
+    rows = {(s.dataset_id, s.revision, s.file, s.sha256, cache) for s in swebench.SOURCES}
     assert set(calls) == cards | rows and len(cards | rows) == 4
     django = ("django", "django", COMMIT, "LICENSE", hashlib.sha256(BSD_3.encode()).hexdigest())
     assert django in fetched
     (corpus / "licenses" / DJANGO_COPY).write_text(MIT)
-    assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 1
+    assert main([*command, "--check"]) == 1
     assert capsys.readouterr().err == f"{corpus / 'licenses' / DJANGO_COPY}: differs from a fresh import\n"
 
 
@@ -570,19 +579,23 @@ def test_the_command_refuses_a_dataset_card_that_states_a_license_and_writes_not
     cards = {source.dataset_id: "---\nlicense: mit\n---\n"}
     fetch, _ = fake_hub(tmp_path, [row()], [row(instance_id="django__django-10097")], cards=cards)
     monkeypatch.setattr(hf, "fetch", fetch)
-    refused = (
-        f"^{re.escape(source.dataset_id)} README.md: the card's license is 'mit', not the reviewed None; review it"
-    )
+    pinned_card = re.escape(hf.source(source.dataset_id, source.revision))
+    refused = f"^{pinned_card} README.md: the card's license is 'mit', not the reviewed None; review it"
     with pytest.raises(ValueError, match=refused):
         main(["import", "swebench", "--corpus", str(tmp_path / "corpus")])
     assert not (tmp_path / "corpus").exists()
 
 
-def test_the_command_refuses_sets_past_the_limit_and_writes_nothing(tmp_path, monkeypatch):
-    fetch, _ = fake_hub(tmp_path, [row()], [row(instance_id="django__django-10097")])
+def test_the_command_writes_every_set_compressed_past_the_limit_and_checks_them(tmp_path, monkeypatch):
+    fetch, _ = fake_hub(tmp_path, [row()], [row(instance_id="django__django-10097", problem_statement="Other.\n")])
     monkeypatch.setattr(hf, "fetch", fetch)
     fake_licenses(tmp_path, monkeypatch, {"django/django": BSD_3})
     monkeypatch.setattr(corpus_sets, "LIMIT", 1)
-    with pytest.raises(ValueError, match=r"^the swebench-\* sets take [0-9]+ bytes, past the 1 one source may take"):
-        main(["import", "swebench", "--corpus", str(tmp_path / "corpus")])
-    assert not (tmp_path / "corpus").exists()
+    corpus = tmp_path / "corpus"
+    assert main(["import", "swebench", "--corpus", str(corpus)]) == 0
+    assert sorted(path.name for path in (corpus / "render").iterdir()) == [
+        "swebench-test.jsonl.zst",
+        "swebench-verified.jsonl.zst",
+    ]
+    assert (corpus / "licenses" / DJANGO_COPY).read_text() == BSD_3  # beside the sets, plain and outside the limit
+    assert main(["import", "swebench", "--corpus", str(corpus), "--check"]) == 0

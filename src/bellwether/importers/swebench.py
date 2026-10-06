@@ -8,8 +8,9 @@ SWE-bench has no prompt and no tools, so the request and the messages are bellwe
 - a content case: the gold patch in a fenced ``diff`` block.
 
 Verified is imported whole. SWE-bench's test split holds all of Verified's rows, so a test row that Verified already
-gave is imported once, in the Verified sets. The files are read through the Hugging Face cache (``hf.fetch``) and parsed
-with ``pyarrow``; the sets are written and checked by the set writer the importers share (``corpus_sets``).
+gave is imported once, in the Verified sets. The files are read with ``hf.fetch`` into the importers' cache and parsed
+with ``pyarrow``; the sets are written and checked, and what the import keeps and leaves out is printed, by the set
+writer the importers share (``corpus_sets``).
 
 The dataset cards state no license. A row's code, its gold patch, is under its repository's license at the row's base
 commit, read from the repository's license file there (``license_of``). ``swebench_licenses.json`` pins that file and
@@ -45,8 +46,8 @@ class Source:
 
     @property
     def uri(self) -> str:
-        """The pinned revision, as ``origin.source`` names it."""
-        return f"hf://datasets/{self.dataset_id}@{self.revision}"
+        """The pinned revision, as ``origin.source`` names it (``hf.source``)."""
+        return hf.source(self.dataset_id, self.revision)
 
 
 VERIFIED = Source(
@@ -445,29 +446,13 @@ def build_sets(
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files: dict[str, bytes]) -> list[Path]:
-    """Write every set and ``files``, and remove ``swebench-*`` set files the import no longer writes.
-
-    ``files`` are the import's other files, the copied license files, as bytes by path under ``corpus_dir``.
-    """
-    written = corpus_sets.write(sets, corpus_dir, "swebench-")
-    for relative, content in sorted(files.items()):
-        path = corpus_dir / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
-        written.append(path)
-    return written
+    """Write every set and the copied license files (``files``), and remove ``swebench-*`` sets no longer written."""
+    return corpus_sets.write(sets, corpus_dir, "swebench-", files)
 
 
 def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files: dict[str, bytes]) -> list[str]:
-    """One line per set file, or file of ``files``, that differs from a fresh import; empty when none does."""
-    problems = corpus_sets.check(sets, corpus_dir, "swebench-", "SWE-bench set")
-    for relative, content in sorted(files.items()):
-        path = corpus_dir / relative
-        if not path.is_file():
-            problems.append(f"{path}: missing")
-        elif path.read_bytes() != content:
-            problems.append(f"{path}: differs from a fresh import")
-    return problems
+    """One line per set file, or copied license file, that differs from a fresh import; empty when none does."""
+    return corpus_sets.check(sets, corpus_dir, "swebench-", "SWE-bench set", files)
 
 
 def license_texts(table: dict, cache: Path) -> dict[str, bytes]:
@@ -485,34 +470,30 @@ def run(args: argparse.Namespace) -> int:
     sources = []
     for source in SOURCES:
         # The cards state no license: each row's code is under its repository's, read below.
-        card = hf.fetch(source.dataset_id, source.revision, hf.CARD, source.card_sha256).read_text("utf-8")
-        hf.check_card_license(source.dataset_id, card, None)
-        sources.append((source, read_rows(hf.fetch(source.dataset_id, source.revision, source.file, source.sha256))))
+        hf.check_card_license(source.dataset_id, source.revision, source.card_sha256, None, cache=args.cache)
+        path = hf.fetch(source.dataset_id, source.revision, source.file, source.sha256, cache=args.cache)
+        sources.append((source, read_rows(path)))
     table = load_license_table()
     texts = license_texts(table, args.cache)
     files = {f"{LICENSE_DIR}/{name}": text for name, text in texts.items()}
     skipped: list[tuple[str, str]] = []
     repeated: list[str] = []
     sets = build_sets(sources, licenses_from(table, texts), skipped=skipped, repeated=repeated)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus, files)
+        problems = check_sets(kept, args.corpus, files)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             pinned = ", ".join(source.uri for source in SOURCES)
             print(f"{args.corpus}: the SWE-bench sets equal a fresh import of {pinned}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
-    rows_by_reason: dict[str, list[str]] = {}
-    for row_id, why in skipped:
-        rows_by_reason.setdefault(why, []).append(row_id)
-    for why, row_ids in rows_by_reason.items():
-        print(f"no cases for {len(row_ids)} row(s) ({', '.join(row_ids)}): {why}")
+    corpus_sets.report("SWE-bench", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped)
     if repeated:
         print(
             f"{len(repeated)} {TEST.label} row(s) are also {VERIFIED.label} rows; each is imported once, in the "
             "Verified sets"
         )
-    write_sets(sets, args.corpus, files)
+    write_sets(kept, args.corpus, files)
     return 0
