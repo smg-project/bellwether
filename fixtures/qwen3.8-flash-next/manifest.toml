@@ -1,0 +1,12 @@
+model    = "Qwen/Qwen3.8-Flash-Next"
+revision = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
+tier     = 1
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"    = "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+"config.json"            = "42e8610ca80474a6c48c94a0218056ea63a961d2501fb8d31d2d7d95ce0a69c8"
+"generation_config.json" = "da21c9e3edabfac1433ec60fdc006bee19c4c3731b40c0b0f9fb0b5e338562be"
+"merges.txt"             = "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+"tokenizer.json"         = "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"
+"tokenizer_config.json"  = "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"
+"vocab.json"             = "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"

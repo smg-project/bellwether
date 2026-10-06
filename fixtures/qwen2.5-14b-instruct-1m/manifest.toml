@@ -1,0 +1,12 @@
+model    = "Qwen/Qwen2.5-14B-Instruct-1M"
+revision = "620fad32de7bdd2293b3d99b39eba2fe63e97438"
+tier     = 1
+group    = "qwen2.5-7b-instruct-1m"
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"config.json"            = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"  = "26526103465e01638f5beee912faa5f863ddfb86fc15864012f785413991aa82"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
