@@ -6,11 +6,32 @@ https://github.com/smg-project/bellwether/issues/23#issuecomment-6017548219
 
 ## What this is for
 
-Simo wants bellwether's evidence for every model to come from public benchmark data, through both
-paths a gateway runs: the request rendered to prompt tokens, and the model's function calls parsed
-back from its output. Thousands of cases per model, next to the hand-written sets, which stay as the
-adversarial ones. Bellwether leads Symphony (ground rule 26): a Symphony format starts only once the
-models that use it have these sets.
+Simo's statement of bellwether's job (2026-10-06):
+
+> Given a request, what's expected tokens. Given a token, what's expected output text. With insane
+> amount of data. Then smg uses it in many places. Tokenizer, detokenization, gRPC router, and
+> symphony.
+
+So bellwether holds expected values in both directions for every model: a request rendered to
+prompt tokens, and output tokens turned back into text and, for parse cases, into the message a
+parser returns. The data is public benchmark data, thousands of cases per model, next to the
+hand-written sets, which stay as the adversarial ones.
+
+Its consumers in smg:
+
+- **The tokenizer crate:** encoding the prompt text gives the reference ids, and its incremental
+  decode of the output ids gives `output_pieces`.
+- **The gRPC router's request path:** smg's render parity test (smg #2782) replays render cases
+  through the gateway's chat request processing. A scripted mock worker with capture, run against a
+  real `smg` over gRPC, is the one test that sees what the router sends the engine, the
+  `tool_choice` constraint included.
+- **Symphony's parsers:** its fixture test replays parse cases, chunk plan by chunk plan.
+  Bellwether leads Symphony (ground rule 26): a Symphony format starts only once the models that
+  use it have these sets.
+
+For now a consumer reads bellwether's main. Later: tagged releases with a note of which sets
+changed, a pin file in smg holding the release and the `sets.toml` hashes, CI fetching that pin,
+and each bump a pull request that shows what changed.
 
 ## Which models
 
@@ -33,7 +54,7 @@ for now; embedding, reranking and classification models are out.
   The command pins the registry refs, but the Hub only shows its present state, so what is
   reproducible is the committed list with each row's revision; a rerun shows what changed as a diff
   of that list. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
-  Qwen organization: about 45 checkpoints today.
+  Qwen organization: 64 checkpoints on 2026-10-06.
 - **Every checkpoint is a row.** Each row gives the model, its pinned revision, checkpoint group,
   tier, and a status. The status says what was recorded, what was rejected and why, or why nothing
   can be recorded yet (vendor code needed, gated, no chat template). A checkpoint that records
@@ -43,13 +64,15 @@ for now; embedding, reranking and classification models are out.
   - **The oracle inputs** are every file the oracle reads for the model: the tokenizer files, the
     chat template, the generation config (for the end of turn), and, for a vendor-code oracle, the
     vendor's files. From `config.json` they take only the two fields that choose the tokenizer
-    class (`model_type`, `tokenizer_class`).
+    class (`model_type`, `tokenizer_class`), and from the generation config only its token ids
+    (`eos_token_id`, `bos_token_id`, `pad_token_id`), so sampling defaults do not split a group.
   - **Membership.** The manifest lists each input with its sha256, and membership is equality of
     those lists, checked when recording. As a check on the list itself, the weekly job also
     records one other member of each group and compares the results, so a file the list misses
     shows up.
-  - **The effect.** The current Qwen chat checkpoints fall into about 20 groups: the seven Qwen3
-    sizes share one, and six Qwen3.5 sizes share another.
+  - **The effect,** measured on 2026-10-06: the 64 current Qwen chat checkpoints fall into 38
+    groups. The six dense Qwen3 sizes share one; most other groups are pairs or threes, such as
+    Qwen3.5-4B and 9B, or the three large Qwen3.5 mixtures of experts.
 - **Order.**
   1. Simo's tier: DeepSeek-V4.1-Flash, MiniMax-M3, the latest GLM (GLM-5.3-Flash), every current
      Qwen chat checkpoint, and Hy4-preview.
@@ -64,8 +87,25 @@ for now; embedding, reranking and classification models are out.
 ## Sources
 
 BFCL's single-turn categories come first, because they carry tool definitions and function calls,
-the path Symphony is built for. After them, in #23's order: BFCL multi_turn, GSM8K, tau2-bench, the
-tool-schema collections in `corpus.md`, and real model outputs.
+the path Symphony is built for. Every other source on #23 follows (Simo, 2026-10-06: "Why not all
+of them"), each its own importer on BFCL's pattern, in this order:
+
+1. GSM8K, with outlines combined from GSM8K text and BFCL calls: reasoning only, prose only,
+   reasoning then prose, reasoning then calls, prose then calls, all three.
+2. Agent trajectories on SWE-bench (SWE-agent, OpenHands and the published trajectory sets).
+3. Model-written reasoning traces.
+4. tau2-bench and BFCL multi_turn.
+5. SWE-bench and SWE-bench Verified, their gold patches as large single arguments; then SWE-bench
+   Pro.
+6. Tool-schema collections: xLAM 60k, ToolACE, ToolBench and the MCP benchmarks.
+7. JSONSchemaBench, for #19's constrained cases.
+8. MGSM.
+
+Each source is confirmed to exist as remembered, pinned, and license-checked before its sets land.
+A set built from copyleft input (SWE-bench Pro's repositories, or any row whose repository is
+copyleft) is kept in its own set files, named with a `-copyleft` suffix and carrying the license in
+`origin`, so it can be dropped or handled apart if the repository's visibility ever changes. Gated
+sources wait for a Hugging Face login on the recording machine.
 
 ## Importing BFCL
 
@@ -115,25 +155,84 @@ render-only.
 
 ## Recording
 
-`record` stays the recorder. The probe covered 63 current checkpoints (gpt-oss set aside); 45 of
-them load and record BFCL's render cases, and the parse and storage figures here are for those 45.
-It found two things the round-trip oracle has to learn, both declared per model in the manifest.
-Each lands as its own change, and each shows that the existing fixtures come out byte-identical.
+`record` stays the recorder. Every case is recorded from two sources of truth, neither of which
+needs a model (Simo, 2026-10-06, #23):
 
-- **How the template takes tool-call arguments.**
-  - Most current templates iterate the arguments as an object: Qwen3.5 to 3.8, GLM, MiniMax, Step,
-    Hy4, Gemma 4, Muse-Glimmer and others. DeepSeek's concatenate them as a string.
-  - The manifest says `tool_call_arguments = "object"` (the default) or `"string"`. Qwen3-8B's
-    fixtures come out byte-identical either way.
-  - With objects, and strings for DeepSeek, 26 of the 45 models record all 2501 parse cases; with
-    strings alone, 11 do.
-  - Both engines turn the arguments into an object before rendering: vLLM in
-    `vllm/entrypoints/chat_utils.py:1931` (1ad5182b), SGLang in `parse_tool_call_arguments`,
-    `python/sglang/srt/entrypoints/openai/serving_chat.py:126` (7d22b7a8). So they hand
-    DeepSeek's templates a form those templates cannot take: a request whose history carries a
-    DeepSeek tool call fails to render, the shape behind smg #2783. That stays a finding, reported
-    with the render cases. The manifest setting only says how the reference renders the round
-    trip; it does not hide the finding.
+- **Hugging Face:** the checkpoint's own published files.
+  - transformers' `apply_chat_template` with the checkpoint's tokenizer and template gives the
+    prompt ids for render and, through the round trip, the output text, ids and pieces for parse.
+  - A checkpoint whose prompt format or tokenizer is the vendor's own code is rendered by that code
+    instead: an encoder in place of a chat template (DeepSeek V3.2 and V4, Mistral's
+    `mistral-common` checkpoints) or a custom tokenizer class (Kimi-K3). That is the vendor-code
+    oracle, run as "Running vendor code" says; it is the first authority in the manifest's order,
+    and for these models it is the Hugging Face side.
+- **vLLM:** `vllm launch render <model>`, the GPU-less render server, in vLLM's official image
+  pinned by tag and digest: `vllm/vllm-openai:v0.31.0` (db9527a4), index digest
+  `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
+  The digest goes into each line's provenance, since a tag can move. It runs on Linux: under colima
+  on the Mac that records, or on a Linux runner. vLLM code cited below is at that release.
+  - `POST /v1/chat/completions/render` gives a request's prompt ids.
+  - `POST /v1/completions/derender` gives the text of output ids without the parsers. For every
+    chunk plan, vLLM's text for each chunk is compared with the pieces Hugging Face's incremental
+    decode gives (`output_pieces`), and the whole output's text with the reference's.
+  - `POST /v1/chat/completions/derender` gives vLLM's parsed message for the output ids, recorded
+    beside the reference message. It is also vLLM's answer to two open policy questions, an empty
+    think block (#17) and the marker probes (#16), so it is recorded first for the 16 hand-written
+    parse cases.
+
+  What exactly these return, including whether render reports the stop ids the end of a turn needs
+  and how per-chunk text is obtained, is established first (delivery step 5).
+
+**Names.** Hugging Face's result stays the line's `reference` and vLLM's is a `witness`, the case
+schema's existing words; "source of truth" is the role both play, not a field. The two are equal in
+authority, and neither overrides the other:
+
+- when they agree, the case is settled;
+- when they disagree, the line records both results and carries `disputed`, holding the
+  disagreement's fingerprint. A consumer counts no parity against a disputed case: Symphony's
+  fixture test and smg's tests report it as disputed and skip it.
+
+Witness results and `disputed` are case-schema changes (question 4).
+
+**Disagreements are issues.** Each kind has a stable fingerprint, `vllm:<what differs>:<group>`,
+where what differs is `prompt-ids`, `rejected` (one source takes the case, the other refuses it),
+`end-of-turn`, `output-text`, `chunk-text` or `message`. A rerun finds the issue a fingerprint
+already has and updates its cases instead of opening another (ground rule 15). The recorder prints
+each new fingerprint with its cases and a draft issue, and opens nothing itself; a person, or the
+work loop under its ground rules, files one issue per fingerprint, with the fingerprint in its body.
+Nothing in bellwether is configured to make the two agree: no per-model setting, and no adjustment
+of either side.
+
+What the probe over 63 current checkpoints settles this way (gpt-oss set aside; 45 of them load and
+record BFCL's render cases, and the parse figures here are for those 45):
+
+- **Tool-call arguments reach the template exactly as vLLM gives them** (`_postprocess_messages`,
+  `vllm/entrypoints/chat_utils.py:2084`): arguments become the object they decode to, and anything
+  that does not decode to a JSON object becomes `{}` (#29). Most current templates iterate the
+  arguments as an object; with objects, 24 of the 45 record every BFCL parse case, and with the JSON
+  string, 11 do. SGLang differs: `normalize_assistant_tool_call_arguments` (7d22b7a8) rejects a
+  string that is not a JSON object; that is recorded, not decided. DeepSeek's templates (R1, V3,
+  V3.1) concatenate a string and fail on an object. That is a finding (#27), and the vLLM recording
+  shows whether the engine fails the same way.
+- **The end of the assistant turn** is not a rule of bellwether's. The round trip cuts the output at
+  the tokenizer's end-of-sequence token, which many templates do not write:
+  - `<|eot|>` (Muse-Glimmer), `<|endofassistant|>` (dots3), `<|im_end|>` (ERNIE, MiniCPM5),
+    `</assistant>` (Laguna);
+  - GLM closes a turn with no marker at all;
+  - Inkling's tokenizer has no end-of-sequence token.
+
+  For these, the output ends where generation stops, and that too has two sources:
+  - Hugging Face: the generation config as transformers' `generate` reads it (`eos_token_id`, which
+    may be a list), with the tokenizer's own end-of-sequence token;
+  - vLLM: its stop set, from whichever of its code paths yields it. The model's end-of-sequence
+    ids are added by `SamplingParams.update_from_generation_config`, called from the engine's input
+    processor (`vllm/v1/engine/input_processor.py:440`), while the render server builds its
+    parameters with `request.to_sampling_params` alone
+    (`vllm/entrypoints/scale_out/render/serving.py:125`), so render may not report them.
+
+  They are compared like every other result. GLM-5.3-Flash comes first, as the only one of the four
+  weekly models without parse cases.
+
 - **The reference's arguments string.**
   - For templates that write JSON, it is the bytes in the output.
   - For tagged formats, it is the canonical JSON a parser builds from the tags. Whether that is the
@@ -143,17 +242,6 @@ Each lands as its own change, and each shows that the existing fixtures come out
     When it is false for a template that writes JSON, the reference still holds the canonical
     string, and each such template is reported as its own kind.
   - When engine witnesses land for a tagged format, each engine's argument string is kept per case.
-- **Where the assistant turn ends.** The oracle cuts the output at the tokenizer's end-of-sequence
-  token, but many templates close a turn with their own marker:
-  - `<|eot|>` (Muse-Glimmer), `<|endofassistant|>` (dots3), `<|im_end|>` (ERNIE, MiniCPM5),
-    `</assistant>` (Laguna);
-  - GLM closes a turn with no marker at all: generation stops at the next role tag;
-  - Inkling's tokenizer has no end-of-sequence token.
-
-  The output ends at the first of the model's own stop tokens (its generation config) found in the
-  rendered turn, or at the turn's end when there is none, and the manifest records which.
-  GLM-5.3-Flash is the first to fix, as the only one of the four weekly models without parse cases.
-
 Rejections are never silent. A case the reference cannot take is reported with its reason, every
 checkpoint's row carries its recorded and rejected counts, and each kind of rejection gets an issue.
 The probe's open kinds:
@@ -231,9 +319,9 @@ hashes, and through the per-model table.
 ## Running vendor code
 
 Some models need code from their own repositories: vendor encoders, custom tokenizers or configs.
-That code runs pinned to the manifest's revision, inside a container that holds only bellwether and
-the repository's files, in a step that does not hold the Hugging Face token. The files are
-downloaded first, by a step that does.
+The vendor-code oracle runs that code, pinned to the manifest's revision, inside a container that
+holds only bellwether and the repository's files, in a step that does not hold the Hugging Face
+token. The files are downloaded first, by a step that does.
 
 ## Counting
 
@@ -256,22 +344,46 @@ hand-written) as a table or JSON, read from the `sets.toml` files. The README ca
 
 Each step is its own pull request.
 
-1. The BFCL importer, its corpus sets, and `count`.
-2. The argument form, per model in the manifest, with the existing fixtures re-recorded
-   byte-identical.
-3. The end-of-turn rule, likewise, with GLM-5.3-Flash's parse cases first.
-4. `bellwether models` and the committed list.
-5. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
-6. Tier 1: groups and manifests, its recorded sets, and the per-model table.
-7. Tiers 2 and 3 in batches, with the extra work in tier order: a vendor-code oracle (DeepSeek V3.2
-   and V4-Flash, Kimi-K3), tokenizers that need `tiktoken` or custom code, gated models, and a
-   reference for templates that drop the tool list.
-8. The next sources, from BFCL multi_turn on; #19's `tool_choice` cases are built from the BFCL
-   import.
+1. The BFCL importer, its corpus sets, and `count` (#30).
+2. Tool-call arguments given to the template exactly as vLLM gives them, with the existing fixtures
+   re-recorded byte-identical (#29).
+3. The storage form: zstd sets in Git LFS, `sets.toml`, `unpack` and `.lfsconfig`.
+4. Tier 1's Hugging Face references, as soon as the storage form is in: groups and manifests, its
+   recorded sets, and the per-model table. They are what every consumer reads. vLLM's witnesses
+   join the same lines when step 5 lands; until then a line without its witness says so, and counts
+   as neither settled nor disputed. GLM-5.3-Flash's parse cases join with step 6.
+5. vLLM as the second source, in four pull requests:
+   1. What render and derender return: their requests and responses, whether render reports stop
+      ids, how per-chunk text is obtained, and derender's reading of the 16 hand-written parse
+      cases, the evidence #16 and #17 wait for.
+   2. `record --oracle vllm` against the pinned image: render, and derender whole and per chunk.
+   3. Witness results and `disputed` in the case schema (question 4).
+   4. The comparison: fingerprints and the printed issues.
+6. The end of a turn from both sources: GLM-5.3-Flash first, then the other templates the probe
+   found.
+7. The vendor-code oracle: Kimi-K3, then DeepSeek V3.2 and V4 and Mistral's `mistral-common`
+   checkpoints.
+8. `bellwether models` and the committed list.
+9. Tiers 2 and 3 in batches, with the extra work in tier order: tokenizers that need `tiktoken` or
+   custom code, gated models, and a reference for templates that drop the tool list.
+10. The next sources, one importer per source in the order of Sources; #19's `tool_choice` cases
+    are built from the BFCL import.
 
 ## Questions for Simo
 
-1. The organization's Git LFS allowance, and whether to buy more when the sets pass it.
+1. Answered (2026-10-06): Git LFS goes ahead, and Simo raises the organization's allowance if the
+   sets pass it.
 2. `arguments_verbatim` on parse lines, a case-schema addition (#24).
 3. The two scope assumptions: multimodal chat models are in, with text-only cases; embedding,
    reranking and classification models are out.
+4. Witness results and `disputed` in the case schema: vLLM's prompt ids for render; its text, whole
+   and per chunk, and its message for parse; and a disagreement's fingerprint.
+5. The rendered prompt on parse lines (`prompt_ids` and `prompt_text`), a case-schema addition. A
+   parser needs to know the state the output starts in: Qwen 3.8's generation prompt leaves the
+   think block open, so its output begins `\n</think>`. Symphony may not depend on a tokenizer, so
+   it cannot render the prompt itself; the round trip already renders it.
+6. Per-token pieces for each render case's prompt ids (`input_pieces`), a case-schema addition. The
+   recorded pieces cover output ids only, 8.6 million in the first full-width run; prompt ids would
+   put the incremental decoder over 181 million. The reference must be Hugging Face's own
+   incremental decode of those ids: joining the decoded pieces does not give back `reference.text`
+   for a tokenizer whose normalizer changes the text before encoding.
