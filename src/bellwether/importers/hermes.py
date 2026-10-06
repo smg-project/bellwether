@@ -117,7 +117,8 @@ def system_message(text: str, tools: str | None) -> str:
     """What is left of a system turn once the Hermes tool prompt carrying ``tools`` (the row's field) is taken out.
 
     ``tools`` is ``None`` for a row that declares no tool; its system message is kept as it is, unless it holds a
-    ``<tools>`` element, whose tools the row would then not declare.
+    ``<tools>`` element, whose tools the row would then not declare. What is left stays as it is: in every pinned row
+    with tools the prompt is the whole turn, so nothing is left.
     """
     if tools is None:
         if "<tools>" in text:
@@ -126,7 +127,7 @@ def system_message(text: str, tools: str | None) -> str:
     for before, after in TOOL_PROMPTS:
         prompt = f"{before}<tools>\n{tools}\n</tools>{after}"
         if prompt in text:
-            return text.replace(prompt, "", 1).strip()
+            return text.replace(prompt, "", 1)
     raise Unmappable("the system message carries no Hermes tool prompt with the row's tools")
 
 
@@ -137,8 +138,8 @@ def split_calls(text: str) -> tuple[str, list[dict]]:
     """The content of an assistant turn and its calls, one ``{"name", "arguments"}`` object per ``<tool_call>``.
 
     A turn without a block is all content, byte for byte. In a turn with blocks the content is the text before the
-    first block, less the whitespace that separates it from that block; between and after the blocks there may be
-    only whitespace, since a message renders its content before its calls.
+    first block, as it is (in every pinned turn of calls it is empty); between and after the blocks there may be only
+    whitespace, since a message renders its content before its calls.
     """
     pieces = CALL.split(text)  # text, block, text, block, ..., text
     if any(tag in piece for piece in pieces[0::2] for tag in ("<tool_call>", "</tool_call>")):
@@ -148,7 +149,7 @@ def split_calls(text: str) -> tuple[str, list[dict]]:
         return text, []
     if any(piece.strip() for piece in pieces[2::2]):
         raise Unmappable("text after a <tool_call> block")
-    return pieces[0].rstrip(), [_call(body) for body in bodies]
+    return pieces[0], [_call(body) for body in bodies]
 
 
 def _call(body: str) -> dict:
@@ -315,7 +316,7 @@ def build_sets(
 
     A row that cannot be mapped gives no case, and is appended to ``skipped`` as ``(config, index, reason)``. A case
     that repeats an earlier one is left out and appended to ``repeated`` (``leave_out_repeats``): rows that open with
-    the same turns give the cases of those turns once.
+    the same turns give the cases of those turns once. A set no row fills is not made.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     for config, found in rows.items():
@@ -332,31 +333,35 @@ def build_sets(
         for kind, lines in cases.items():
             if lines:
                 sets[(kind, set_name(config))] = lines
-    return leave_out_repeats(sets, repeated)
+    kept, repeats = leave_out_repeats(sets)
+    if repeated is not None:
+        repeated.extend(repeats)
+    return kept
 
 
 def leave_out_repeats(
-    sets: dict[tuple[str, str], list[dict]], repeated: list[tuple[str, str]] | None = None
-) -> dict[tuple[str, str], list[dict]]:
-    """The sets less each case whose request (and, for a parse case, message) is an earlier case's of its kind.
+    sets: dict[tuple[str, str], list[dict]],
+) -> tuple[dict[tuple[str, str], list[dict]], list[tuple[str, str]]]:
+    """The sets without the cases that repeat an earlier one, and ``(left-out name, name it repeats)`` for each.
 
-    Earlier is in any set before it, in the order of ``sets``, or before it in its own set. Each case left out is
-    appended to ``repeated`` as ``(its name, the earlier case's name)``, and a set left with no case is dropped, so
-    every case kept is distinct.
+    A case repeats an earlier one when its request (render), or its request and message (parse), are the same JSON as
+    written, so every case kept is distinct; a render case, which has no message, never repeats a parse case. Earlier
+    is in the order of ``sets``, then of each set's lines. A set whose every case repeats stays, empty. This is
+    ``corpus_sets.leave_out_repeats`` of #35, which this importer takes once its base has it.
     """
-    first: dict[str, dict[str, str]] = {}  # per kind: a case's request and message as written -> its name
+    first: dict[str, str] = {}  # a case's request and message, as written -> its name
     kept: dict[tuple[str, str], list[dict]] = {}
-    for (kind, name), lines in sets.items():
-        seen = first.setdefault(kind, {})
+    repeats: list[tuple[str, str]] = []
+    for key, lines in sets.items():
+        kept[key] = []
         for line in lines:
-            key = json.dumps([line["request"], line.get("message")], ensure_ascii=False)
-            if key in seen:
-                if repeated is not None:
-                    repeated.append((line["name"], seen[key]))
-                continue
-            seen[key] = line["name"]
-            kept.setdefault((kind, name), []).append(line)
-    return kept
+            compared = json.dumps([line["request"], line.get("message")], ensure_ascii=False)
+            if compared in first:
+                repeats.append((line["name"], first[compared]))
+            else:
+                first[compared] = line["name"]
+                kept[key].append(line)
+    return kept, repeats
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:

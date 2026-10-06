@@ -55,9 +55,10 @@ def test_the_hermes_tool_prompt_is_taken_out_of_the_system_message():
         assert hermes.system_message(text, TOOLS) == ""
 
 
-def test_text_around_the_tool_prompt_stays_as_the_system_message_stripped_at_its_ends():
+def test_text_around_the_tool_prompt_stays_as_the_system_message_as_it_is():
+    # No pinned row has any (the system turn of every row with tools is the prompt alone), so nothing trims it.
     text = "You are Bob, a terse assistant.\n\n" + GLAIVE + "\nAnswer in French. "
-    assert hermes.system_message(text, TOOLS) == "You are Bob, a terse assistant.\n\n\nAnswer in French."
+    assert hermes.system_message(text, TOOLS) == "You are Bob, a terse assistant.\n\n\nAnswer in French. "
 
 
 def test_a_row_without_tools_keeps_its_system_message_as_it_is():
@@ -88,9 +89,10 @@ def test_a_turn_of_calls_has_empty_content_and_a_prose_turn_is_its_content_byte_
     assert hermes.split_calls(prose) == (prose, [])
 
 
-def test_prose_before_the_calls_is_the_content_without_the_whitespace_that_separates_it_from_them():
+def test_prose_before_the_calls_is_the_content_as_it_is():
+    # No pinned turn of calls has any (their content is empty), so nothing trims it.
     content, calls = hermes.split_calls("\nLet me check both.\n\n" + PARIS + "\n" + ZURICH)
-    assert content == "\nLet me check both." and len(calls) == 2
+    assert content == "\nLet me check both.\n\n" and len(calls) == 2
 
 
 def test_text_after_a_call_is_unmappable_because_a_message_holds_its_content_before_its_calls():
@@ -347,16 +349,20 @@ def test_a_case_that_repeats_an_earlier_one_of_its_kind_is_left_out_and_named_wi
         ("render", "hermes-b"): [case("b-1", "Hi"), case("b-3", "Bye")],
         ("parse", "hermes-b"): [case("b-2", "Hi", "Hello!")],
     }
-    repeated: list = []
-    kept = hermes.leave_out_repeats(sets, repeated)
+    kept, repeats = hermes.leave_out_repeats(sets)
     # A render and a parse case may share a request, and two parse cases a request with different messages. A
-    # repeat is left out in any set, and a set left with no case is dropped.
+    # repeat is left out in any set, and a set it empties stays, empty, as corpus_sets.leave_out_repeats has it.
     assert {key: [line["name"] for line in lines] for key, lines in kept.items()} == {
         ("render", "hermes-a"): ["a-1"],
         ("parse", "hermes-a"): ["a-2", "a-4"],
         ("render", "hermes-b"): ["b-3"],
+        ("parse", "hermes-b"): [],
     }
-    assert repeated == [("a-3", "a-1"), ("b-1", "a-1"), ("b-2", "a-2")]
+    assert repeats == [("a-3", "a-1"), ("b-1", "a-1"), ("b-2", "a-2")]
+
+
+def test_a_config_whose_rows_give_no_case_has_no_set():
+    assert hermes.build_sets({"func_calling": [ORPHAN, ORPHAN, ORPHAN]}, stride=1) == {}
 
 
 def test_rows_that_open_with_the_same_turns_give_the_cases_of_those_turns_once():
