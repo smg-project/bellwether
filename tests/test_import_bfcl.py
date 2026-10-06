@@ -5,6 +5,7 @@ import pytest
 
 from bellwether.cli import main
 from bellwether.importers import bfcl, pypi
+from bellwether.record.corpus import read_cases
 
 WHEEL = "pkg-1.0-py3-none-any.whl"
 
@@ -311,6 +312,15 @@ def test_render_sets_for_every_category_and_parse_sets_where_an_answer_exists(tm
     }
 
 
+def test_a_row_whose_text_holds_unicode_line_breaks_is_read_intact(tmp_path):
+    text = "Order a Café\u0085now"
+    row = dict(SIMPLE, question=[[{"role": "user", "content": text}]])
+    path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [row]})
+    with zipfile.ZipFile(path) as wheel:
+        [line] = bfcl.build_sets(wheel, categories=("simple_python",))[("render", "bfcl-simple-python")]
+    assert line["request"]["messages"] == [{"role": "user", "content": text}]
+
+
 def test_two_rows_with_one_case_name_stop_the_import(tmp_path):
     twin = dict(SIMPLE, id="simple-python-0")
     path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE, twin]})
@@ -353,6 +363,31 @@ def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'bfcl-simple-python.jsonl'}: 1 cases" in out
+
+
+def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_they_repeat(
+    tmp_path, monkeypatch, capsys
+):
+    # As live_irrelevance_118-7-8 sends what live_simple_29-7-2 sends, irrelevance_1 sends what simple_python_0 sends.
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE],
+            "bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json": [ANSWER],
+            "bfcl_eval/data/BFCL_v4_irrelevance.json": [IRRELEVANT, dict(SIMPLE, id="irrelevance_1")],
+        },
+    )
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python", "irrelevance"))
+    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    corpus = tmp_path / "corpus"
+    assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
+    assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert "no case bfcl-irrelevance-1: it repeats bfcl-simple-python-0" in out
+    assert f"{corpus / 'render' / 'bfcl-irrelevance.jsonl'}: 1 cases, 1 left out as repeats" in out
+    assert f"{corpus / 'parse' / 'bfcl-simple-python.jsonl'}: 1 cases, 1 distinct messages" in out
+    assert f"{corpus}: 3 cases in the 3 BFCL sets, 1 left out as repeats, 1 distinct messages" in out
+    assert [case.name for case in read_cases(corpus / "render" / "bfcl-irrelevance.jsonl")] == ["bfcl-irrelevance-0"]
 
 
 def metadata_wheel(tmp_path, text: str):

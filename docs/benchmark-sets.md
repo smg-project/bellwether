@@ -151,9 +151,10 @@ weekly run pins (2026.3.23).
   `corpus/README.md` lists each imported dataset with its license and attribution, and a dataset's
   license is checked before its sets land.
 
-The single-turn categories give 3641 render cases and 2420 parse cases per checkpoint group: 2501
+The single-turn categories give 3635 render cases and 2420 parse cases per checkpoint group: 2501
 rows have a ground truth, and 76 Java and JavaScript rows and 5 rows no built call answers stay
-render-only.
+render-only. Six `live_irrelevance` rows repeat an earlier case and are left out (one rule for
+repeats, in `corpus_sets`).
 
 ## Recording
 

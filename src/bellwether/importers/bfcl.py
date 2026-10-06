@@ -5,7 +5,8 @@ installed and none of its code runs. The weekly run uses BFCL's function-calling
 ``OpenAICompletionsHandler``, so a request is the case's messages plus the functions turned into tools the way
 that handler does: BFCL's language hint and Java/JavaScript rewrite (``_func_doc_language_specific_pre_processing``
 in ``bfcl_eval/utils.py``), then ``convert_to_tool`` for OpenAI chat completions (``bfcl_eval/model_handler/utils.py``).
-This module imports nothing beyond the standard library.
+This module, like the set writer it shares with the other importers (``corpus_sets``), imports nothing beyond the
+standard library.
 """
 
 from __future__ import annotations
@@ -17,6 +18,10 @@ import re
 import sys
 import zipfile
 from pathlib import Path
+
+from bellwether import jsonl
+
+from . import corpus_sets
 
 PROJECT = "bfcl-eval"
 VERSION = "2026.3.23"
@@ -250,7 +255,8 @@ def answer_file(category: str) -> str:
 
 
 def _jsonl(wheel: zipfile.ZipFile, member: str) -> list[dict]:
-    return [json.loads(line) for line in wheel.read(member).decode("utf-8").splitlines() if line.strip()]
+    """The rows of a JSON Lines member of the wheel, in order."""
+    return [row for _, row in jsonl.loads(wheel.read(member).decode("utf-8"), member)]
 
 
 def read_rows(wheel: zipfile.ZipFile, category: str) -> list[dict]:
@@ -336,39 +342,14 @@ def build_sets(
     return sets
 
 
-def _text(lines: list[dict]) -> str:
-    return "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
-
-
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
     """Write every set, and remove ``bfcl-*`` files no category writes any more."""
-    written = []
-    for (kind, name), lines in sorted(sets.items()):
-        path = corpus_dir / kind / f"{name}.jsonl"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(_text(lines).encode("utf-8"))
-        written.append(path)
-    for kind in ("render", "parse"):
-        for stale in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
-            if stale not in written:
-                stale.unlink()
-    return written
+    return corpus_sets.write(sets, corpus_dir, "bfcl-")
 
 
 def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
     """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    expected = {corpus_dir / kind / f"{name}.jsonl": _text(lines) for (kind, name), lines in sets.items()}
-    problems = []
-    for path, text in sorted(expected.items()):
-        if not path.is_file():
-            problems.append(f"{path}: missing")
-        elif path.read_bytes().decode("utf-8") != text:
-            problems.append(f"{path}: differs from a fresh import")
-    for kind in ("render", "parse"):
-        for path in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
-            if path not in expected:
-                problems.append(f"{path}: no BFCL category writes it")
-    return problems
+    return corpus_sets.check(sets, corpus_dir, "bfcl-", "BFCL category")
 
 
 def check_license(wheel: zipfile.ZipFile) -> None:
@@ -395,19 +376,15 @@ def run(args: argparse.Namespace) -> int:
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
         check_license(wheel)
         sets = build_sets(wheel, skipped=skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(kept, args.corpus)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the BFCL sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
-    rows_by_reason: dict[str, list[str]] = {}
-    for row_id, why in skipped:
-        rows_by_reason.setdefault(why, []).append(row_id)
-    for why, row_ids in rows_by_reason.items():
-        print(f"no parse case for {len(row_ids)} row(s) ({', '.join(row_ids)}): {why}")
-    write_sets(sets, args.corpus)
+    corpus_sets.report("BFCL", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped, "parse case")
+    write_sets(kept, args.corpus)
     return 0

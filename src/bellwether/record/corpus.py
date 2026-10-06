@@ -10,10 +10,11 @@ kind.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from bellwether import jsonl
 
 _NAME = re.compile(r"^[a-z0-9-]+$")
 
@@ -31,13 +32,7 @@ class Case:
 def read_cases(path: Path) -> list[Case]:
     cases: list[Case] = []
     names: set[str] = set()
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not raw.strip():
-            continue
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as err:
-            raise ValueError(f"{path}:{number}: not JSON: {err}") from err
+    for number, data in jsonl.loads(path.read_text(encoding="utf-8"), path):
         name = data.get("name")
         if not isinstance(name, str) or not _NAME.match(name):
             raise ValueError(f"{path}:{number}: `name` must be a lowercase slug, got {name!r}")
