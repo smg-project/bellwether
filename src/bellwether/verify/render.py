@@ -9,6 +9,10 @@ receives to its capture file as one JSON line, so a case's capture line is found
 Cases go one at a time: the mock writes a request's line before the engine answers, so once SMG has answered a
 case, every line for it is in the file, and the lines written since the previous answer are the case's or another
 client's.
+
+SMG's answer is read as the vLLM render client reads vLLM's (``bellwether.engines.vllm_render``): a 400 whose body is
+SMG's error object is SMG refusing the request, an answer about the case; anything else that is not a 200 is about the
+setup or SMG's own failure, and measures nothing. A capture line, when there is one, is compared whatever SMG answered.
 """
 
 from __future__ import annotations
@@ -77,15 +81,39 @@ class Capture:
 
 
 def client() -> httpx.Client:
-    """The HTTP client for one run. The environment's proxy settings are ignored: verify talks to the SMG it was
-    given, with nothing in between."""
-    return httpx.Client(timeout=TIMEOUT, trust_env=False)
+    """The HTTP client for one run. It follows no redirect, since SMG answers where it is, and it ignores the
+    environment's proxy settings: verify talks to the SMG it was given, with nothing in between."""
+    return httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False)
+
+
+def served_models(http: httpx.Client, url: str) -> set[str]:
+    """The model ids SMG lists at ``/v1/models``, asked before the first case.
+
+    SMG lists each worker's model id there, not its aliases, and answers 503 when it has no worker. Anything but a
+    200 with a list of ids stops the run: a model SMG does not serve would fail every case as a failed measurement.
+    """
+    target = f"{url.rstrip('/')}/v1/models"
+    try:
+        response = http.get(target)
+    except (httpx.HTTPError, httpx.InvalidURL) as err:
+        raise CannotVerify(f"no answer from {target}: {type(err).__name__}: {err}") from err
+    if response.status_code != 200:
+        hint = "; is --smg SMG's base URL, without /v1?" if response.status_code == 404 else ""
+        raise CannotVerify(f"{target} answered {response.status_code}: {response.text.strip()[:200]}{hint}")
+    try:
+        models = response.json()["data"]
+        ids = {model["id"] for model in models}
+    except (ValueError, TypeError, KeyError):
+        raise CannotVerify(f"{target} answered 200 without SMG's list of models: {response.text[:200]!r}") from None
+    if not all(isinstance(model_id, str) for model_id in ids):
+        raise CannotVerify(f"{target} answered 200 without SMG's list of models: {response.text[:200]!r}")
+    return ids
 
 
 def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manifest, set_name: str, case: dict) -> dict:
     """Send one case and judge it on the first capture line written for it since the previous case's answer."""
     try:
-        status, body = send(http, url, request_body(case, manifest.model))
+        status, body, location = send(http, url, request_body(case, manifest.model))
     except (httpx.HTTPError, httpx.InvalidURL) as err:
         raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
     line = None
@@ -99,13 +127,18 @@ def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manife
                 f"{capture.path}: the line at byte {at} for {request_id} has no list of integer input_ids"
             )
         line = candidate
-    if status != 200:
-        # A non-200 is SMG's answer to the case, so it is a verdict, not an error of the run.
-        outcome = {"verdict": "rejected", "message": error_message(body)}
-    elif line is None:
-        outcome = {"verdict": "missing"}
-    else:
+    refused = refusal(status, body)
+    if line is not None:
+        # SMG sent the engine its prompt, so the ids are compared whatever it answered afterwards.
         outcome = compare(case, line)
+    elif status == 200:
+        outcome = {"verdict": "missing"}
+    elif refused is not None:
+        outcome = {"verdict": "rejected", "code": refused["code"], "message": refused["message"]}
+    else:
+        outcome = {"verdict": "measurement_failed"}
+    if status != 200 and "message" not in outcome:
+        outcome["message"] = f"redirected to {location}" if location is not None else error_message(body)
     return {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "status": status, "body": body}
 
 
@@ -123,16 +156,33 @@ def request_body(case: dict, model: str) -> dict:
     return body
 
 
-def send(http: httpx.Client, url: str, body: dict) -> tuple[int, object]:
+def send(http: httpx.Client, url: str, body: dict) -> tuple[int, object, str | None]:
+    """SMG's status, its body (JSON, else the text), and where a redirect points."""
     response = http.post(
         f"{url.rstrip('/')}/v1/chat/completions",
         content=json.dumps(body),
         headers={"content-type": "application/json"},
     )
+    location = response.headers.get("location") if response.is_redirect else None
     try:
-        return response.status_code, response.json()
+        return response.status_code, response.json(), location
     except ValueError:
-        return response.status_code, response.text
+        return response.status_code, response.text, location
+
+
+def refusal(status: int, body: object) -> dict | None:
+    """SMG's error object when the answer is SMG refusing the request, else None.
+
+    That is a 400 whose body is ``{"error": {...}}`` with a string ``message`` and a ``code``: SMG's own errors carry
+    a string code (``create_error`` in smg's external_router), and its validation errors the number 400
+    (``ValidatedJson`` in smg's protocols). A proxy's 400 is a page, and every other status (404 for a model no worker
+    serves, 429, 5xx) is about the setup or SMG's own failure, not the request.
+    """
+    error = body.get("error") if status == 400 and isinstance(body, dict) else None
+    if not isinstance(error, dict) or not isinstance(error.get("message"), str):
+        return None
+    code = error.get("code")
+    return error if isinstance(code, str) or (isinstance(code, int) and not isinstance(code, bool)) else None
 
 
 def carries(request_id: object, case_id: str) -> bool:
@@ -190,4 +240,4 @@ def error_message(body: object) -> str:
     error = body.get("error") if isinstance(body, dict) else None
     if isinstance(error, dict) and isinstance(error.get("message"), str):
         return error["message"]
-    return body.strip() if isinstance(body, str) else json.dumps(body)
+    return body.strip()[:500] if isinstance(body, str) else json.dumps(body)[:500]

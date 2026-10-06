@@ -20,8 +20,9 @@ from bellwether.manifest import Manifest
 
 from .render import CannotVerify
 
-VERDICTS = ("match", "regression", "rejected", "missing")
+VERDICTS = ("match", "regression", "rejected", "missing", "measurement_failed")
 EXCUSABLE = ("regression", "rejected")
+SETUP = ("missing", "measurement_failed")  # verdicts about the setup, never excused
 LEADING_KEYS = ("id", "model", "set", "verdict", "passed", "known")
 WITHOUT_CASE = "listed, but there is no such case; remove the entry"
 JUNIT_COUNTS = (("failure", "failures"), ("error", "errors"), ("skipped", "skipped"))
@@ -44,8 +45,8 @@ def judge(result: dict, known: dict[str, str]) -> None:
 
     A case passes when it matches and is not listed, or when it is a regression or rejected and is listed. A listed
     case that matches fails, so an entry goes as soon as SMG is fixed and the list cannot rot. A missing capture
-    line fails even when listed: it is about the setup, which file is read and whether the ``rid`` reached the
-    engine, not about how SMG renders.
+    line and a failed measurement fail even when listed: they are about the setup (which file is read, whether the
+    ``rid`` reached the engine, what answered), not about how SMG renders.
     """
     reason = known.get(result["id"])
     result["known"] = reason
@@ -94,7 +95,7 @@ class Writer:
             self.passed += 1
         else:
             self.failed += 1
-        if not (result["verdict"] == "match" and result["passed"]):
+        if not (result["verdict"] == "match" and result["passed"] and result["status"] == 200):
             print(f"{result['verdict']} {result['id']}: {describe(result)}")
         if self._cases is not None:
             # The verdict and whether it passes first; the response body, which can be long, last.
@@ -133,15 +134,16 @@ class Writer:
         return written
 
     def _testcase(self, result: dict) -> ET.Element:
-        """One testcase: ``regression`` and ``missing`` are failures; ``rejected`` is an error, SMG's own error answer;
-        a listed known difference is skipped with its reason."""
+        """One testcase. A verdict about the case (``regression``, ``rejected``, a listed case that matches) is a
+        failure; one about the setup (``missing``, ``measurement_failed``) is an error, the test not having run; a
+        listed known difference is skipped with its reason."""
         classname = f"{result['id'].split('/')[0]}/{self.kind}/{result['set']}"
         testcase = ET.Element("testcase", classname=classname, name=result["id"])
         if result["passed"]:
             if result["known"] is not None:
                 ET.SubElement(testcase, "skipped", message=f"known difference: {result['known']}")
             return testcase
-        tag = "error" if result["verdict"] == "rejected" else "failure"
+        tag = "error" if result["verdict"] in SETUP else "failure"
         failure_type = "known-but-matches" if result["verdict"] == "match" else result["verdict"]
         element = ET.SubElement(testcase, tag, type=failure_type, message=describe(result))
         if result["verdict"] == "regression":
@@ -267,16 +269,20 @@ def describe(result: dict) -> str:
         else:
             detail += "; the capture line does not carry the text"
     elif result["verdict"] == "rejected":
-        detail = f"HTTP {result['status']}: {result['message']}"
+        detail = f"HTTP {result['status']} {result['code']}: {result['message']}"
     elif result["verdict"] == "missing":
         detail = "SMG answered, but no capture line carries this case's id"
+    elif result["verdict"] == "measurement_failed":
+        detail = f"HTTP {result['status']}: {result['message']}; not SMG refusing the request, so nothing was measured"
     elif result["known"] is not None:
         detail = "matches"
+    if result["verdict"] in ("match", "regression") and result["status"] != 200:
+        detail = f"{detail}; SMG then answered HTTP {result['status']}: {result['message']}".lstrip("; ")
     if result["known"] is not None:
         if result["passed"]:
             detail += f"; known: {result['known']}"
         elif result["verdict"] == "match":
             detail += f", but it is listed as a known difference ({result['known']}); remove the entry"
         else:
-            detail += "; listed as a known difference, but a missing line is not one"
+            detail += f"; listed as a known difference, but {result['verdict'].replace('_', ' ')} is about the setup"
     return detail

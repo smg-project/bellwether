@@ -230,16 +230,24 @@ the JUnit XML are put together when the run finishes.
 |---|---|
 | `match` | the `input_ids` SMG sent equal the reference's |
 | `regression` | they do not; the report gives the first differing index, the ids around it on both sides, and whether the prompt text SMG sent equals the reference text (equal text points at tokenization, other text at rendering) |
-| `rejected` | SMG answered with a status other than 200; its status and message are kept |
-| `missing` | SMG answered, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
+| `rejected` | SMG refused the request: a 400 whose body is SMG's error object; its code and message are kept |
+| `missing` | SMG answered 200, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
+| `measurement_failed` | SMG answered neither 200 nor its refusal (a redirect, a 404 for a model no worker serves, a 429 or 5xx, a proxy's page) and no capture line carries the case's id: nothing was measured |
+
+A capture line is compared whatever SMG answered after sending it, and the answer is kept beside the
+verdict. `missing` and `measurement_failed` are about the setup, so no known difference excuses them.
+Before the first case, `verify` asks SMG's `/v1/models` for the models it serves; a model with cases
+that SMG does not list stops the run, as does an answer other than SMG's list (a 404 there usually means
+`--smg` ends in `/v1`).
 
 `--known PATH` lists SMG's known differences as a TOML table of `"<fixture id>" = "<reason>"`. A listed
 case passes while it is a regression or rejected and fails once it matches, and a listed id that names
 no case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
 status is 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such
-model, a manifest or a set verify cannot read, no answer from SMG, a capture file verify cannot read). A
-case is judged against its reference alone for now: telling an `engine_defect` or `engines_split` from a
-`regression` needs the engine witnesses, which come once they are recorded.
+model, a manifest or a set verify cannot read, a model SMG does not serve, no answer from SMG, a capture
+file verify cannot read). A case is judged against its reference alone for now: telling an
+`engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once they
+are recorded.
 
 ## Layout
 

@@ -48,6 +48,10 @@ def run(args: argparse.Namespace) -> int:
             render.client() as http,
             report.Writer(report=args.report, junit=args.junit) as writer,
         ):
+            served = render.served_models(http, args.smg)
+            for model in dict.fromkeys(manifest.model for manifest, _, _ in sets):
+                if model not in served:
+                    raise CannotVerify(f"SMG serves no model {model}; it serves {', '.join(sorted(served)) or 'none'}")
             judged: set[str] = set()  # the listed ids the run judged
             for manifest, set_name, path in sets:
                 for _, case in read_cases(path):

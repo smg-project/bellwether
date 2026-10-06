@@ -12,6 +12,7 @@ import threading
 import tracemalloc
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -22,15 +23,18 @@ from bellwether.record.fixtures import write_fixture_file
 
 
 class FakeGateway:
-    """An HTTP server on a free local port, answering each request by its ``rid``."""
+    """An HTTP server on a free local port standing in for SMG and the mock behind it, answering by ``rid``."""
 
     def __init__(self, capture):
         self.capture = capture
         capture.touch()  # the mock creates its capture file when it starts
+        self.models: set[str] = set()  # what GET /v1/models lists; with none it answers 503, as SMG does
         self.prompts: dict[str, tuple[list[int] | None, str | None]] = {}  # rid -> what the engine receives
         self.request_ids: dict[str, str] = {}  # rid -> the engine's request_id, where it is not the rid as sent
-        # rid -> the status and the message SMG answers with; bytes are a plain body from something in front of it
-        self.rejections: dict[str, tuple[int, str | bytes]] = {}
+        # rid -> what SMG answers instead of sending the request on: a status and a body. A str is SMG's own error
+        # message, bytes a plain body from something in front of it, a dict a JSON body as given; a 3xx redirects.
+        self.rejections: dict[str, tuple[int, str | bytes | dict]] = {}
+        self.after_line: dict[str, tuple[int, str | bytes | dict]] = {}  # rid -> the same, once the engine has it
         self.appended_after: dict[str, str] = {}  # rid -> raw text another client appends after it
         self.received: list[dict] = []
         # A prompt computed from the request instead of looked up by rid, and no record of what was received: a
@@ -42,14 +46,29 @@ class FakeGateway:
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
 
+            def do_GET(self):
+                if self.path != "/v1/models":
+                    self.reply(404, b"")
+                elif not gateway.models:
+                    self.reply(503, b"No models available")
+                else:
+                    models = [
+                        {"id": m, "object": "model", "created": 0, "owned_by": "self_hosted"} for m in gateway.models
+                    ]
+                    self.reply(200, {"object": "list", "data": sorted(models, key=lambda m: m["id"])})
+
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 if gateway.keep_received:
                     gateway.received.append({"path": self.path, "body": body})
-                status, payload = gateway.answer(body)
+                self.reply(*gateway.answer(body))
+
+            def reply(self, status, payload):
                 plain = isinstance(payload, bytes)
                 data = payload if plain else json.dumps(payload).encode()
                 self.send_response(status)
+                if 300 <= status < 400:
+                    self.send_header("Location", "/elsewhere")
                 self.send_header("Content-Type", "text/plain" if plain else "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -65,15 +84,13 @@ class FakeGateway:
     def serve(self, cases: dict[str, dict]) -> None:
         """Send each case's reference to the engine, the way a conformant SMG would."""
         for case_id, case in cases.items():
+            self.models.add(case["model"])
             self.prompts[case_id] = (case["reference"]["input_ids"], case["reference"]["text"])
 
     def answer(self, body: dict) -> tuple[int, dict | bytes]:
         rid = body["rid"]
         if rid in self.rejections:
-            status, message = self.rejections[rid]
-            if isinstance(message, bytes):
-                return status, message
-            return status, {"error": {"type": "Bad Request", "code": "bad_request", "message": message, "param": None}}
+            return smg_answer(*self.rejections[rid])
         if self.prompt_for is not None:
             self.prompts = {rid: self.prompt_for(body)}
         ids, text = self.prompts.get(rid, ([], ""))
@@ -92,6 +109,8 @@ class FakeGateway:
             self.append(json.dumps(line) + "\n")
         if rid in self.appended_after:
             self.append(self.appended_after[rid])
+        if rid in self.after_line:
+            return smg_answer(*self.after_line[rid])
         message = {"role": "assistant", "content": "ok"}
         prompt_tokens = len(ids or [])
         usage = {"prompt_tokens": prompt_tokens, "completion_tokens": 1, "total_tokens": prompt_tokens + 1}
@@ -104,6 +123,14 @@ class FakeGateway:
     def append(self, text: str) -> None:
         with self.capture.open("a", encoding="utf-8") as f:
             f.write(text)
+
+
+def smg_answer(status: int, body: str | bytes | dict) -> tuple[int, dict | bytes]:
+    """A str body is SMG's own error message, in the shape SMG's create_error answers with."""
+    if not isinstance(body, str):
+        return status, body
+    phrase = HTTPStatus(status).phrase
+    return status, {"error": {"type": phrase, "code": phrase.lower().replace(" ", "_"), "message": body, "param": None}}
 
 
 @pytest.fixture
@@ -239,23 +266,68 @@ def test_a_difference_gives_the_first_differing_index_and_the_ids_and_text_aroun
     assert "m1/render/hello" in out and "index 12" in out
 
 
-def test_a_non_200_answer_is_recorded_as_rejected_with_its_status_and_message(tmp_path, gateway, capsys):
+SMG_VALIDATION = {"error": {"message": "temperature: must be at most 2", "type": "invalid_request_error", "code": 400}}
+
+
+def smg_error(status: int, code: str, message: str) -> dict:
+    return {"error": {"type": HTTPStatus(status).phrase, "code": code, "message": message, "param": None}}
+
+
+@pytest.mark.parametrize(
+    "status, body, verdict",
+    [
+        (400, "message content cannot be empty", "rejected"),
+        (400, SMG_VALIDATION, "rejected"),
+        (404, smg_error(404, "model_not_found", "No worker available for model 'org/M1'"), "measurement_failed"),
+        (503, smg_error(503, "no_available_workers", "No available workers"), "measurement_failed"),
+        (500, smg_error(500, "internal_error", "the worker went away"), "measurement_failed"),
+        (502, b"upstream connect error", "measurement_failed"),
+        (400, b"<html>400 Bad Request</html>", "measurement_failed"),
+        (307, b"", "measurement_failed"),
+    ],
+    ids=["refusal", "validation", "no worker", "unavailable", "internal", "proxy", "proxy 400", "redirect"],
+)
+def test_only_smgs_refusal_of_the_request_is_rejected(tmp_path, gateway, capsys, status, body, verdict):
+    fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    gateway.rejections["m1/render/hello"] = (status, body)
+    known.write_text('"m1/render/hello" = "SMG refuses it"\n')  # an answer about the setup is never excused
+
+    assert verify(gateway, fixtures, "--known", str(known), "--report", str(report)) == (
+        0 if verdict == "rejected" else 1
+    )
+
+    results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
+    hello = results["m1/render/hello"]
+    assert (hello["verdict"], hello["status"], hello["passed"]) == (verdict, status, verdict == "rejected")
+    answered = smg_answer(status, body)[1]
+    assert hello["body"] == (answered.decode() if isinstance(answered, bytes) else answered)
+    if verdict == "rejected":
+        assert (hello["code"], hello["message"]) == (answered["error"]["code"], answered["error"]["message"])
+    else:
+        assert "code" not in hello
+    assert results["m1/render/budget"]["verdict"] == "match"
+    out = capsys.readouterr().out
+    assert f"{verdict} m1/render/hello: HTTP {status}" in out
+
+
+def test_a_capture_line_is_compared_whatever_smg_answers_after_it(tmp_path, gateway, capsys):
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
-    cases = write_model(fixtures, "m1", "org/M1", CASES)
-    gateway.serve(cases)
-    gateway.rejections["m1/render/hello"] = (400, "message content cannot be empty")
-    gateway.rejections["m1/render/tools"] = (502, b"upstream connect error")
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    gateway.prompts["m1/render/budget"] = ([10, 12], "Hi")
+    gateway.after_line["m1/render/budget"] = (500, smg_error(500, "internal_error", "the worker went away"))
+    gateway.after_line["m1/render/hello"] = (400, "message content cannot be empty")
 
     assert verify(gateway, fixtures, "--report", str(report)) == 1
 
     results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
-    hello, tools = results["m1/render/hello"], results["m1/render/tools"]
-    assert (hello["verdict"], hello["status"], hello["message"]) == ("rejected", 400, "message content cannot be empty")
-    assert hello["body"]["error"]["message"] == "message content cannot be empty"
-    assert (tools["verdict"], tools["status"], tools["message"]) == ("rejected", 502, "upstream connect error")
-    assert tools["body"] == "upstream connect error"
-    assert results["m1/render/budget"]["verdict"] == "match"
-    assert "rejected m1/render/hello: HTTP 400: message content cannot be empty" in capsys.readouterr().out
+    budget, hello = results["m1/render/budget"], results["m1/render/hello"]
+    assert (budget["verdict"], budget["index"], budget["lengths"]) == ("regression", 1, {"reference": 2, "smg": 2})
+    assert (budget["status"], budget["message"]) == (500, "the worker went away")
+    assert (hello["verdict"], hello["passed"], hello["status"]) == ("match", True, 400)
+    out = capsys.readouterr().out
+    assert "regression m1/render/budget: ids differ from index 1" in out and "SMG then answered HTTP 500" in out
+    assert "match m1/render/hello: SMG then answered HTTP 400" in out
 
 
 def test_an_answered_request_with_no_capture_line_is_missing(tmp_path, gateway, capsys):
@@ -404,6 +476,7 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
         "regression": 1,
         "rejected": 2,
         "missing": 1,
+        "measurement_failed": 0,
         "passed": 2,
         "failed": 3,
     }
@@ -430,9 +503,9 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
     assert outcome == {
         "m1/render/budget": None,
         "m1/render/hello": ("failure", "regression"),
-        "m1/render/tools": ("error", "rejected"),
+        "m1/render/tools": ("failure", "rejected"),
         "m2/render/bye": ("skipped", None),
-        "m2/render/hello": ("failure", "missing"),
+        "m2/render/hello": ("error", "missing"),
         "m2/render/gone": ("failure", "known-without-case"),
     }
     assert [suite.get("name") for suite in suites] == ["org/M1 render", "org/M2 render", "known differences"]
@@ -488,6 +561,7 @@ def test_memory_does_not_grow_with_the_number_of_cases(tmp_path, gateway):
 
     gateway.prompt_for = lambda body: prompt(int(body["messages"][0]["content"].split()[1]))
     gateway.keep_received = False
+    gateway.models = {"org/M1"}
     peaks = {}
     for n in (20, 100, 400):  # the first run takes what a process allocates once
         fixtures, out = tmp_path / f"fixtures-{n}", tmp_path / f"out-{n}"
@@ -538,6 +612,9 @@ def closed_port() -> int:
         "a named model without render cases",
         "bad known file",
         "no gateway",
+        "model not served",
+        "no model served",
+        "url ends in /v1",
         "capture not found",
         "capture is a directory",
         "not a capture file",
@@ -587,6 +664,15 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
     elif problem == "no gateway":
         url = f"http://127.0.0.1:{closed_port()}"
         message = f"no answer from {url}"
+    elif problem == "model not served":
+        gateway.models = {"org/Other"}
+        message = "SMG serves no model org/M1; it serves org/Other"
+    elif problem == "no model served":
+        gateway.models = set()
+        message = "/v1/models answered 503: No models available"
+    elif problem == "url ends in /v1":
+        url = f"{gateway.url}/v1"
+        message = "/v1/v1/models answered 404"
     elif problem == "set not fetched":
         pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 10\n"
         (fixtures / "m1" / "render" / "bench.jsonl.zst").write_text(pointer)
