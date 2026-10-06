@@ -11,7 +11,7 @@ from bellwether.record import sets as set_tables
 from bellwether.record.corpus import read_cases
 
 
-def test_the_calls_interleave_their_categories_one_case_at_a_time():
+def test_the_bfcl_cases_interleave_their_categories_one_at_a_time():
     simple, parallel, live = ["s0", "s1", "s2"], ["p0"], ["l0", "l1"]
     assert shapes.interleave([simple, parallel, live]) == ["s0", "p0", "l0", "s1", "l1", "s2"]
     assert shapes.interleave([[], ["p0"]]) == ["p0"]

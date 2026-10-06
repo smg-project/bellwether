@@ -102,17 +102,18 @@ def interleave(lists: list[list]) -> list:
     return [items[index] for index in range(longest) for items in lists if index < len(items)]
 
 
-def pair(calls: list, texts: list, size: int) -> list[tuple]:
+def pair(bfcl_cases: list, texts: list, size: int) -> list[tuple]:
     """The i-th BFCL case with the i-th text, for ``size`` pairs.
 
     A side with fewer than ``size`` stops the import rather than give an item twice: a text paired with two requests is
     no repeat to ``corpus_sets.leave_out_repeats``, so it would pass unnoticed.
     """
-    if len(calls) < size or len(texts) < size:
+    if len(bfcl_cases) < size or len(texts) < size:
         raise ValueError(
-            f"{size} pairs need {size} BFCL parse cases and {size} GSM8K rows; there are {len(calls)} and {len(texts)}"
+            f"{size} pairs need {size} BFCL parse cases and {size} GSM8K rows; "
+            f"there are {len(bfcl_cases)} and {len(texts)}"
         )
-    return list(zip(calls[:size], texts[:size], strict=True))
+    return list(zip(bfcl_cases[:size], texts[:size], strict=True))
 
 
 def set_name(shape: str) -> str:
@@ -124,9 +125,10 @@ def build_sets(
 ) -> dict[tuple[str, str], list[dict]]:
     """One parse set per message shape, from the BFCL wheel and GSM8K's test file through their importers' builders.
 
-    The calls are BFCL's parse cases of ``CATEGORIES``, interleaved; a category without any stops the import. The texts
-    are the solutions of GSM8K's reasoning-content parse cases of ``SPLIT``, each split by ``split_solution``. Each pair
-    gives the i-th case of every set: the request and calls of the call, the reasoning and content of the text.
+    The BFCL cases are the parse cases of ``CATEGORIES``, interleaved; a category without any stops the import. The
+    texts are the solutions of GSM8K's reasoning-content parse cases of ``SPLIT``, each split by ``split_solution``.
+    Each pair gives the i-th case of every set: the request and tool calls of the BFCL case, the reasoning and content
+    of the text.
 
     The sets then go through ``corpus_sets.leave_out_repeats``, which leaves out each case that repeats an earlier one.
 
@@ -140,9 +142,9 @@ def build_sets(
     missing = [category for category in CATEGORIES if ("parse", bfcl.set_name(category)) not in found]
     if missing:
         raise ValueError(f"no parse case in BFCL {', '.join(missing)}: the shapes take calls from every category")
-    cases = {category: found[("parse", bfcl.set_name(category))] for category in CATEGORIES}
-    calls = interleave(list(cases.values()))
-    owners = interleave([[category] * len(lines) for category, lines in cases.items()])  # each call's category
+    by_category = {category: found[("parse", bfcl.set_name(category))] for category in CATEGORIES}
+    bfcl_cases = interleave(list(by_category.values()))
+    owners = interleave([[category] * len(lines) for category, lines in by_category.items()])  # each case's category
     gsm8k_skipped: list[tuple[str, str]] = []
     gsm8k_lines = gsm8k.build_sets({SPLIT: test_file}, gsm8k_skipped)[
         ("parse", gsm8k.set_name(SPLIT, "reasoning-content"))
@@ -153,7 +155,7 @@ def build_sets(
             texts.append((gsm8k_line, *split_solution(gsm8k_line["message"]["reasoning_content"])))
         except gsm8k.Unusable as err:
             gsm8k_skipped.append((f"{SPLIT} row {gsm8k_line['origin']['row']}", str(err)))
-    pairs = pair(calls, texts, SIZE)
+    pairs = pair(bfcl_cases, texts, SIZE)
     sets: dict[tuple[str, str], list[dict]] = {("parse", set_name(shape)): [] for shape in SHAPES}
     for index, (bfcl_line, (gsm8k_line, reasoning, content)) in enumerate(pairs):
         origin = {"dataset": DATASET, "parts": [bfcl_line["origin"], gsm8k_line["origin"]]}
@@ -168,21 +170,21 @@ def build_sets(
         skipped.extend((f"BFCL {row}", why) for row, why in bfcl_skipped)
         skipped.extend((f"GSM8K {row}", why) for row, why in gsm8k_skipped)
         count = len(pairs)
-        skipped.extend(after_pairs(calls[count:], owners[count:], [text[0] for text in texts[count:]], count))
+        skipped.extend(after_pairs(bfcl_cases[count:], owners[count:], [text[0] for text in texts[count:]], count))
         skipped.extend((name, f"it repeats {first}") for name, first in repeats)
     return sets
 
 
-def after_pairs(calls: list[dict], owners: list[str], texts: list[dict], count: int) -> list[tuple[str, str]]:
+def after_pairs(bfcl_cases: list[dict], owners: list[str], texts: list[dict], count: int) -> list[tuple[str, str]]:
     """The cases left after the ``count`` pairs, as ``(what, why)``: one run per BFCL category, then GSM8K's rows.
 
-    ``owners`` names each call's category. A category's calls after the pairs are its last parse cases, in file order,
-    and so are the GSM8K rows, so each run is named by how many it holds and its first and last row.
+    ``owners`` names each BFCL case's category. A category's cases after the pairs are its last parse cases, in file
+    order, and so are the GSM8K rows, so each run is named by how many it holds and its first and last row.
     """
     why = f"after the first {count} pairs"
     runs = []
     for category in CATEGORIES:
-        rows = [line["origin"]["row"] for line, owner in zip(calls, owners, strict=True) if owner == category]
+        rows = [line["origin"]["row"] for line, owner in zip(bfcl_cases, owners, strict=True) if owner == category]
         if rows:
             runs.append((run_of(rows, "BFCL", f"BFCL {category} parse cases"), why))
     rows = [line["origin"]["row"] for line in texts]
