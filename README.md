@@ -69,7 +69,9 @@ catches up.
 | disputed | a case whose two sources of truth disagree; it carries the disagreement's fingerprint, and no parity is counted against it |
 | verdict | the classification of one case after comparing SMG with reference and witnesses |
 | waiver | a reviewed, expiring record explaining an `engine_defect`, with an upstream link |
-| manifest | per-model file: revision, authority order, SMG and engine parser names |
+| manifest | per-checkpoint file: revision, tier, oracle inputs, group, authority order, SMG and engine parser names |
+| oracle inputs | every file the oracle reads for a checkpoint, each with its sha256 |
+| checkpoint group | checkpoints with equal oracle inputs, recorded once under the slug of its primary |
 | chunk plan | how an output token stream is cut into engine chunks for a streaming replay |
 | capture | the mock worker's record of each request SMG sends it, one JSON line per request |
 | known difference | a case where SMG is known to differ from the reference, listed for `verify --known` with the outcome SMG gives on it, the reason and the issue |
@@ -110,11 +112,27 @@ types. Names that differ across systems for one format are merged through
 one implementation behind several rows as alias candidates, so the table is kept honest by what
 the code says rather than by memory.
 
+## Checkpoint groups and manifests
+
+```bash
+HF_HUB_OFFLINE=1 uv run bellwether manifests --models models.tsv
+```
+
+Reads one `model<TAB>revision<TAB>downloads<TAB>tier` row per checkpoint, computes each one's oracle inputs (the
+tokenizer files, the chat template, and the few fields of `config.json` and `generation_config.json` that the oracle
+depends on) at the pinned revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and
+writes every checkpoint's `fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the
+recorded one if there is one, else its most-downloaded member's. The others' manifests name the group and hold no
+fixtures. It prints each group with its members and their tiers. `fixtures/README.md` describes the manifest.
+
 ## Recording render fixtures
 
 ```bash
 uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
+
+`record` first checks the manifest: it refuses a group member, naming the group to record instead, and a checkpoint
+whose oracle inputs at the pinned revision are not the ones its manifest lists, naming the files that differ.
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
 case under `corpus/render/` through the checkpoint's own chat template at the pinned revision

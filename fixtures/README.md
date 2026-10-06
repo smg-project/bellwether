@@ -1,16 +1,21 @@
 # Fixtures
 
-One directory per model, named by a lowercase slug of the Hugging Face id:
+One directory per checkpoint, named by a lowercase slug of the Hugging Face id:
 
 ```
 fixtures/
   kimi-k3/
-    manifest.toml          # model, pinned revision, authority order, SMG and engine parser names
+    manifest.toml          # model, pinned revision, tier, oracle inputs, authority order, parser names
     render/*.jsonl         # request -> prompt token ids
     parse/*.jsonl          # output token ids -> response, whole and per chunk plan (see below)
     tokenize/*.jsonl       # text -> ids
     detokenize/*.jsonl     # ids -> incremental text pieces
 ```
+
+Checkpoints whose oracle inputs are equal render and parse identically, so they form one checkpoint group, recorded
+once under the slug of its primary (`docs/benchmark-sets.md`, "Which models"). Every other member's directory holds
+only its manifest, which names the group. Fixture ids carry the group's slug, so `qwen3-8b/parse/call-unicode-arguments`
+is also Qwen3-0.6B's case.
 
 A set recorded from an imported corpus set (a benchmark set) is stored as `<set>.jsonl.zst`, zstd-compressed, in Git
 LFS; hand-written sets stay plain `<set>.jsonl`. `.lfsconfig` keeps a clone from fetching the compressed sets; fetch
@@ -32,6 +37,7 @@ bellwether commit).
 ```toml
 model    = "Qwen/Qwen3-8B"
 revision = "b968826d9c46dd6066d109eabc6255188de91218"   # HF commit the fixtures are recorded at
+tier     = 1                                             # the checkpoint's place in the recording order
 
 [authority]                                              # first source that exists for a case wins
 render     = ["hf-template", "engine:vllm", "engine:sglang"]
@@ -46,7 +52,35 @@ reasoning_parser = "qwen3"
 [engines]
 vllm   = { tool_parser = "hermes", reasoning_parser = "qwen3" }
 sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"config.json"            = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"tokenizer.json"         = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+"tokenizer_config.json"  = "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
 ```
+
+`revision` is a 40-character commit hash, never a branch or tag, which could move under a consumer that caches the
+fixtures. `[inputs]` lists every file the oracle reads, each with its sha256: the tokenizer files, the chat template
+files, and `config.json` and `generation_config.json`, which are hashed over the canonical JSON
+(`json.dumps(..., sort_keys=True)`, a missing field as null) of only `model_type` and `tokenizer_class`, and of only
+`bos_token_id`, `eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group. A member's manifest
+adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its group's. The parser
+tables of a new group are left out until someone maps them. A manifest that `bellwether manifests` creates has no
+`[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"), and
+restating it for each checkpoint is the sponsor's call.
+
+`bellwether manifests --models <file>` writes them all. The file has one row per checkpoint,
+`model<TAB>revision<TAB>downloads<TAB>tier`; the command computes each checkpoint's inputs at its revision from the
+Hugging Face cache (`HF_HUB_OFFLINE=1` reads the cache only), groups equal ones, and prints the groups. A group that is
+already recorded keeps its slug; a new group takes its most-downloaded member's. The list names every checkpoint that
+has a manifest. The command keeps every line a person wrote in an existing manifest, never moves a recorded group's
+revision, and writes the same files when run again.
+
+`record --model <id>` refuses a member, naming the group to record instead, and refuses a checkpoint whose inputs at
+the pinned revision differ from its manifest's list, naming the files; it exits 1 in both cases, recording nothing.
 
 `record --model <id>` finds the manifest whose `model` is that id, reads the corpus under
 `corpus/<kind>/`, and writes `fixtures/<slug>/<kind>/<set>.jsonl`: one line per case, sorted by id,
