@@ -70,7 +70,9 @@ class Writer:
     """The run's results, written as they come: text for each case to look at, and the JSON report and the JUnit XML
     from temporary files when the run finishes.
 
-    Nothing is written to ``report`` or ``junit`` unless the run finishes.
+    A run that stops before its last case still finishes: the cases answered are reported with their verdicts, the
+    case it stopped at with the error, and every case after it as not sent. Nothing is written to ``report`` or
+    ``junit`` if the run gives no verdict at all.
     """
 
     def __init__(self, *, report: Path | None, junit: Path | None, kind: str = "render") -> None:
@@ -79,13 +81,16 @@ class Writer:
         self.counts = dict.fromkeys(VERDICTS, 0)
         self.passed = self.failed = 0
         self._cases = _scratch() if report else None
+        self._not_sent = _scratch() if report else None
         self._suites: dict[str, _Suite] = {}
+        self.stopped: dict | None = None  # the case the run stopped at, and why
+        self.unsent = 0
 
     def __enter__(self) -> Writer:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
-        for scratch in [self._cases, *(suite.scratch for suite in self._suites.values())]:
+        for scratch in [self._cases, self._not_sent, *(suite.scratch for suite in self._suites.values())]:
             if scratch is not None:
                 scratch.close()
 
@@ -107,14 +112,35 @@ class Writer:
         if self.junit:
             self._suite(f"{result['model']} {self.kind}").add(self._testcase(result))
 
+    def stop(self, model: str, set_name: str, case_id: str | None, error: str) -> None:
+        """The run stopped at this case (None: between cases, at a set it could not read again) for ``error``."""
+        self.stopped = {"case": case_id, "error": error}
+        if case_id is not None and self.junit:
+            testcase = ET.Element("testcase", classname=_classname(case_id, self.kind, set_name), name=case_id)
+            ET.SubElement(testcase, "error", type="stopped", message=error)
+            self._suite(f"{model} {self.kind}").add(testcase)
+
+    def not_sent(self, model: str, set_name: str, case_id: str) -> None:
+        """A case after the one the run stopped at."""
+        self.unsent += 1
+        if self._not_sent is not None:
+            self._not_sent.write(json.dumps(case_id, ensure_ascii=False) + "\n")
+        if self.junit:
+            testcase = ET.Element("testcase", classname=_classname(case_id, self.kind, set_name), name=case_id)
+            message = f"not sent: the run stopped at {self.stopped['case'] or 'a set it could not read'}"
+            ET.SubElement(testcase, "error", type="not-sent", message=message)
+            self._suite(f"{model} {self.kind}").add(testcase)
+
     def finish(self, *, provenance: dict, known_without_case: list[str], models_without_cases: list[str]) -> dict:
         """Print the totals, write the JSON report and the JUnit XML, and return the report without its cases."""
         cases = self.passed + self.failed
+        summary = {"cases": cases, **self.counts, "passed": self.passed, "failed": self.failed, "not_sent": self.unsent}
         written = {
             "kind": self.kind,
             "provenance": provenance,
-            "summary": {"cases": cases, **self.counts, "passed": self.passed, "failed": self.failed},
-            "passed": self.failed == 0 and not known_without_case,
+            "summary": summary,
+            "passed": self.failed == 0 and not known_without_case and self.stopped is None,
+            "stopped": self.stopped,
             "known_without_case": known_without_case,
             "models_without_cases": models_without_cases,
         }
@@ -126,7 +152,12 @@ class Writer:
         tally = f"{self.passed} pass, {self.failed} fail"
         if known_without_case:
             tally += f", {len(known_without_case)} listed without a case"
-        print(f"{self.kind}: {cases} cases ({counts}); {tally}; {'passed' if written['passed'] else 'failed'}")
+        if self.stopped is not None:
+            at = self.stopped["case"] or "a set it could not read"
+            outcome = f"stopped at {at}; {self.unsent} cases not sent"
+        else:
+            outcome = "passed" if written["passed"] else "failed"
+        print(f"{self.kind}: {cases} cases ({counts}); {tally}; {outcome}")
         if self.report:
             self._write_json(written)
         if self.junit:
@@ -137,8 +168,9 @@ class Writer:
         """One testcase. A verdict about the case (``regression``, ``rejected``, a listed case that matches) is a
         failure; one about the setup (``missing``, ``measurement_failed``) is an error, the test not having run; a
         listed known difference is skipped with its reason."""
-        classname = f"{result['id'].split('/')[0]}/{self.kind}/{result['set']}"
-        testcase = ET.Element("testcase", classname=classname, name=result["id"])
+        testcase = ET.Element(
+            "testcase", classname=_classname(result["id"], self.kind, result["set"]), name=result["id"]
+        )
         if result["passed"]:
             if result["known"] is not None:
                 ET.SubElement(testcase, "skipped", message=f"known difference: {result['known']}")
@@ -163,11 +195,13 @@ class Writer:
             out.write("{\n")
             for key, value in written.items():
                 out.write(f" {json.dumps(key)}: {json.dumps(value, ensure_ascii=False)},\n")
-            out.write(' "cases": [')
-            self._cases.seek(0)
-            for number, line in enumerate(self._cases):
-                out.write(("\n  " if number == 0 else ",\n  ") + line.rstrip("\n"))
-            out.write("\n ]\n}\n")
+            for key, scratch in (("cases", self._cases), ("not_sent", self._not_sent)):
+                out.write(f' "{key}": [')
+                scratch.seek(0)
+                for number, line in enumerate(scratch):
+                    out.write(("\n  " if number == 0 else ",\n  ") + line.rstrip("\n"))
+                out.write("\n ]" if key == "not_sent" else "\n ],\n")
+            out.write("\n}\n")
 
     def _write_junit(self, known_without_case: list[str]) -> None:
         suites = list(self._suites.values())
@@ -214,6 +248,10 @@ class _Suite:
         for line in self.scratch:
             out.write(line)
         out.write("  </testsuite>\n")
+
+
+def _classname(case_id: str, kind: str, set_name: str) -> str:
+    return f"{case_id.split('/')[0]}/{kind}/{set_name}"
 
 
 def _attributes(counts: dict[str, int]) -> str:

@@ -36,6 +36,8 @@ class FakeGateway:
         self.rejections: dict[str, tuple[int, str | bytes | dict]] = {}
         self.after_line: dict[str, tuple[int, str | bytes | dict]] = {}  # rid -> the same, once the engine has it
         self.appended_after: dict[str, str] = {}  # rid -> raw text another client appends after it
+        self.drops: set[str] = set()  # rids whose connection closes without an answer
+        self.on_answer: dict[str, Callable[[], None]] = {}  # rid -> something done before answering it
         self.received: list[dict] = []
         # A prompt computed from the request instead of looked up by rid, and no record of what was received: a
         # fake whose memory does not grow with the number of cases.
@@ -61,6 +63,9 @@ class FakeGateway:
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 if gateway.keep_received:
                     gateway.received.append({"path": self.path, "body": body})
+                if body["rid"] in gateway.drops:
+                    self.close_connection = True
+                    return
                 self.reply(*gateway.answer(body))
 
             def reply(self, status, payload):
@@ -89,6 +94,8 @@ class FakeGateway:
 
     def answer(self, body: dict) -> tuple[int, dict | bytes]:
         rid = body["rid"]
+        if rid in self.on_answer:
+            self.on_answer[rid]()
         if rid in self.rejections:
             return smg_answer(*self.rejections[rid])
         if self.prompt_for is not None:
@@ -479,8 +486,9 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
         "measurement_failed": 0,
         "passed": 2,
         "failed": 3,
+        "not_sent": 0,
     }
-    assert written["passed"] is False
+    assert (written["passed"], written["stopped"], written["not_sent"]) == (False, None, [])
     assert written["known_without_case"] == ["m2/render/gone"]
     entries = {entry["id"]: entry for entry in written["cases"]}
     assert list(entries) == sorted(cases)
@@ -594,6 +602,25 @@ def test_memory_does_not_grow_with_the_number_of_cases(tmp_path, gateway):
     assert per_case < 1024, f"the peak grows by {per_case:.0f} bytes for each case"
 
 
+def test_a_set_that_cannot_be_read_again_stops_the_run_where_it_is(tmp_path, gateway, capsys):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    cases = write_model(fixtures, "m1", "org/M1", CASES)
+    cases |= write_model(fixtures, "m2", "org/M2", {"hello": (HELLO, [5, 6], "h")})
+    gateway.serve(cases)
+    later = fixtures / "m2" / "render" / "common.jsonl"
+    gateway.on_answer["m1/render/tools"] = lambda: later.write_text("not a line of a set\n")
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 2
+
+    written = json.loads(report.read_text())
+    assert [case["verdict"] for case in written["cases"]] == ["match"] * 3
+    assert written["stopped"] == {"case": None, "error": f"{later}:1: not a JSON line"}
+    assert written["not_sent"] == []
+    captured = capsys.readouterr()
+    assert f"{later}:1: not a JSON line" in captured.err
+    assert "stopped at a set it could not read; 0 cases not sent" in captured.out
+
+
 def closed_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -617,8 +644,6 @@ def closed_port() -> int:
         "url ends in /v1",
         "capture not found",
         "capture is a directory",
-        "not a capture file",
-        "capture line without ids",
         "set not fetched",
         "set not zstd",
         "set cut short",
@@ -691,20 +716,61 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
             fixtures / "m1" / "render" / "bye.jsonl", {"m1/render/bye": {**CASE_LINE, "reference": reference}}
         )
         message = "m1/render/bye"
-    elif problem == "id in two sets":
+    else:
         write_fixture_file(fixtures / "m1" / "render" / "again.jsonl", {"m1/render/hello": CASE_LINE})
         message = "m1/render/hello"
-    elif problem == "not a capture file":
-        gateway.appended_after["m1/render/hello"] = "INFO smg: request done\n"
-        message = "not JSON"
-    else:
-        gateway.prompts["m1/render/hello"] = (None, "<u>Hello.</u><a>")
-        message = "input_ids"
     argv = ["--smg", url, "--capture", str(capture), "--fixtures", str(fixtures), "--report", str(report)]
 
     assert main(["verify", *argv, *extra]) == 2
 
     assert message in capsys.readouterr().err
     assert not report.exists()
-    if problem not in ("not a capture file", "capture line without ids"):
-        assert gateway.received == [], "found before the first request"
+    assert gateway.received == [], "found before the first request"
+
+
+@pytest.mark.parametrize("problem", ["no answer", "not a capture file", "capture line without ids"])
+def test_a_run_stopped_partway_reports_what_was_answered_and_names_what_was_not_sent(
+    tmp_path, gateway, capsys, problem
+):
+    fixtures, out, known = tmp_path / "fixtures", tmp_path / "out", tmp_path / "known.toml"
+    cases = write_model(fixtures, "m1", "org/M1", CASES)
+    cases |= write_model(fixtures, "m2", "org/M2", {"hello": (HELLO, [5, 6], "h"), "bye": (BYE, [7], "b")})
+    gateway.serve(cases)
+    gateway.prompts["m1/render/budget"] = ([10, 99], "Hi")  # a regression before the run stops
+    if problem == "no answer":
+        gateway.drops.add("m1/render/tools")
+        message = f"no answer from {gateway.url} for m1/render/tools"
+    elif problem == "not a capture file":
+        gateway.appended_after["m1/render/tools"] = "INFO smg: request done\n"
+        message = "is not JSON; is this the mock's capture file?"
+    else:
+        gateway.prompts["m1/render/tools"] = (None, "<t>Weather?")
+        message = "has no list of integer input_ids"
+    known.write_text('"m2/render/bye" = "a listed case the run did not reach"\n')
+    argv = ["--known", str(known), "--report", str(out / "report.json"), "--junit", str(out / "junit.xml")]
+
+    assert verify(gateway, fixtures, *argv) == 2
+
+    written = json.loads((out / "report.json").read_text())
+    verdicts = {case["id"]: case["verdict"] for case in written["cases"]}
+    assert verdicts == {"m1/render/budget": "regression", "m1/render/hello": "match"}
+    assert written["stopped"]["case"] == "m1/render/tools"
+    assert message in written["stopped"]["error"]
+    assert written["not_sent"] == ["m2/render/bye", "m2/render/hello"]
+    assert written["known_without_case"] == []
+    assert (written["passed"], written["summary"]["not_sent"]) == (False, 2)
+    outcome = {}
+    for testcase in ET.parse(out / "junit.xml").getroot().iter("testcase"):
+        child = next(iter(testcase), None)
+        outcome[testcase.get("name")] = None if child is None else (child.tag, child.get("type"))
+    assert outcome == {
+        "m1/render/budget": ("failure", "regression"),
+        "m1/render/hello": None,
+        "m1/render/tools": ("error", "stopped"),
+        "m2/render/bye": ("error", "not-sent"),
+        "m2/render/hello": ("error", "not-sent"),
+    }
+    captured = capsys.readouterr()
+    assert message in captured.err
+    assert "regression m1/render/budget" in captured.out
+    assert "stopped at m1/render/tools; 2 cases not sent" in captured.out

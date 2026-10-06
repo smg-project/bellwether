@@ -5,9 +5,12 @@ token ids SMG sent in its capture file. The other kinds exit with status 2 until
 so a script never mistakes a missing feature for a passing run.
 
 A run reads every set once before its first request, to stop on anything it cannot read, keeping only the case ids.
-It then sends, judges and writes one case at a time, so its memory does not grow with the number of cases.
+It then sends, judges and writes one case at a time, so its memory does not grow with the number of cases. A failure
+after the first request that leaves a case without a verdict (no answer, a capture line verify cannot read) stops
+the sending; the cases answered so far are judged and reported, and the cases not sent are named.
 
-Exit status: 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict at all.
+Exit status: 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict or stops before its
+last case.
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+
+import httpx
 
 from bellwether.manifest import Manifest, find_manifest, load_manifest
 
@@ -52,23 +57,54 @@ def run(args: argparse.Namespace) -> int:
             for model in dict.fromkeys(manifest.model for manifest, _, _ in sets):
                 if model not in served:
                     raise CannotVerify(f"SMG serves no model {model}; it serves {', '.join(sorted(served)) or 'none'}")
-            judged: set[str] = set()  # the listed ids the run judged
-            for manifest, set_name, path in sets:
-                for _, case in read_cases(path):
-                    result = render.verify_case(http, args.smg, capture, manifest, set_name, case)
-                    report.judge(result, known)
-                    if result["known"] is not None:
-                        judged.add(result["id"])
-                    writer.add(result)
+            listed = send(sets, http, args.smg, capture, known, writer)
             written = writer.finish(
                 provenance=report.provenance(url=args.smg, capture=args.capture, known=args.known, manifests=manifests),
-                known_without_case=report.known_without_case(known, manifests, judged),
+                known_without_case=report.known_without_case(known, manifests, listed),
                 models_without_cases=without_cases,
             )
     except CannotVerify as err:
         print(f"bellwether verify: {err}", file=sys.stderr)
         return CANNOT_RUN
+    if written["stopped"] is not None:
+        print(f"bellwether verify: {written['stopped']['error']}", file=sys.stderr)
+        return CANNOT_RUN
     return 0 if written["passed"] else 1
+
+
+def send(
+    sets: list[tuple[Manifest, str, Path]],
+    http: httpx.Client,
+    url: str,
+    capture: render.Capture,
+    known: dict[str, str],
+    writer: report.Writer,
+) -> set[str]:
+    """Send, judge and write every case, one at a time, and return the listed ids among them.
+
+    A failure that leaves a case without a verdict stops the sending. Each case after it is still read, to be named
+    as not sent; a set that cannot be read again stops the run where it is, its error naming the set.
+    """
+    listed: set[str] = set()
+    for manifest, set_name, path in sets:
+        try:
+            for _, case in read_cases(path):
+                if case["id"] in known:
+                    listed.add(case["id"])
+                if writer.stopped is not None:
+                    writer.not_sent(manifest.model, set_name, case["id"])
+                    continue
+                try:
+                    result = render.verify_case(http, url, capture, manifest, set_name, case)
+                except CannotVerify as err:
+                    writer.stop(manifest.model, set_name, case["id"], str(err))
+                    continue
+                report.judge(result, known)
+                writer.add(result)
+        except CannotVerify as err:
+            if writer.stopped is None:
+                writer.stop(manifest.model, set_name, None, str(err))
+    return listed
 
 
 def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]:

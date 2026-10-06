@@ -244,10 +244,13 @@ that SMG does not list stops the run, as does an answer other than SMG's list (a
 case passes while it is a regression or rejected and fails once it matches, and a listed id that names
 no case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
 status is 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such
-model, a manifest or a set verify cannot read, a model SMG does not serve, no answer from SMG, a capture
-file verify cannot read). A case is judged against its reference alone for now: telling an
-`engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once they
-are recorded.
+model, a manifest or a set verify cannot read, a capture file verify cannot open, no answer from SMG, a
+model it does not serve) or stops before its last case. After the first request, a case left without a
+verdict (no answer from SMG, a capture line verify cannot read, a set that cannot be read again) stops
+the sending: the cases answered so far are judged and reported, and the report names the case the run
+stopped at and every case it did not send. A case is judged against its reference alone for now: telling
+an `engine_defect` or `engines_split` from a `regression` needs the engine witnesses, which come once
+they are recorded.
 
 ## Layout
 
