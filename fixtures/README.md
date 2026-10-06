@@ -59,8 +59,30 @@ from it.
 ## Parse lines
 
 `record --kind parse --oracle reference` records the round trip: the corpus states the assistant
-message, the template renders it as the final assistant turn, and the text between the generation
-prompt and the end-of-turn token is the output.
+message, the template renders it as the final assistant turn, and the turn up to where generation
+stops is the output.
+
+Generation stops on vLLM's stop set: the `eos_token_id` of the checkpoint's `generation_config.json`
+at the manifest revision, or of its `config.json` when it ships none (read as transformers'
+`GenerationConfig.from_model_config` reads it, `text_config` included), and the tokenizer's eos when
+it has one. The output ends before the first of those stop ids in the rendered turn; after it the
+turn may hold only whitespace and further stop ids (Phi-4-mini writes `<|end|><|endoftext|>`). A
+turn with no stop id is the output whole when the next message (a user message after content, one
+tool message per call after tool calls) opens with one, right after the turn and on a token
+boundary: GLM writes no end marker, and its `<|user|>` and `<|observation|>` are in its generation
+config. Any other case is reported and not recorded. The provenance's `end_of_turn` holds the
+`stop_id` and the step that found it (`found_by`: `turn` or `next-message`): vLLM's final token ids
+end with that id, while its text is dropped.
+
+transformers' `generate` stops on the generation config's ids alone. Where it would not stop where
+vLLM does (Qwen3.5-9B ships no `generation_config.json`, its `config.json` lists only
+`<|endoftext|>`, and its turns end with the tokenizer's `<|im_end|>`), the output still ends where
+vLLM stops, as serving engines do; `end_of_turn.hf_generate` says what `generate` would do instead,
+and the run prints `stop sets differ <id>: ...`. `generation_config.json` must be cached at the
+revision or known absent, through the hub cache's `.no_exist` marker, which
+`hf download <model> generation_config.json --revision <sha>` leaves when the repository has no such
+file. Offline, transformers would take a file that is merely not cached for one the repository does
+not ship, so `record` stops with an error naming the file and that command.
 
 The template gets every assistant message, the request's history and the final turn alike, as vLLM
 gives it to a template (`_postprocess_messages` in `vllm/entrypoints/chat_utils.py` at v0.31.0, the
@@ -73,7 +95,7 @@ that is a rule of the corpus, not of an engine. A template that cannot take an o
 case, which is reported as a finding.
 
 A line carries `request` (what a replay sends to SMG),
-`tools`, `output_ids` (the output's tokens, the end-of-turn token excluded), `output_pieces` (the text
+`tools`, `output_ids` (the output's tokens, the stop id excluded), `output_pieces` (the text
 each of those tokens contributes under the tokenizer's incremental decode, tokenizers' `DecodeStream`:
 a token that does not complete a character contributes an empty piece and the token that completes it
 carries the whole character; one piece per id, and joined they are the output text), `malformed: false`,
@@ -81,7 +103,7 @@ carries the whole character; one piece per id, and joined they are the output te
 every two-way split for outputs of at most 32 tokens; `random-<seed>` thirty seeded plans with chunks
 of one to eight tokens) and `reference` with `source: roundtrip`, the `message` (with `role`), the
 `finish_reason` (`tool_calls` when the message has calls, else `stop`), the output `text` and the
-provenance. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
+provenance with `end_of_turn`. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
 sampled in context; a replay feeds them, with their pieces, as the engine's output. A case whose
 template does not extend the generation prompt when the turn is appended, or whose tokens do not give
 back its text under the incremental decode, is reported and not recorded, and the run exits 1;

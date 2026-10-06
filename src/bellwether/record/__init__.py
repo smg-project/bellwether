@@ -58,6 +58,7 @@ def run(args: argparse.Namespace) -> int:
     )
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
+    stop_sets_differ: list[tuple[str, str]] = []
     kind_dir = args.fixtures / manifest.slug / args.kind
     # This run's sets.toml tables, by set; None drops the set's table. sets.toml is read when they are put in, at the
     # end of the run, so a run of the other kind for this model that wrote it in the meantime keeps its tables.
@@ -83,6 +84,10 @@ def run(args: argparse.Namespace) -> int:
                 rejected += 1
                 continue
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
+            # Recorded where vLLM stops; transformers' generate would stop elsewhere (roundtrip.py says why).
+            elsewhere = line["reference"]["provenance"].get("end_of_turn", {}).get("hf_generate")
+            if elsewhere is not None:
+                stop_sets_differ.append((case_id, elsewhere))
             old = previous.get(case_id)
             if old is not None and "witnesses" in old:
                 if old.get("request") == case.request:
@@ -117,6 +122,8 @@ def run(args: argparse.Namespace) -> int:
                 tables[name] = None
                 print(f"{stale}: removed, the corpus has no set of that name")
     set_tables.update(args.fixtures / manifest.slug / set_tables.FILE, args.kind, tables)
+    for case_id, elsewhere in stop_sets_differ:
+        print(f"stop sets differ {case_id}: {elsewhere}", file=sys.stderr)
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
@@ -152,6 +159,6 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "message": {"role": "assistant", **case.message},
             "finish_reason": output.finish_reason,
             "text": output.text,
-            "provenance": provenance,
+            "provenance": {**provenance, "end_of_turn": output.end_of_turn},
         },
     }
