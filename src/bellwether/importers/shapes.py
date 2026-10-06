@@ -43,8 +43,13 @@ from pathlib import Path
 from . import bfcl, corpus_sets, gsm8k
 
 DATASET = "shapes"
-SIZE = 1000  # pairs, and so cases per set
-# BFCL's categories whose parse cases carry calls, in the order of bfcl.CATEGORIES; Java and JavaScript are left out.
+# Pairs, and so cases per set: at least the 184 that reach every case of the two smallest categories, and at most
+# GSM8K's 1319 test rows, since no text is given twice (``pair``). 1000 is a round number between the two; its six sets
+# take 18 MB plain, under the 50 MB a source's corpus may take (docs/benchmark-sets.md, Storage).
+SIZE = 1000
+# BFCL's categories whose parse cases carry calls, in the order of bfcl.CATEGORIES. Java and JavaScript wait for #26:
+# until it writes their values as strings, the BFCL importer gives only some of their rows a parse case (52 of 100 and
+# 22 of 50).
 CATEGORIES = (
     "simple_python",
     "multiple",
