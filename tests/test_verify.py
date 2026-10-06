@@ -226,16 +226,52 @@ def test_capture_lines_from_before_the_run_do_not_count(tmp_path, gateway):
     assert {case["verdict"] for case in json.loads(report.read_text())["cases"]} == {"match"}
 
 
-def test_other_clients_lines_and_a_line_still_being_written_are_skipped(tmp_path, gateway):
+def test_other_clients_lines_and_a_line_still_being_written_are_skipped_and_counted(tmp_path, gateway, capsys):
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
     cases = write_model(fixtures, "m1", "org/M1", CASES)
     gateway.serve(cases)
-    first, last = sorted(cases)[0], sorted(cases)[-1]
-    gateway.appended_after[first] = json.dumps({"request_id": "another-client", "input_ids": [1]}) + "\n"
-    gateway.appended_after[last] = '{"request_id": "another-client-2", "input_'
+    # Another client's request whose id starts with a case's id, a blank line, and a line still being written.
+    other = json.dumps({"request_id": "m1/render/hello-again", "input_ids": [1]})
+    gateway.appended_after["m1/render/hello"] = other + "\n\n"
+    gateway.appended_after["m1/render/tools"] = '{"request_id": "another-client-2", "input_'
 
     assert verify(gateway, fixtures, "--report", str(report)) == 0
-    assert {case["verdict"] for case in json.loads(report.read_text())["cases"]} == {"match"}
+
+    written = json.loads(report.read_text())
+    assert [(case["verdict"], case["lines"]) for case in written["cases"]] == [("match", 1)] * 3
+    assert written["capture"] == {"lines": 5, "joined": 3, "other": 2, "unfinished": True}
+    out = capsys.readouterr().out
+    assert "capture: 5 lines written during the run, 3 joined a case, 2 did not; a line was still being written" in out
+
+
+def test_every_line_for_a_case_is_compared(tmp_path, gateway):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    # A second request for the case, such as a retry, whose prompt is not the reference's.
+    again = {"request_id": "m1/render/hello", "input_ids": [*range(10, 22), 7, *range(23, 30)]}
+    gateway.appended_after["m1/render/hello"] = json.dumps(again) + "\n"
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 1
+
+    results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
+    hello = results["m1/render/hello"]
+    assert (hello["verdict"], hello["index"], hello["lines"]) == ("regression", 12, 2)
+    assert results["m1/render/budget"]["lines"] == 1
+
+
+def test_lines_under_ids_no_case_carries_are_counted(tmp_path, gateway, capsys):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    cases = write_model(fixtures, "m1", "org/M1", CASES)
+    gateway.serve(cases)
+    for n, case_id in enumerate(cases):
+        gateway.request_ids[case_id] = f"chatcmpl-{n}"  # an SMG that does not pass the rid through
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 1
+
+    written = json.loads(report.read_text())
+    assert {case["verdict"] for case in written["cases"]} == {"missing"}
+    assert written["capture"] == {"lines": 3, "joined": 0, "other": 3, "unfinished": False}
+    assert "capture: 3 lines written during the run, 0 joined a case, 3 did not" in capsys.readouterr().out
 
 
 def test_a_difference_gives_the_first_differing_index_and_the_ids_and_text_around_it(tmp_path, gateway, capsys):
@@ -359,7 +395,9 @@ def test_a_capture_file_nobody_writes_leaves_every_answered_case_missing(tmp_pat
     argv = ["--smg", gateway.url, "--capture", str(tmp_path / "elsewhere.jsonl"), "--fixtures", str(fixtures)]
 
     assert main(["verify", *argv, "--report", str(report)]) == 1
-    assert {case["verdict"] for case in json.loads(report.read_text())["cases"]} == {"missing"}
+    written = json.loads(report.read_text())
+    assert {case["verdict"] for case in written["cases"]} == {"missing"}
+    assert written["capture"] == {"lines": 0, "joined": 0, "other": 0, "unfinished": False}
 
 
 def test_a_request_id_with_the_prefill_decode_suffix_joins_to_its_case(tmp_path, gateway):
@@ -368,14 +406,14 @@ def test_a_request_id_with_the_prefill_decode_suffix_joins_to_its_case(tmp_path,
     gateway.serve(cases)
     for n, case_id in enumerate(cases):
         gateway.request_ids[case_id] = case_id + PD_SUFFIX.format(n)
-    # A retry goes out under a fresh suffix; the first line for a case is the one compared.
-    retry = {"request_id": "m1/render/hello" + PD_SUFFIX.format(99), "input_ids": [1]}
+    # A retry goes out under a fresh suffix, with the same prompt; its line joins the case too.
+    retry = {"request_id": "m1/render/hello" + PD_SUFFIX.format(99), "input_ids": list(range(10, 30))}
     gateway.appended_after["m1/render/hello"] = json.dumps(retry) + "\n"
 
     assert verify(gateway, fixtures, "--report", str(report)) == 0
 
-    verdicts = {case["id"]: case["verdict"] for case in json.loads(report.read_text())["cases"]}
-    assert verdicts == dict.fromkeys(cases, "match")
+    results = {case["id"]: (case["verdict"], case["lines"]) for case in json.loads(report.read_text())["cases"]}
+    assert results == {**dict.fromkeys(cases, ("match", 1)), "m1/render/hello": ("match", 2)}
 
 
 @pytest.mark.parametrize("prefill_decode", [False, True], ids=["verbatim", "prefill-decode"])

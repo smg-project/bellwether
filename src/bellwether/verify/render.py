@@ -45,7 +45,8 @@ class Capture:
 
     The mock creates the file when it starts and appends to it, so what is there at the start is an earlier run's.
     Each read takes the complete lines written since the last one; the text after the last newline is a line still
-    being written, kept for the next read.
+    being written, kept for the next read. It counts the lines written during the run and those that joined a case,
+    so a line no case takes is counted, never dropped unseen.
     """
 
     def __init__(self, path: Path) -> None:
@@ -56,6 +57,8 @@ class Capture:
             raise CannotVerify(f"cannot read the capture file {path}: {err.strerror or err}") from None
         self._at = self._file.seek(0, os.SEEK_END)  # where the text not yet split into lines starts
         self._pending = b""
+        self.written = 0  # complete lines written during the run, blank ones included
+        self.joined = 0  # those that carried the id of the case they were read for
 
     def __enter__(self) -> Capture:
         return self
@@ -66,6 +69,7 @@ class Capture:
     def lines(self) -> list[tuple[int, object]]:
         """``(byte offset, line)`` for each complete line written since the last read; blank lines are skipped."""
         *complete, self._pending = (self._pending + self._file.read()).split(b"\n")
+        self.written += len(complete)
         found = []
         for raw in complete:
             at, self._at = self._at, self._at + len(raw) + 1
@@ -78,6 +82,14 @@ class Capture:
                     f"{self.path}: the line at byte {at} is not JSON; is this the mock's capture file?"
                 ) from None
         return found
+
+    def counts(self) -> dict:
+        """The lines written during the run, the last case's answer included: how many, how many joined a case, how
+        many did not (another client's, a line for no case, a blank one), and whether one was still being written."""
+        *complete, self._pending = (self._pending + self._file.read()).split(b"\n")
+        self.written += len(complete)
+        other = self.written - self.joined
+        return {"lines": self.written, "joined": self.joined, "other": other, "unfinished": bool(self._pending)}
 
 
 def client() -> httpx.Client:
@@ -111,26 +123,32 @@ def served_models(http: httpx.Client, url: str) -> set[str]:
 
 
 def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manifest, set_name: str, case: dict) -> dict:
-    """Send one case and judge it on the first capture line written for it since the previous case's answer."""
+    """Send one case and judge it on every capture line written for it since the previous case's answer.
+
+    A request can reach the engine more than once (a retry; under prefill-decode, both legs), and each time SMG
+    must have sent the reference's ids, so the case matches only when every line does.
+    """
     try:
         status, body, location = send(http, url, request_body(case, manifest.model))
     except (httpx.HTTPError, httpx.InvalidURL) as err:
         raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
-    line = None
-    for at, candidate in capture.lines():
-        request_id = candidate.get("request_id") if isinstance(candidate, dict) else None
-        if line is not None or not carries(request_id, case["id"]):
+    joined = []
+    for at, line in capture.lines():
+        request_id = line.get("request_id") if isinstance(line, dict) else None
+        if not carries(request_id, case["id"]):
             continue
-        ids = candidate.get("input_ids")
+        ids = line.get("input_ids")
         if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
             raise CannotVerify(
                 f"{capture.path}: the line at byte {at} for {request_id} has no list of integer input_ids"
             )
-        line = candidate
+        joined.append(line)
+    capture.joined += len(joined)
     refused = refusal(status, body)
-    if line is not None:
+    if joined:
         # SMG sent the engine its prompt, so the ids are compared whatever it answered afterwards.
-        outcome = compare(case, line)
+        outcomes = (compare(case, line) for line in joined)
+        outcome = next((found for found in outcomes if found["verdict"] != "match"), {"verdict": "match"})
     elif status == 200:
         outcome = {"verdict": "missing"}
     elif refused is not None:
@@ -139,7 +157,8 @@ def verify_case(http: httpx.Client, url: str, capture: Capture, manifest: Manife
         outcome = {"verdict": "measurement_failed"}
     if status != 200 and "message" not in outcome:
         outcome["message"] = f"redirected to {location}" if location is not None else error_message(body)
-    return {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "status": status, "body": body}
+    result = {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "lines": len(joined)}
+    return {**result, "status": status, "body": body}
 
 
 def request_body(case: dict, model: str) -> dict:

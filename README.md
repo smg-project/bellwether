@@ -234,11 +234,14 @@ the JUnit XML are put together when the run finishes.
 | `missing` | SMG answered 200, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
 | `measurement_failed` | SMG answered neither 200 nor its refusal (a redirect, a 404 for a model no worker serves, a 429 or 5xx, a proxy's page) and no capture line carries the case's id: nothing was measured |
 
-A capture line is compared whatever SMG answered after sending it, and the answer is kept beside the
-verdict. `missing` and `measurement_failed` are about the setup, so no known difference excuses them.
-Before the first case, `verify` asks SMG's `/v1/models` for the models it serves; a model with cases
-that SMG does not list stops the run, as does an answer other than SMG's list (a 404 there usually means
-`--smg` ends in `/v1`).
+Every capture line that carries a case's id is compared, whatever SMG answered after sending it, and the
+answer is kept beside the verdict. A request can reach the engine more than once (a retry; under
+prefill-decode, both legs), so a case matches only when each of its lines does. The report counts the
+lines written during the run, those that joined a case and those that did not (another client's, a line
+for no case), so a line no case takes is never dropped unseen. `missing` and `measurement_failed` are
+about the setup, so no known difference excuses them. Before the first case, `verify` asks SMG's
+`/v1/models` for the models it serves; a model with cases that SMG does not list stops the run, as does
+an answer other than SMG's list (a 404 there usually means `--smg` ends in `/v1`).
 
 `--known PATH` lists SMG's known differences as a TOML table of `"<fixture id>" = "<reason>"`. A listed
 case passes while it is a regression or rejected and fails once it matches, and a listed id that names

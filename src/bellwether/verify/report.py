@@ -131,7 +131,9 @@ class Writer:
             ET.SubElement(testcase, "error", type="not-sent", message=message)
             self._suite(f"{model} {self.kind}").add(testcase)
 
-    def finish(self, *, provenance: dict, known_without_case: list[str], models_without_cases: list[str]) -> dict:
+    def finish(
+        self, *, provenance: dict, capture: dict, known_without_case: list[str], models_without_cases: list[str]
+    ) -> dict:
         """Print the totals, write the JSON report and the JUnit XML, and return the report without its cases."""
         cases = self.passed + self.failed
         summary = {"cases": cases, **self.counts, "passed": self.passed, "failed": self.failed, "not_sent": self.unsent}
@@ -141,6 +143,7 @@ class Writer:
             "summary": summary,
             "passed": self.failed == 0 and not known_without_case and self.stopped is None,
             "stopped": self.stopped,
+            "capture": capture,
             "known_without_case": known_without_case,
             "models_without_cases": models_without_cases,
         }
@@ -148,6 +151,9 @@ class Writer:
             print(f"known {case_id}: {WITHOUT_CASE}")
         for model in models_without_cases:
             print(f"{model}: no render cases")
+        lines = f"capture: {capture['lines']} lines written during the run, {capture['joined']} joined a case"
+        lines += f", {capture['other']} did not" + ("; a line was still being written" if capture["unfinished"] else "")
+        print(lines)
         counts = ", ".join(f"{self.counts[verdict]} {verdict}" for verdict in VERDICTS)
         tally = f"{self.passed} pass, {self.failed} fail"
         if known_without_case:

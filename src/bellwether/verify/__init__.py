@@ -60,6 +60,7 @@ def run(args: argparse.Namespace) -> int:
             listed = send(sets, http, args.smg, capture, known, writer)
             written = writer.finish(
                 provenance=report.provenance(url=args.smg, capture=args.capture, known=args.known, manifests=manifests),
+                capture=capture.counts(),
                 known_without_case=report.known_without_case(known, manifests, listed),
                 models_without_cases=without_cases,
             )
