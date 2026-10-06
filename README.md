@@ -52,9 +52,11 @@ as evidence without authority. `docs/benchmark-sets.md` has the rules.
 Every undisputed case gets a verdict: `match`, `engine_defect` (SMG agrees with the sources of
 truth, a witnessing engine does not), `engines_split`, `policy` (malformed output, documented
 fallback expected), or `regression` (SMG disagrees with them). A `disputed` case gets none; it waits
-for its disagreement's issue. Only `regression`, an `engine_defect` without a waiver, and a stale
-waiver fail the gate. Waivers live in `waivers/engine_defects.toml`, carry evidence and an upstream
-link, and expire when the engine catches up.
+for its disagreement's issue. A case that has only its Hugging Face result so far is judged against
+it, and becomes settled or disputed once vLLM's result arrives. Only `regression`, an
+`engine_defect` without a waiver, and a stale waiver fail the gate. Waivers live in
+`waivers/engine_defects.toml`, carry evidence and an upstream link, and expire when the engine
+catches up.
 
 ## Vocabulary
 
