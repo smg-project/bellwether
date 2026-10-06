@@ -8,7 +8,13 @@ must turn back into that message, and its token ids are the engine chunks a repl
 
 Generation stops on vLLM's stop set: the ``eos_token_id`` of the checkpoint's generation config
 (``generation_config.json``, else ``config.json`` as ``GenerationConfig.from_model_config`` reads it)
-and the tokenizer's eos, when it has one (``SamplingParams.update_from_generation_config``). The
+and the tokenizer's eos, when it has one (``SamplingParams.update_from_generation_config``). That is
+vLLM's stop set within one limit. vLLM reads ``config.json`` through the config class of its model
+type, whose defaults count, and here that class is transformers' own for a model type transformers
+knows; vendor code is never run. So a default eos that ``config.json`` does not state is missed when
+the class is the vendor's (``auto_map``), whose code vLLM runs under ``--trust-remote-code``, or
+vLLM's own (``_CONFIG_REGISTRY`` in ``vllm/transformers_utils/config.py``). Only a checkpoint that
+ships no ``generation_config.json`` can be affected. The
 output is the text before the first stop id in the rendered turn, after which the turn may hold only
 whitespace and further stop ids. A template that writes no end marker (GLM's) gives the whole turn,
 provided the next message, a user message after content or a tool message after tool calls, opens
@@ -223,7 +229,8 @@ def generation_eos_ids(model: str, revision: str) -> tuple[list[int], str | None
     """The ``eos_token_id`` transformers' ``generate`` stops on, and the file it comes from.
 
     ``generate`` reads ``generation_config.json``, else ``config.json`` through ``GenerationConfig.from_model_config``,
-    which takes a value the top level leaves unset from ``text_config`` (or ``decoder``, ``generator``).
+    which takes a value the top level leaves unset from ``text_config`` (or ``decoder``, ``generator``). The model
+    config it is given is the one ``model_config`` builds.
     """
     from transformers import GenerationConfig
 
@@ -234,9 +241,26 @@ def generation_eos_ids(model: str, revision: str) -> tuple[list[int], str | None
         path = checkpoint_file(model, revision, "config.json")
         if path is None:
             return [], None
-        source, config = "config.json", GenerationConfig.from_model_config(json.loads(path.read_text()))
+        source, config = "config.json", GenerationConfig.from_model_config(model_config(json.loads(path.read_text())))
     eos = config.eos_token_id
     return ([] if eos is None else [eos] if isinstance(eos, int) else [int(i) for i in eos]), source
+
+
+def model_config(values: dict):
+    """``config.json`` as the model config vLLM gives ``GenerationConfig.from_model_config``, without vendor code.
+
+    vLLM gives it the config object, which carries its class's defaults: ``{"model_type": "llama"}`` states no eos,
+    and ``LlamaConfig``'s is 2. For a model type transformers knows, that is transformers' class, built the way
+    ``AutoConfig.from_pretrained`` builds it. Any other model type's class is the vendor's code, named by ``auto_map``,
+    which bellwether never runs (nor ``trust_remote_code``): its values are read as written, and a default eos that
+    class would set is not seen.
+    """
+    from transformers import CONFIG_MAPPING
+
+    model_type = values.get("model_type")
+    if isinstance(model_type, str) and model_type in CONFIG_MAPPING:
+        return CONFIG_MAPPING[model_type].from_dict(values)
+    return values
 
 
 def checkpoint_file(model: str, revision: str, filename: str) -> Path | None:

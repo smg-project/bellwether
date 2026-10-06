@@ -66,7 +66,13 @@ stops is the output.
 Generation stops on vLLM's stop set: the `eos_token_id` of the checkpoint's `generation_config.json`
 at the manifest revision, or of its `config.json` when it ships none (read as transformers'
 `GenerationConfig.from_model_config` reads it, `text_config` included), and the tokenizer's eos when
-it has one. The output ends before the first of those stop ids in the rendered turn; after it the
+it has one. vLLM reads `config.json` through the config class of its model type, whose defaults
+count (`{"model_type": "llama"}` states no eos, and `LlamaConfig`'s is 2); here that class is
+transformers' own for a model type transformers knows. Bellwether never runs vendor code, so this is
+vLLM's stop set within one limit: a default eos that `config.json` does not state is missed when the
+class is the vendor's (`auto_map`, which vLLM runs under `--trust-remote-code`) or one of vLLM's own
+(`_CONFIG_REGISTRY` in `vllm/transformers_utils/config.py`). Only a checkpoint that ships no
+`generation_config.json` can be affected. The output ends before the first of those stop ids in the rendered turn; after it the
 turn may hold only whitespace and further stop ids (Phi-4-mini writes `<|end|><|endoftext|>`). A
 turn with no stop id is the output whole when the next message (a user message after content, one
 tool message per call after tool calls) opens with one, right after the turn and on a token

@@ -1115,6 +1115,29 @@ def test_a_hub_checkpoint_needs_its_generation_config_cached_or_known_absent(tmp
     assert generation_eos_ids("acme/Tiny-Chat", revision) == ([7, 8], "generation_config.json")
 
 
+def test_config_json_is_read_with_the_defaults_of_the_class_transformers_has_for_its_model_type(
+    tiny_model, tmp_path_factory
+):
+    # vLLM gives GenerationConfig.from_model_config the config object, which carries its class's defaults: a
+    # config.json of {"model_type": "llama"} states no eos, and LlamaConfig's is 2.
+    model = tiny_variant(tiny_model, tmp_path_factory, "llama-config-chat", TEMPLATE)
+    (model / "config.json").write_text(json.dumps({"model_type": "llama"}))
+    assert generation_eos_ids(str(model), "local") == ([2], "config.json")
+
+
+def test_config_json_of_a_model_type_transformers_does_not_know_is_read_as_written(tiny_model, tmp_path_factory):
+    # Its class is the vendor's code, named by auto_map, which bellwether never runs: the file is read as written.
+    model = tiny_variant(tiny_model, tmp_path_factory, "vendor-config-chat", TEMPLATE)
+    (model / "configuration_acme.py").write_text('raise RuntimeError("the vendor\'s code ran")\n')
+    config = {
+        "model_type": "acme_chat",
+        "auto_map": {"AutoConfig": "configuration_acme.AcmeConfig"},
+        "text_config": {"eos_token_id": 7},
+    }
+    (model / "config.json").write_text(json.dumps(config))
+    assert generation_eos_ids(str(model), "local") == ([7], "config.json")
+
+
 def test_where_hf_generate_would_not_stop_the_run_says_so_once_and_sets_toml_names_its_stop_ids(
     tmp_path, tiny_model, tmp_path_factory, capsys
 ):
