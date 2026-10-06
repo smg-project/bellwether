@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from .hub import Details, Hub, HubUnavailable
-from .registry import Entry
+from .registry import NOTHING_SERVED, Entry, Served
 from .rules import (
     NO_CHECKPOINT,
-    POOLING_HEADS,
     TIER1,
     admits_details,
     admits_listing,
     is_current_chat,
+    is_generative_in_code,
     is_gpt_oss,
     is_hub_id,
     order_key,
@@ -159,7 +159,11 @@ def registry_only_rows(entries: Iterable[Entry], built: date) -> list[Row]:
 
 
 def hub_rows(
-    entries: list[Entry], hub: Hub, built: date, log: Callable[[str], None] = lambda message: None
+    entries: list[Entry],
+    hub: Hub,
+    built: date,
+    log: Callable[[str], None] = lambda message: None,
+    served: Served = NOTHING_SERVED,
 ) -> list[Row]:
     """The registries' checkpoints as the Hub has them, then each of their organizations' chat checkpoints."""
     found = _resolve(registry_checkpoints(entries), hub)
@@ -168,7 +172,7 @@ def hub_rows(
     log(f"registries: {len(found)} checkpoints, {missing} not on the Hub")
     if unanswered:
         log(f"registries: no answer from the Hub for {', '.join(unanswered)}; their rows say why")
-    text, multimodal = _registered(entries, found)
+    text, multimodal = _registered(entries, served)
     rows = {
         model: _row(model, f.details, f.named, built, checked=True, status=f.unavailable) for model, f in found.items()
     }
@@ -216,21 +220,26 @@ def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, _Found]:
     return found
 
 
-def _registered(entries: list[Entry], found: dict[str, _Found]) -> tuple[set[str], set[str]]:
-    """Text and multimodal architectures: vLLM's generative tables, and what registry checkpoints' configs name.
+def _registered(entries: list[Entry], served: Served) -> tuple[set[str], set[str]]:
+    """Text and multimodal architectures: vLLM's generative tables, and what SGLang's code serves.
 
-    SGLang's docs name checkpoints, not architectures, so the configs of those checkpoints are what
-    says which architectures SGLang serves.
+    SGLang's code also serves pooling and draft heads, which are left out, and so is a name vLLM
+    files only among its pooling, draft or backend models. An architecture SGLang serves through a
+    multimodal processor is multimodal.
     """
     text: set[str] = set()
     multimodal: set[str] = set()
+    elsewhere: set[str] = set()
     for entry in entries:
-        if entry.engine == "vllm" and entry.generative:
-            (multimodal if entry.multimodal else text).add(entry.name)
-    for f in found.values():
-        if f.details is not None:
-            architectures = {arch for arch in f.details.architectures if not arch.endswith(POOLING_HEADS)}
-            (multimodal if f.named.multimodal else text).update(architectures)
+        if entry.engine == "vllm":
+            if entry.generative:
+                (multimodal if entry.multimodal else text).add(entry.name)
+            else:
+                elsewhere.add(entry.name)
+    only_elsewhere = elsewhere - text - multimodal
+    for architecture in served.architectures:
+        if is_generative_in_code(architecture) and architecture not in only_elsewhere:
+            (multimodal if architecture in served.multimodal else text).add(architecture)
     return text, multimodal
 
 

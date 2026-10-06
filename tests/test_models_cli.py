@@ -38,7 +38,7 @@ def cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
             files[rel] = hashlib.sha256(content).hexdigest()
-        monkeypatch.setattr(registry, pin.engine.upper(), replace(pin, files=files))
+        monkeypatch.setattr(registry, pin.engine.upper(), replace(pin, files=files, dirs={}))  # no code registry here
     return root
 
 

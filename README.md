@@ -153,9 +153,14 @@ two sources:
 - **The engines' registries at pinned commits.** vLLM's `tests/models/registry.py` at v0.31.0, read
   with `ast`: every checkpoint its text-generation and multimodal tables name, except under a
   ranking or classification head. SGLang's three "Text Generation" docs pages at 7d22b7a8: every id
-  in a table's example column. The files come from a checkout given with `--vllm-src` and
-  `--sglang-src` (read with `git show`, whatever the checkout has checked out) or from GitHub, and
-  are cached by commit under `~/.cache/bellwether/registries`.
+  in a table's example column. SGLang's code at the same commit, read with `ast`: each module of
+  `python/sglang/srt/models/` names the architectures it serves as `EntryClass` (251), and the
+  multimodal processors name those they serve with images, audio or video. The registered
+  architectures are vLLM's generative tables and those SGLang's code serves, leaving out pooling and
+  speculative-decoding draft heads. The files come from a checkout given with `--vllm-src` and
+  `--sglang-src` (read with `git show`, whatever the checkout has checked out) or from GitHub, are
+  checked against their pinned sha256 on every use, and are cached by commit under
+  `~/.cache/bellwether/registries`.
 - **The Hugging Face Hub as it is today.** Every model of the organizations whose checkpoints the
   engines give as an architecture's example (vLLM's default checkpoint, the ids in SGLang's docs)
   whose `config.json` names a registered architecture and that ships a chat template, leaving out

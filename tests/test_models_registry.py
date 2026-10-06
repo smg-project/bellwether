@@ -15,8 +15,17 @@ from pathlib import Path
 import httpx
 import pytest
 
-from bellwether.models.pins import SGLANG, SGLANG_PAGES, VLLM, Pin, PinError, pinned_root
-from bellwether.models.registry import read_sglang, read_vllm
+from bellwether.models.pins import (
+    SGLANG,
+    SGLANG_MODELS,
+    SGLANG_PAGES,
+    SGLANG_PROCESSORS,
+    VLLM,
+    Pin,
+    PinError,
+    pinned_root,
+)
+from bellwether.models.registry import read_sglang, read_sglang_code, read_vllm
 
 DATA = Path(__file__).parent / "data" / "models"
 TEXT = "_TEXT_GENERATION_EXAMPLE_MODELS"
@@ -173,6 +182,56 @@ def test_sglang_reader_refuses_a_page_without_its_table() -> None:
         read_sglang("<html><body>429 Too Many Requests</body></html>", GENERATIVE_PAGE)
 
 
+def test_sglang_code_names_each_modules_entry_class_and_the_classes_its_multimodal_processors_serve() -> None:
+    models = {  # in the forms SGLang's modules use at the pin
+        "qwen3.py": b"class Qwen3ForCausalLM(nn.Module):\n    pass\n\n\nEntryClass = Qwen3ForCausalLM\n",
+        "zaya.py": (  # a module may begin with a byte-order mark
+            b"\xef\xbb\xbf# Copyright\nclass ZayaForCausalLM: ...\nEntryClass = [ZayaForCausalLM]\n"
+        ),
+        "moss_vl.py": b"class MossVLForConditionalGeneration: ...\nEntryClass = (MossVLForConditionalGeneration,)\n",
+        "dots3.py": (
+            b"from sglang.srt.models.dots3_common.model import Dots3NoteForCausalLM\n"
+            b"EntryClass = Dots3NoteForCausalLM\n"
+        ),
+        "renamed.py": b"from sglang.srt.models.base import BaseForCausalLM as Renamed\nEntryClass = [Renamed]\n",
+        "utils.py": b"def helper():\n    return 1\n",  # no EntryClass: not a model module
+    }
+    processors = {
+        "moss_vl.py": (
+            b"from sglang.srt.models.moss_vl import MossVLForConditionalGeneration as MossVL\n"
+            b"class MossVLProcessor(BaseMultimodalProcessor):\n    models = [MossVL]\n"
+        ),
+        "glm4v.py": (
+            b"from sglang.srt.models.glm4v import Glm4vForConditionalGeneration\n"
+            b"class Glm4vImageProcessor(BaseMultimodalProcessor):\n"
+            b"    models = [m for m in [Glm4vForConditionalGeneration] if m is not None]\n"
+        ),
+        "executor.py": b"class Executor:\n    pass\n",  # serves no model
+        "base_processor.py": b"class BaseMultimodalProcessor:\n    models = []\n",  # the base serves none itself
+    }
+    served = read_sglang_code(models, processors)
+    assert served.architectures == {
+        "Qwen3ForCausalLM",
+        "ZayaForCausalLM",
+        "MossVLForConditionalGeneration",
+        "Dots3NoteForCausalLM",
+        "BaseForCausalLM",  # SGLang registers a class by its own name, whatever the module calls it
+    }
+    assert served.multimodal == {"MossVLForConditionalGeneration", "Glm4vForConditionalGeneration"}
+
+
+@pytest.mark.parametrize(
+    ("models", "processors", "module"),
+    [
+        ({"weird.py": b"EntryClass = make_classes()\n"}, {}, "weird.py"),
+        ({"a.py": b"class A: ...\nEntryClass = A\n"}, {"odd.py": b"class P:\n    models = [load()]\n"}, "odd.py"),
+    ],
+)
+def test_sglang_code_refuses_what_it_cannot_read_as_written(models: dict, processors: dict, module: str) -> None:
+    with pytest.raises(ValueError, match=module):
+        read_sglang_code(models, processors)
+
+
 def test_the_pins_are_the_designs_refs() -> None:
     assert (VLLM.ref, VLLM.commit) == ("v0.31.0", "db9527a46873454610df6dbedf79a36d6bf1a7f6")
     assert tuple(VLLM.files) == ("tests/models/registry.py",)
@@ -278,6 +337,80 @@ def test_a_checkout_file_that_is_not_the_pinned_content_is_refused(tmp_path: Pat
         pinned_root(pin, tmp_path / "cache", checkout=repo)
 
 
+def sha256sum(files: dict[str, str]) -> str:
+    """A directory's pin as the sha256sum tool would give it: one "<sha256>  <name>" line per module, by name."""
+    lines = "".join(f"{sha256(text)}  {name}\n" for name, text in sorted(files.items()))
+    return sha256(lines)
+
+
+MODULES = {"a.py": "EntryClass = A\n", "b.py": "EntryClass = B\n"}
+
+
+def test_a_pinned_directory_comes_from_a_checkout_as_its_top_level_modules(tmp_path: Path) -> None:
+    repo = tmp_path / "checkout"
+    models = repo / "python/pkg/models"
+    (models / "sub").mkdir(parents=True)
+    git(repo, "init", "-q")
+    for name, text in MODULES.items():
+        (models / name).write_text(text)
+    (models / "sub" / "__init__.py").write_text("")  # a subpackage, which SGLang's registry skips
+    (models / "README.md").write_text("not a module")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "pinned")
+    pin = Pin(
+        "sglang", "example/sglang", "x", git(repo, "rev-parse", "HEAD"), {}, {"python/pkg/models": sha256sum(MODULES)}
+    )
+    root = pinned_root(pin, tmp_path / "cache", checkout=repo)
+    assert {p.name for p in (root / "python/pkg/models").glob("*.py")} == {"a.py", "b.py"}
+
+
+def github(listing: list[dict], files: dict[str, str], urls: list[str]) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        urls.append(str(request.url))
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json=listing)
+        return httpx.Response(200, content=files[request.url.path.rsplit("/", 1)[1]].encode())
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_a_pinned_directory_from_github_is_listed_once_and_then_read_from_the_cache(tmp_path: Path) -> None:
+    listing = [
+        {"name": "a.py", "type": "file"},
+        {"name": "b.py", "type": "file"},
+        {"name": "sub", "type": "dir"},
+        {"name": "README.md", "type": "file"},
+    ]
+    urls: list[str] = []
+    pin = Pin("sglang", "example/sglang", "x", "e" * 40, {}, {"python/pkg/models": sha256sum(MODULES)})
+    root = pinned_root(pin, tmp_path / "cache", client=github(listing, MODULES, urls))
+    assert urls[0] == f"https://api.github.com/repos/example/sglang/contents/python/pkg/models?ref={'e' * 40}"
+    assert len(urls) == 3  # the listing, then a.py and b.py
+    assert (root / "python/pkg/models/b.py").read_text() == "EntryClass = B\n"
+    pinned_root(pin, tmp_path / "cache", client=github(listing, MODULES, urls))
+    assert len(urls) == 3  # a full cache, checked whole, makes no request
+
+
+def test_a_pinned_directory_that_is_not_the_pinned_content_is_refused(tmp_path: Path) -> None:
+    listing = [{"name": "a.py", "type": "file"}, {"name": "b.py", "type": "file"}]
+    changed = {**MODULES, "b.py": "EntryClass = C\n"}
+    pin = Pin("sglang", "example/sglang", "x", "f" * 40, {}, {"python/pkg/models": sha256sum(MODULES)})
+    with pytest.raises(PinError, match="sha256"):
+        pinned_root(pin, tmp_path / "cache", client=github(listing, changed, []))
+    assert not (tmp_path / "cache" / "sglang" / ("f" * 40) / "python/pkg/models").exists()
+
+
+def test_a_cached_directory_with_a_changed_module_is_fetched_again(tmp_path: Path) -> None:
+    listing = [{"name": "a.py", "type": "file"}, {"name": "b.py", "type": "file"}]
+    pin = Pin("sglang", "example/sglang", "x", "a" * 40, {}, {"python/pkg/models": sha256sum(MODULES)})
+    root = pinned_root(pin, tmp_path / "cache", client=github(listing, MODULES, []))
+    (root / "python/pkg/models/a.py").write_text("tampered = 1\n")
+    urls: list[str] = []
+    pinned_root(pin, tmp_path / "cache", client=github(listing, MODULES, urls))
+    assert len(urls) == 3
+    assert (root / "python/pkg/models/a.py").read_text() == "EntryClass = A\n"
+
+
 def cached(pin: Pin, rel: str) -> str:
     path = Path.home() / ".cache" / "bellwether" / "registries" / pin.engine / pin.commit / rel
     if not path.is_file():
@@ -306,3 +439,25 @@ def test_sglang_at_the_pinned_commit_yields_every_id_its_pages_format_as_code() 
         assert [c for e in entries for c in e.checkpoints] == code_ids.findall(source)
     multimodal = read_sglang(cached(SGLANG, MULTIMODAL_PAGE), MULTIMODAL_PAGE)
     assert [e.name for e in multimodal if not e.checkpoints] == ["JetVLM", "JetVLM"]
+
+
+def cached_modules(pin: Pin, rel_dir: str) -> dict[str, bytes]:
+    root = Path.home() / ".cache" / "bellwether" / "registries" / pin.engine / pin.commit / rel_dir
+    if not (root / ".listed").is_file():
+        pytest.skip(f"{pin.engine}'s {rel_dir} at {pin.ref} is not cached; `bellwether models` caches it")
+    return {name: (root / name).read_bytes() for name in (root / ".listed").read_text().split()}
+
+
+def test_sglang_code_at_the_pinned_commit_serves_the_five_architectures_its_docs_name_no_checkpoint_for() -> None:
+    served = read_sglang_code(cached_modules(SGLANG, SGLANG_MODELS), cached_modules(SGLANG, SGLANG_PROCESSORS))
+    assert len(served.architectures) == 251
+    five = {
+        "ZayaForCausalLM",
+        "Sarashina2VisionForCausalLM",
+        "POINTSV15ChatModel",
+        "YiVLForCausalLM",
+        "MossVLForConditionalGeneration",
+    }
+    assert five <= served.architectures
+    assert {"Sarashina2VisionForCausalLM", "POINTSV15ChatModel", "MossVLForConditionalGeneration"} <= served.multimodal
+    assert {"Glm4vForConditionalGeneration", "Qwen3_5MoeForConditionalGeneration"} <= served.multimodal

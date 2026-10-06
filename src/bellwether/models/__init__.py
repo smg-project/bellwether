@@ -23,7 +23,7 @@ FAILED = 1
 
 def run(args: argparse.Namespace) -> int:
     try:
-        entries = read_pinned(args.cache, args.vllm_src, args.sglang_src)
+        entries, served = read_pinned(args.cache, args.vllm_src, args.sglang_src)
     except PinError as err:
         print(f"bellwether models: {err}", file=sys.stderr)
         return FAILED
@@ -31,7 +31,7 @@ def run(args: argparse.Namespace) -> int:
     if args.registry_only:
         rows = registry_only_rows(entries, built)
     else:
-        rows = hub_rows(entries, HfHub(), built, log=_note)
+        rows = hub_rows(entries, HfHub(), built, log=_note, served=served)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(to_jsonl(rows))
     for note in unnamed(entries):

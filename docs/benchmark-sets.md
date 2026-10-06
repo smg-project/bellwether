@@ -44,7 +44,8 @@ for now; embedding, reranking and classification models are out.
   - the engines' registries at pinned refs: every example checkpoint that vLLM's
     `tests/models/registry.py` names for a generative architecture (134 text-generation and 130
     multimodal architectures at the 2026-10-04 ref), and every checkpoint in SGLang's
-    supported-models docs;
+    supported-models docs; the architectures SGLang serves come from its code, each model module's
+    `EntryClass`, since the docs name checkpoints and not architectures;
   - the Hugging Face Hub, for each organization that publishes a registered architecture: its
     models whose `config.json` names a registered architecture and that ship a chat template.
     Two kinds are left out. Quantized and converted copies (GGUF, AWQ, GPTQ, MLX, ONNX, FP8,

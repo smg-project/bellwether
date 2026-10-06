@@ -34,6 +34,9 @@ POOLING_HEADS = (
     "ForProcessRewardModel",
     "ForEmbedding",
 )
+# Heads that draft tokens for speculative decoding. SGLang's code serves them beside the models they
+# draft for; vLLM keeps them in a table of their own.
+DRAFT_HEADS = ("Eagle", "Eagle3", "NextN", "MTP", "DSpark")
 # Pipeline tags of embedding, reranking and classification models, which the list leaves out.
 NON_GENERATIVE_PIPELINES = frozenset(
     {
@@ -91,6 +94,11 @@ def is_hub_id(name: str) -> bool:
 
 def is_generative_architecture(table: str, architecture: str) -> bool:
     return table in GENERATIVE_TABLES and not architecture.endswith(POOLING_HEADS)
+
+
+def is_generative_in_code(architecture: str) -> bool:
+    """An architecture an engine's code serves, unless it scores or classifies, or drafts for another."""
+    return not architecture.endswith(POOLING_HEADS + DRAFT_HEADS)
 
 
 def is_generative_pipeline(pipeline_tag: str | None) -> bool:

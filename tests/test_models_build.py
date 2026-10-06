@@ -8,7 +8,7 @@ from pathlib import Path
 
 from bellwether.models.build import Row, hub_rows, missing_from_tier1, registry_only_rows, set_aside, to_jsonl, unnamed
 from bellwether.models.hub import Details, HubUnavailable, Listed
-from bellwether.models.registry import Entry, read_sglang, read_vllm
+from bellwether.models.registry import Entry, Served, read_sglang, read_vllm
 
 DATA = Path(__file__).parent / "data" / "models"
 BUILT = date(2026, 10, 6)
@@ -193,9 +193,12 @@ LISTINGS = {
 }
 
 
+SGLANG_CODE = Served(frozenset({"XverseMoeForCausalLM"}), frozenset())  # what SGLang's code serves, in brief
+
+
 def build() -> tuple[list[Row], FakeHub, list[str]]:
     hub, log = FakeHub(LISTINGS, MODELS), []
-    return hub_rows(ENTRIES, hub, BUILT, log.append), hub, log
+    return hub_rows(ENTRIES, hub, BUILT, log.append, SGLANG_CODE), hub, log
 
 
 def test_the_hub_list_holds_the_registries_checkpoints_and_the_organizations_chat_checkpoints() -> None:
@@ -246,9 +249,11 @@ def test_only_the_registries_organizations_are_listed_and_ruled_out_listings_cos
     assert hub.asked.count("Qwen/Qwen3-8B") == hub.asked.count("zai-org/GLM-5.3-Flash") == 1
 
 
-def test_an_sglang_only_architecture_is_registered_through_its_checkpoints_config() -> None:
+def test_an_architecture_only_sglangs_code_serves_is_registered_not_one_an_example_config_names() -> None:
     rows = [row.model for row in build()[0]]
     assert "xverse/XVERSE-MoE-A4.2B-Chat" in rows  # XverseMoeForCausalLM is in no vLLM table here
+    without_code = [row.model for row in hub_rows(ENTRIES, FakeHub(LISTINGS, MODELS), BUILT)]
+    assert "xverse/XVERSE-MoE-A4.2B-Chat" not in without_code  # SGLang's docs example's config no longer says it
     assert "zai-org/GLM-4.7-Flash" not in rows  # no registry names its architecture
     assert "Qwen/Qwen3-8B-Base" not in rows  # ships no chat template
     assert "Qwen/Qwen-Image" not in rows  # its config names no architecture
@@ -394,6 +399,39 @@ def test_a_listed_checkpoint_or_organization_the_hub_fails_on_is_logged_and_the_
     assert "Qwen/Qwen3-32B: left out, hub-error-502" in log
     assert "xverse: not listed, hub-error-500" in log
     assert hub.listed == ["Qwen", "xverse"]
+
+
+def test_sglangs_draft_and_pooling_heads_and_what_vllm_files_elsewhere_register_nothing() -> None:
+    entries = [
+        Entry("vllm", "Zamba2ForCausalLM", TEXT, True, False, ("Zyphra/Zamba2-7B-Instruct",)),
+        Entry("vllm", "ZayaModel", "_EMBEDDING_EXAMPLE_MODELS", False, False, ("Zyphra/ZAYA1-Embed",)),
+    ]
+    code = {
+        "ZayaForCausalLM",
+        "ZayaForCausalLMNextN",  # a draft head for speculative decoding
+        "ZayaForRewardModel",  # a pooling head
+        "ZayaModel",  # vLLM files it only among its pooling models
+        "MossVLForConditionalGeneration",
+    }
+    served = Served(frozenset(code), frozenset({"MossVLForConditionalGeneration"}))
+
+    def zyphra(name: str, architecture: str) -> Details:
+        return details(f"Zyphra/{name}", date(2025, 11, 1), 10, (architecture,))
+
+    models = {
+        d.id: d
+        for d in (
+            zyphra("Zamba2-7B-Instruct", "Zamba2ForCausalLM"),
+            zyphra("ZAYA1-8B", "ZayaForCausalLM"),
+            zyphra("ZAYA1-8B-MTP", "ZayaForCausalLMNextN"),
+            zyphra("ZAYA1-RM", "ZayaForRewardModel"),
+            zyphra("ZAYA1-Embed-Chat", "ZayaModel"),
+            zyphra("ZAYA1-VL", "MossVLForConditionalGeneration"),
+        )
+    }
+    hub = FakeHub({"Zyphra": [listed(model, date(2025, 11, 1)) for model in models]}, models)
+    rows = {row.model: row.modality for row in hub_rows(entries, hub, BUILT, served=served)}
+    assert rows == {"Zyphra/Zamba2-7B-Instruct": "text", "Zyphra/ZAYA1-8B": "text", "Zyphra/ZAYA1-VL": "multimodal"}
 
 
 def test_the_list_is_canonical_json_lines() -> None:
