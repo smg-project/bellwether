@@ -1,0 +1,164 @@
+"""Render verify: does SMG send the engine the prompt token ids the reference renders?
+
+Each render fixture's request goes to SMG's chat endpoint with the fixture id as ``rid``. SMG passes a
+client ``rid`` through as the engine request's ``request_id``, and the mock worker behind SMG writes every
+Generate request it receives to its capture file as one JSON line, so a case's capture line is found by
+its id and the ``input_ids`` on it are compared with ``reference.input_ids``.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from pathlib import Path
+
+import httpx
+
+from bellwether.manifest import Manifest
+
+TIMEOUT = 60.0  # seconds per request; a render case takes milliseconds, so this only catches a stuck SMG
+ID_WINDOW = 8  # ids shown on each side of the first difference
+TEXT_WINDOW = 40  # characters shown on each side of the first difference in the prompt text
+
+
+class CannotVerify(Exception):
+    """The run cannot give verdicts: no such model or cases, no answer from SMG, or a capture verify cannot read."""
+
+
+def verify(url: str, capture: Path, cases: list[tuple[Manifest, str, dict]]) -> list[dict]:
+    """Send every case, then join the capture file to the answers on ``request_id``."""
+    start = capture_size(capture)
+    answers = []
+    # The environment's proxy settings are ignored: verify talks to the SMG it was given, with nothing in between.
+    with httpx.Client(timeout=TIMEOUT, trust_env=False) as client:
+        for manifest, _, case in cases:
+            try:
+                answers.append(send(client, url, request_body(case, manifest.model)))
+            except (httpx.HTTPError, httpx.InvalidURL) as err:
+                raise CannotVerify(f"no answer from {url} for {case['id']}: {type(err).__name__}: {err}") from err
+    captured = read_capture(capture, start, {case["id"] for _, _, case in cases})
+    results = []
+    for (manifest, set_name, case), (status, body) in zip(cases, answers, strict=True):
+        if status != 200:
+            # A non-200 is SMG's answer to the case, so it is a verdict, not an error of the run.
+            outcome = {"verdict": "rejected", "message": error_message(body)}
+        elif case["id"] not in captured:
+            outcome = {"verdict": "missing"}
+        else:
+            outcome = compare(case, captured[case["id"]])
+        results.append(
+            {"id": case["id"], "model": manifest.model, "set": set_name, **outcome, "status": status, "body": body}
+        )
+    return results
+
+
+def request_body(case: dict, model: str) -> dict:
+    """The recorded request in its own key order, plus what SMG needs to route, join and answer it.
+
+    None of the added fields reaches the chat template, so the prompt SMG renders is the recorded one's.
+    """
+    body = dict(case["request"])
+    body["model"] = model
+    body["rid"] = case["id"]
+    body["stream"] = False
+    if "max_tokens" not in body and "max_completion_tokens" not in body:
+        body["max_tokens"] = 1
+    return body
+
+
+def send(client: httpx.Client, url: str, body: dict) -> tuple[int, object]:
+    response = client.post(
+        f"{url.rstrip('/')}/v1/chat/completions",
+        content=json.dumps(body),
+        headers={"content-type": "application/json"},
+    )
+    try:
+        return response.status_code, response.json()
+    except ValueError:
+        return response.status_code, response.text
+
+
+def capture_size(path: Path) -> int:
+    """Where this run's capture lines will start. The mock appends, so what is there already is an earlier run's."""
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def read_capture(path: Path, start: int, wanted: set[str]) -> dict[str, dict]:
+    """The first capture line for each wanted request id among the complete lines written since ``start``.
+
+    Lines for other request ids are other clients'. The text after the last newline is a line the mock is still
+    writing for one of them: every request this run sent was answered, and the mock writes a request's line
+    before the engine answers. SMG retries under the same id, so a later line for an id is a retry.
+    """
+    try:
+        with path.open("rb") as f:
+            f.seek(start)
+            data = f.read()
+    except FileNotFoundError:
+        return {}
+    found: dict[str, dict] = {}
+    end = start
+    for raw in data.split(b"\n")[:-1]:
+        at, end = end, end + len(raw) + 1
+        if not raw.strip():
+            continue
+        try:
+            line = json.loads(raw)
+        except ValueError:
+            raise CannotVerify(f"{path}: the line at byte {at} is not JSON; is this the mock's capture file?") from None
+        request_id = line.get("request_id") if isinstance(line, dict) else None
+        if not isinstance(request_id, str) or request_id not in wanted or request_id in found:
+            continue
+        ids = line.get("input_ids")
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            raise CannotVerify(f"{path}: the line at byte {at} for {request_id} has no list of integer input_ids")
+        found[request_id] = line
+    return found
+
+
+def compare(case: dict, line: dict) -> dict:
+    """``match``, or where the ids SMG sent leave the reference's and whether the text it rendered did too."""
+    reference, smg = case["reference"]["input_ids"], line["input_ids"]
+    if smg == reference:
+        return {"verdict": "match"}
+    index = first_difference(reference, smg)
+    outcome = {
+        "verdict": "differs",
+        "index": index,
+        "lengths": {"reference": len(reference), "smg": len(smg)},
+        "window": window(reference, smg, index, ID_WINDOW),
+    }
+    # Equal text in other ids points at tokenization; other text points at rendering.
+    expected, sent = case["reference"].get("text"), line.get("original_text")
+    if not isinstance(expected, str) or not isinstance(sent, str):
+        outcome["text_equal"] = None
+    elif sent == expected:
+        outcome["text_equal"] = True
+    else:
+        at = first_difference(expected, sent)
+        outcome["text_equal"] = False
+        outcome["text"] = {"index": at, **window(expected, sent, at, TEXT_WINDOW)}
+    return outcome
+
+
+def first_difference(reference: Sequence, smg: Sequence) -> int:
+    """The first index where the two differ; the shorter length when one is a prefix of the other."""
+    pairs = zip(reference, smg, strict=False)  # the lengths may differ
+    return next((i for i, (a, b) in enumerate(pairs) if a != b), min(len(reference), len(smg)))
+
+
+def window(reference: Sequence, smg: Sequence, index: int, width: int) -> dict:
+    """Both sides from ``width`` before ``index`` to ``width`` after it, with where that span starts."""
+    start = max(0, index - width)
+    return {"start": start, "reference": reference[start : index + width + 1], "smg": smg[start : index + width + 1]}
+
+
+def error_message(body: object) -> str:
+    """SMG's own errors are ``{"error": {"message": ...}}``; something in front of it may answer in plain text."""
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        return error["message"]
+    return body.strip() if isinstance(body, str) else json.dumps(body)
