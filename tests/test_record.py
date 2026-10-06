@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import pathlib
@@ -676,19 +677,6 @@ def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, 
     assert (out_dir / "extra.jsonl").read_text() == extra_before
 
 
-def test_record_without_set_leaves_imported_sets_to_the_storage_form(tmp_path, tiny_model, capsys):
-    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
-    status, out_dir = record(
-        tmp_path,
-        tiny_model,
-        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
-        ("bfcl-x", [imported]),
-    )
-    assert status == 0
-    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
-    assert "1 imported set left out until the storage form lands: bfcl-x" in capsys.readouterr().out
-
-
 def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny_model):
     imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
     record(
@@ -699,11 +687,12 @@ def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny
     )
     assert main(record_argv(tmp_path, tiny_model, "--set", "bfcl-x")) == 0
     out_dir = tmp_path / "fixtures" / "tiny-chat" / "render"
-    recorded = (out_dir / "bfcl-x.jsonl").read_text()
+    recorded = plain_text(out_dir / "bfcl-x.jsonl.zst")
 
     assert main(record_argv(tmp_path, tiny_model)) == 0
 
-    assert (out_dir / "bfcl-x.jsonl").read_text() == recorded
+    assert plain_text(out_dir / "bfcl-x.jsonl.zst") == recorded
+    assert not (out_dir / "bfcl-x.jsonl").exists()
 
 
 def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model, capsys):
@@ -751,3 +740,65 @@ def test_a_compressed_fixture_file_holds_the_same_lines_as_the_plain_one(tmp_pat
     assert plain_text(tmp_path / "set.jsonl") == plain.decode("utf-8")
     assert read_fixture_file(tmp_path / "set.jsonl.zst") == read_fixture_file(tmp_path / "set.jsonl")
     assert list(read_fixture_file(tmp_path / "set.jsonl.zst")) == ["m/render/a", "m/render/b"]
+
+
+def imported(name: str, text: str) -> dict:
+    return {"name": name, "request": {"messages": [user(text)]}, "origin": {"dataset": "bench"}}
+
+
+def sets_tables(tmp_path) -> dict:
+    import tomllib
+
+    return tomllib.loads((tmp_path / "fixtures" / "tiny-chat" / "sets.toml").read_text())
+
+
+def test_record_writes_an_imported_set_compressed_and_a_hand_written_set_plain(tmp_path, tiny_model):
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-x", [imported("bench-x-0", "X"), imported("bench-x-1", "Y")]),
+    )
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["bench-x.jsonl.zst", "common.jsonl"]
+    tables = sets_tables(tmp_path)
+    for name, form, cases in (("common", "plain", 1), ("bench-x", "zstd", 2)):
+        file = out_dir / (f"{name}.jsonl" if form == "plain" else f"{name}.jsonl.zst")
+        plain = plain_text(file).encode("utf-8")
+        assert tables["render"][name] == {
+            "form": form,
+            "cases": cases,
+            "rejected": 0,
+            "plain_bytes": len(plain),
+            "plain_sha256": hashlib.sha256(plain).hexdigest(),
+        }
+
+
+def test_a_set_that_changes_form_leaves_one_file(tmp_path, tiny_model):
+    status, out_dir = record(tmp_path, tiny_model, ("x", [{"name": "x-0", "request": {"messages": [user("X")]}}]))
+    assert status == 0 and (out_dir / "x.jsonl").exists()
+    status, _ = record(tmp_path, tiny_model, ("x", [imported("x-0", "X")]))
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["x.jsonl.zst"]
+    assert sets_tables(tmp_path)["render"]["x"]["form"] == "zstd"
+
+
+def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, tiny_model):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    before = sets_tables(tmp_path)["render"]["extra"]
+    bad = {
+        "name": "c",
+        "request": {"messages": [user("C")], "add_generation_prompt": True, "continue_final_message": True},
+    }
+    write_jsonl(
+        tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}, bad]
+    )
+    assert main(record_argv(tmp_path, tiny_model, "--set", "common")) == 1
+    tables = sets_tables(tmp_path)["render"]
+    assert tables["extra"] == before
+    assert (tables["common"]["cases"], tables["common"]["rejected"]) == (1, 1)
