@@ -157,8 +157,10 @@ needs a model (Simo, 2026-10-06, #23):
     oracle, run as "Running vendor code" says; it is the first authority in the manifest's order,
     and for these models it is the Hugging Face side.
 - **vLLM:** `vllm launch render <model>`, the GPU-less render server, in vLLM's official image
-  pinned by tag and digest. The digest goes into each line's provenance, since a tag can move. It
-  runs on Linux: under colima on the Mac that records, or on a Linux runner.
+  pinned by tag and digest: `vllm/vllm-openai:v0.31.0` (db9527a4), index digest
+  `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
+  The digest goes into each line's provenance, since a tag can move. It runs on Linux: under colima
+  on the Mac that records, or on a Linux runner. vLLM code cited below is at that release.
   - `POST /v1/chat/completions/render` gives a request's prompt ids.
   - `POST /v1/completions/derender` gives the text of output ids without the parsers. For every
     chunk plan, vLLM's text for each chunk is compared with the pieces Hugging Face's incremental
@@ -195,13 +197,13 @@ What the probe over 63 current checkpoints settles this way (gpt-oss set aside; 
 record BFCL's render cases, and the parse figures here are for those 45):
 
 - **Tool-call arguments reach the template exactly as vLLM gives them** (`_postprocess_messages`,
-  `vllm/entrypoints/chat_utils.py:1931` at 1ad5182b): missing or empty arguments become `{}`, and
-  a string is decoded whatever JSON it holds (#29). Most current templates iterate the arguments as
-  an object; with objects, 24 of the 45 record every BFCL parse case, and with the JSON string, 11
-  do. SGLang differs: `normalize_assistant_tool_call_arguments` (7d22b7a8) rejects a string that is
-  not a JSON object; that is recorded, not decided. DeepSeek's templates (R1, V3, V3.1) concatenate
-  a string and fail on an object. That is a finding (#27), and the vLLM recording shows whether the
-  engine fails the same way.
+  `vllm/entrypoints/chat_utils.py:2084`): arguments become the object they decode to, and anything
+  that does not decode to a JSON object becomes `{}` (#29). Most current templates iterate the
+  arguments as an object; with objects, 24 of the 45 record every BFCL parse case, and with the JSON
+  string, 11 do. SGLang differs: `normalize_assistant_tool_call_arguments` (7d22b7a8) rejects a
+  string that is not a JSON object; that is recorded, not decided. DeepSeek's templates (R1, V3,
+  V3.1) concatenate a string and fail on an object. That is a finding (#27), and the vLLM recording
+  shows whether the engine fails the same way.
 - **The end of the assistant turn** is not a rule of bellwether's. The round trip cuts the output at
   the tokenizer's end-of-sequence token, which many templates do not write:
   - `<|eot|>` (Muse-Glimmer), `<|endofassistant|>` (dots3), `<|im_end|>` (ERNIE, MiniCPM5),
@@ -212,11 +214,11 @@ record BFCL's render cases, and the parse figures here are for those 45):
   For these, the output ends where generation stops, and that too has two sources:
   - Hugging Face: the generation config as transformers' `generate` reads it (`eos_token_id`, which
     may be a list), with the tokenizer's own end-of-sequence token;
-  - vLLM: its stop set, from whichever of its code paths yields it. At 1ad5182b the model's
-    end-of-sequence ids are added by `SamplingParams.update_from_generation_config`, called from the
-    engine's input processor (`vllm/v1/engine/input_processor.py:324`), while the render server
-    builds its parameters with `request.to_sampling_params` alone
-    (`vllm/entrypoints/scale_out/render/serving.py:113`), so render may not report them.
+  - vLLM: its stop set, from whichever of its code paths yields it. The model's end-of-sequence
+    ids are added by `SamplingParams.update_from_generation_config`, called from the engine's input
+    processor (`vllm/v1/engine/input_processor.py:440`), while the render server builds its
+    parameters with `request.to_sampling_params` alone
+    (`vllm/entrypoints/scale_out/render/serving.py:125`), so render may not report them.
 
   They are compared like every other result. GLM-5.3-Flash comes first, as the only one of the four
   weekly models without parse cases.
