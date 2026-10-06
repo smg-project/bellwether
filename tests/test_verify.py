@@ -8,18 +8,22 @@ writes before SMG answers. The engine receives each case's own reference unless 
 import json
 import re
 import socket
+import subprocess
 import threading
 import tracemalloc
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
+import zstandard
 
 from bellwether import __version__
 from bellwether.cli import main
 from bellwether.record.fixtures import write_fixture_file
+from bellwether.verify import render, report
 
 
 class FakeGateway:
@@ -29,6 +33,7 @@ class FakeGateway:
         self.capture = capture
         capture.touch()  # the mock creates its capture file when it starts
         self.models: set[str] = set()  # what GET /v1/models lists; with none it answers 503, as SMG does
+        self.models_body: dict | None = None  # a 200 body for GET /v1/models other than the list of models
         self.prompts: dict[str, tuple[list[int] | None, str | None]] = {}  # rid -> what the engine receives
         self.request_ids: dict[str, str] = {}  # rid -> the engine's request_id, where it is not the rid as sent
         # rid -> what SMG answers instead of sending the request on: a status and a body. A str is SMG's own error
@@ -51,6 +56,8 @@ class FakeGateway:
             def do_GET(self):
                 if self.path != "/v1/models":
                     self.reply(404, b"")
+                elif gateway.models_body is not None:
+                    self.reply(200, gateway.models_body)
                 elif not gateway.models:
                     self.reply(503, b"No models available")
                 else:
@@ -244,16 +251,16 @@ def test_other_clients_lines_and_a_line_still_being_written_are_skipped_and_coun
     gateway.serve(cases)
     # Another client's request whose id starts with a case's id, a blank line, and a line still being written.
     other = json.dumps({"request_id": "m1/render/hello-again", "input_ids": [1]})
-    gateway.appended_after["m1/render/hello"] = other + "\n\n"
+    gateway.appended_after["m1/render/hello"] = other + "\n\n" + json.dumps({"input_ids": [1]}) + "\n"
     gateway.appended_after["m1/render/tools"] = '{"request_id": "another-client-2", "input_'
 
     assert verify(gateway, fixtures, "--report", str(report)) == 0
 
     written = json.loads(report.read_text())
     assert [(case["verdict"], case["lines"]) for case in written["cases"]] == [("match", 1)] * 3
-    assert written["capture"] == {"lines": 5, "joined": 3, "other": 2, "unfinished": True}
+    assert written["capture"] == {"lines": 6, "joined": 3, "other": 3, "unfinished": True}
     out = capsys.readouterr().out
-    assert "capture: 5 lines written during the run, 3 joined a case, 2 did not; a line was still being written" in out
+    assert "capture: 6 lines written during the run, 3 joined a case, 3 did not; a line was still being written" in out
 
 
 def test_every_line_for_a_case_is_compared(tmp_path, gateway):
@@ -317,8 +324,19 @@ def test_a_difference_gives_the_first_differing_index_and_the_ids_and_text_aroun
     assert tools["text_equal"] is False
     assert tools["text"] == {"index": 11, "start": 0, "reference": "<t>Weather?", "smg": "<t>Weather?<g>"}
     assert (budget["verdict"], budget["index"], budget["text_equal"]) == ("regression", 1, None)
-    out = capsys.readouterr().out
-    assert "m1/render/hello" in out and "index 12" in out
+    out = capsys.readouterr().out.splitlines()
+    assert (
+        "regression m1/render/hello: ids differ from index 12 (reference 20 ids, smg 21); same text, so tokenization"
+        in out
+    )
+    assert (
+        "regression m1/render/tools: ids differ from index 3 (reference 3 ids, smg 4); "
+        "text differs from character 11, so rendering"
+    ) in out
+    assert (
+        "regression m1/render/budget: ids differ from index 1 (reference 2 ids, smg 2); "
+        "the capture line does not carry the text"
+    ) in out
 
 
 SMG_VALIDATION = {"error": {"message": "temperature: must be at most 2", "type": "invalid_request_error", "code": 400}}
@@ -339,8 +357,21 @@ def smg_error(status: int, code: str, message: str) -> dict:
         (502, b"upstream connect error", "measurement_failed"),
         (400, b"<html>400 Bad Request</html>", "measurement_failed"),
         (307, b"", "measurement_failed"),
+        (400, {"error": {"message": "x", "type": "invalid_request_error"}}, "measurement_failed"),
+        (400, {"error": {"message": "x", "type": "invalid_request_error", "code": True}}, "measurement_failed"),
     ],
-    ids=["refusal", "validation", "no worker", "unavailable", "internal", "proxy", "proxy 400", "redirect"],
+    ids=[
+        "refusal",
+        "validation",
+        "no worker",
+        "unavailable",
+        "internal",
+        "proxy",
+        "proxy 400",
+        "redirect",
+        "no code",
+        "a code that is true",
+    ],
 )
 def test_only_smgs_refusal_of_the_request_is_rejected(tmp_path, gateway, capsys, status, body, verdict):
     fixtures, report, known = tmp_path / "fixtures", tmp_path / "report.json", tmp_path / "known.toml"
@@ -365,6 +396,12 @@ def test_only_smgs_refusal_of_the_request_is_rejected(tmp_path, gateway, capsys,
         assert (hello["code"], hello["message"]) == (answered["error"]["code"], answered["error"]["message"])
     else:
         assert "code" not in hello
+        if status == 307:
+            assert hello["message"] == "redirected to /elsewhere"
+        elif isinstance(answered, dict):
+            assert hello["message"] == answered["error"]["message"]
+        else:
+            assert hello["message"] == answered.decode()
     assert results["m1/render/budget"]["verdict"] == "match"
     out = capsys.readouterr().out
     assert f"{verdict} m1/render/hello: HTTP {status}" in out
@@ -400,7 +437,9 @@ def test_an_answered_request_with_no_capture_line_is_missing(tmp_path, gateway, 
     results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
     assert (results["m1/render/hello"]["verdict"], results["m1/render/hello"]["status"]) == ("missing", 200)
     assert results["m1/render/tools"]["verdict"] == "match"
-    assert "missing m1/render/hello" in capsys.readouterr().out
+    assert (
+        "missing m1/render/hello: SMG answered, but no capture line carries this case's id" in capsys.readouterr().out
+    )
 
 
 def test_a_capture_file_nobody_writes_leaves_every_answered_case_missing(tmp_path, gateway):
@@ -518,7 +557,11 @@ def test_a_listed_case_with_any_other_outcome_fails(tmp_path, gateway, capsys, e
     line = next(line for line in capsys.readouterr().out.splitlines() if "m1/render/hello:" in line)
     assert f"listed as a known {listed}" in line
     if answer == "match":
-        assert "remove the entry" in line
+        assert line.startswith("match m1/render/hello: matches, but it is listed") and "remove the entry" in line
+    elif answer in ("missing", "measurement_failed"):
+        assert line.endswith(f"but {answer.replace('_', ' ')} is about the setup")
+    else:
+        assert f"which this is not ({ISSUE})" in line
 
 
 def test_a_listed_id_that_can_name_no_case_fails_the_run_on_its_own(tmp_path, gateway, capsys):
@@ -534,6 +577,7 @@ def test_a_listed_id_that_can_name_no_case_fails_the_run_on_its_own(tmp_path, ga
     assert (written["passed"], written["known_without_case"], written["known_outside_run"]) == (False, sorted(gone), [])
     out = capsys.readouterr().out
     assert all(f"known {case_id}: listed, but there is no such case" in out for case_id in gone)
+    assert "3 pass, 0 fail, 4 listed without a case; failed" in out
 
 
 @pytest.mark.parametrize(
@@ -587,11 +631,18 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
             "m2/render/gone": {"verdict": "regression", "reason": "a case the corpus dropped"},
         },
     )
-    argv = ["--known", str(known), "--report", str(out / "report.json"), "--junit", str(out / "junit.xml")]
+    argv = [
+        "--known",
+        str(known),
+        "--report",
+        str(out / "a" / "report.json"),
+        "--junit",
+        str(out / "b" / "c" / "junit.xml"),
+    ]
 
     assert verify(gateway, fixtures, *argv) == 1
 
-    written = json.loads((out / "report.json").read_text())
+    written = json.loads((out / "a" / "report.json").read_text())
     assert written["kind"] == "render"
     provenance = written["provenance"]
     assert provenance["bellwether"]["version"] == __version__
@@ -624,7 +675,7 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
     assert list(entries["m1/render/hello"])[:6] == ["id", "model", "set", "verdict", "passed", "known"]
     assert (entries["m2/render/bye"]["model"], entries["m2/render/bye"]["set"]) == ("org/M2", "common")
 
-    suites = ET.parse(out / "junit.xml").getroot()
+    suites = ET.parse(out / "b" / "c" / "junit.xml").getroot()
     assert suites.tag == "testsuites"
     assert {key: suites.get(key) for key in ("tests", "failures", "errors", "skipped")} == {
         "tests": "6",
@@ -672,6 +723,7 @@ def test_set_selects_the_render_sets_to_verify(tmp_path, gateway, capsys):
     gateway.serve({**plain, **bench})
     # A case of a set the run does not select may still be there: its entry is counted, not judged.
     write_known(known, {"m1/render/hello": {"verdict": "regression", "reason": "in the set not selected"}})
+    (fixtures / "m1" / "sets.toml").write_text('[render.gone]\nform = "zstd"\ncases = 1\n')  # not selected
 
     assert verify(gateway, fixtures, "--set", "bench", "--known", str(known), "--report", str(report)) == 0
 
@@ -730,6 +782,7 @@ def test_a_benchmark_set_stored_compressed_is_verified_like_a_plain_one(tmp_path
         "m1/render/bench-a": {**plain["m1/render/hello"], "id": "m1/render/bench-a", "request": BYE},
     }
     write_fixture_file(fixtures / "m1" / "render" / "bench.jsonl.zst", bench)
+    write_fixture_file(fixtures / "m1" / "render" / "empty.jsonl.zst", {})  # a frame that declares no bytes
     gateway.serve({**plain, **bench})
 
     assert verify(gateway, fixtures) == 0
@@ -797,6 +850,54 @@ def test_a_set_that_cannot_be_read_again_stops_the_run_where_it_is(tmp_path, gat
     assert "stopped at a set it could not read; 0 cases not sent" in captured.out
 
 
+def test_a_set_is_read_whole_however_its_lines_end(tmp_path, gateway):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    cases = write_model(fixtures, "m1", "org/M1", CASES)
+    gateway.serve(cases)
+    path = fixtures / "m1" / "render" / "common.jsonl"
+    path.write_text("\n\n".join(path.read_text().splitlines()))  # blank lines between, and no newline at the end
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 0
+
+    assert [case["id"] for case in json.loads(report.read_text())["cases"]] == sorted(cases)
+
+
+def test_lines_written_after_the_last_answer_are_counted(tmp_path, gateway, monkeypatch):
+    fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
+    gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
+    counts = render.Capture.counts
+
+    def late(capture):
+        gateway.append(json.dumps({"request_id": "another-client", "input_ids": [1]}) + "\n")
+        return counts(capture)
+
+    monkeypatch.setattr(render.Capture, "counts", late)
+
+    assert verify(gateway, fixtures, "--report", str(report)) == 0
+
+    assert json.loads(report.read_text())["capture"] == {"lines": 4, "joined": 3, "other": 1, "unfinished": False}
+
+
+def test_the_commit_is_given_only_for_bellwethers_own_checkout(monkeypatch):
+    package = Path(report.__file__).resolve().parents[1]  # src/bellwether
+    answers = {
+        "rev-parse --show-toplevel": str(package.parents[1]),
+        "rev-parse HEAD": "c" * 40,
+        "status --porcelain": " M x",
+    }
+    monkeypatch.setattr(report, "_git", lambda where, *args: answers[" ".join(args)])
+    assert report.bellwether_version() == {"version": __version__, "commit": "c" * 40, "dirty": True}
+
+    answers |= {"rev-parse --show-toplevel": "/another/repository", "status --porcelain": ""}
+    assert report.bellwether_version() == {"version": __version__, "commit": None, "dirty": None}
+
+    def no_checkout(where, *args):
+        raise subprocess.CalledProcessError(128, ["git", *args])
+
+    monkeypatch.setattr(report, "_git", no_checkout)
+    assert report.bellwether_version() == {"version": __version__, "commit": None, "dirty": None}
+
+
 def closed_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -827,6 +928,21 @@ def closed_port() -> int:
         "set listed but not there",
         "reference without ids",
         "id in two sets",
+        "no manifests",
+        "no render cases anywhere",
+        "only empty sets",
+        "sets.toml not TOML",
+        "sets.toml set without a form",
+        "set is a directory",
+        "set corrupt",
+        "line without an id",
+        "case without a request",
+        "known file not TOML",
+        "model list not SMG's",
+        "model ids not strings",
+        "url not valid",
+        "sets.toml render not a table",
+        "set without a declared size",
     ],
 )
 def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, gateway, capsys, problem):
@@ -874,7 +990,57 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         message = "/v1/models answered 503: No models available"
     elif problem == "url ends in /v1":
         url = f"{gateway.url}/v1"
-        message = "/v1/v1/models answered 404"
+        message = "/v1/v1/models answered 404; is --smg SMG's base URL, without /v1?"
+    elif problem == "no manifests":
+        fixtures = tmp_path / "empty"
+        fixtures.mkdir()
+        message = f"no manifests under {fixtures}"
+    elif problem in ("no render cases anywhere", "only empty sets"):
+        fixtures = tmp_path / "other"
+        (fixtures / "m1" / "render").mkdir(parents=True)
+        (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+        if problem == "only empty sets":
+            (fixtures / "m1" / "render" / "common.jsonl").write_text("")
+        message = f"no render fixtures under {fixtures} for org/M1"
+    elif problem == "sets.toml not TOML":
+        (fixtures / "m1" / "sets.toml").write_text("[render.common\n")
+        message = str(fixtures / "m1" / "sets.toml")
+    elif problem == "sets.toml set without a form":
+        (fixtures / "m1" / "sets.toml").write_text("[render.common]\ncases = 3\n")
+        message = "render.common has no form of plain or zstd"
+    elif problem == "set is a directory":
+        (fixtures / "m1" / "render" / "odd.jsonl").mkdir()
+        message = str(fixtures / "m1" / "render" / "odd.jsonl")
+    elif problem == "set corrupt":
+        # A frame that declares 16 bytes, then a block of the type zstd reserves.
+        (fixtures / "m1" / "render" / "bench.jsonl.zst").write_bytes(bytes.fromhex("28b52ffd2010070000"))
+        message = "bench.jsonl.zst is not a zstd stream verify can read"
+    elif problem == "line without an id":
+        (fixtures / "m1" / "render" / "odd.jsonl").write_text('{"kind": "render"}\n')
+        message = f"{fixtures / 'm1' / 'render' / 'odd.jsonl'}:1: not a case with an id"
+    elif problem == "case without a request":
+        (fixtures / "m1" / "render" / "odd.jsonl").write_text('{"id": "m1/render/odd", "reference": {}}\n')
+        message = "m1/render/odd has no request"
+    elif problem == "known file not TOML":
+        (tmp_path / "known.toml").write_text("[[[\n")
+        extra, message = ["--known", str(tmp_path / "known.toml")], str(tmp_path / "known.toml")
+    elif problem == "model list not SMG's":
+        gateway.models_body = {"object": "list"}
+        message = "/v1/models answered 200 without SMG's list of models"
+    elif problem == "model ids not strings":
+        gateway.models_body = {"object": "list", "data": [{"id": 7}]}
+        message = "/v1/models answered 200 without SMG's list of models"
+    elif problem == "url not valid":
+        url = "http://[::1"
+        message = "no answer from http://[::1/v1/models: InvalidURL"
+    elif problem == "sets.toml render not a table":
+        (fixtures / "m1" / "sets.toml").write_text("render = 1\n")
+        message = "[render] is not a table of sets"
+    elif problem == "set without a declared size":
+        line = json.dumps({**CASE_LINE, "id": "m1/render/bench-a"}) + "\n"
+        compressed = zstandard.ZstdCompressor(write_content_size=False).compress(line.encode())
+        (fixtures / "m1" / "render" / "bench.jsonl.zst").write_bytes(compressed)
+        message = "its zstd frame does not declare its content size"
     elif problem == "set not fetched":
         pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 10\n"
         (fixtures / "m1" / "render" / "bench.jsonl.zst").write_text(pointer)
@@ -931,10 +1097,13 @@ def test_a_run_stopped_partway_reports_what_was_answered_and_names_what_was_not_
     assert verify(gateway, fixtures, *argv) == 2
 
     written = json.loads((out / "report.json").read_text())
-    verdicts = {case["id"]: case["verdict"] for case in written["cases"]}
-    assert verdicts == {"m1/render/budget": "regression", "m1/render/hello": "match"}
+    verdicts = [(case["id"], case["verdict"]) for case in written["cases"]]
+    assert verdicts == [("m1/render/budget", "regression"), ("m1/render/hello", "match")]
     assert written["stopped"]["case"] == "m1/render/tools"
     assert message in written["stopped"]["error"]
+    if problem == "not a capture file":
+        at = gateway.capture.read_bytes().index(b"INFO smg")
+        assert f"the line at byte {at} is not JSON" in written["stopped"]["error"]
     assert written["not_sent"] == ["m2/render/bye", "m2/render/hello"]
     assert written["known_without_case"] == []
     assert (written["passed"], written["summary"]["not_sent"]) == (False, 2)
@@ -949,6 +1118,8 @@ def test_a_run_stopped_partway_reports_what_was_answered_and_names_what_was_not_
         "m2/render/bye": ("error", "not-sent"),
         "m2/render/hello": ("error", "not-sent"),
     }
+    not_sent = {error.get("message") for error in ET.parse(out / "junit.xml").getroot().iter("error")}
+    assert "not sent: the run stopped at m1/render/tools" in not_sent
     captured = capsys.readouterr()
     assert message in captured.err
     assert "regression m1/render/budget" in captured.out

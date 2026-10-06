@@ -122,8 +122,10 @@ def served_models(http: httpx.Client, url: str) -> set[str]:
     except (httpx.HTTPError, httpx.InvalidURL) as err:
         raise CannotVerify(f"no answer from {target}: {type(err).__name__}: {err}") from err
     if response.status_code != 200:
+        text = response.text.strip()[:200]
+        said = f": {text}" if text else ""
         hint = "; is --smg SMG's base URL, without /v1?" if response.status_code == 404 else ""
-        raise CannotVerify(f"{target} answered {response.status_code}: {response.text.strip()[:200]}{hint}")
+        raise CannotVerify(f"{target} answered {response.status_code}{said}{hint}")
     try:
         models = response.json()["data"]
         ids = {model["id"] for model in models}

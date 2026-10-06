@@ -89,7 +89,7 @@ def judge(result: dict, known: dict[str, dict]) -> None:
 
 
 def known_without_case(
-    known: dict[str, dict], fixtures: Path, manifests: list[Manifest], listed: set[str], every_set: bool = True
+    known: dict[str, dict], fixtures: Path, manifests: list[Manifest], listed: set[str], every_set: bool
 ) -> tuple[list[str], list[str]]:
     """The listed ids that name no case, and those for cases this run does not verify.
 
