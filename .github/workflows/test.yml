@@ -16,9 +16,9 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev
-      # The pinned files (the BFCL wheel and the LICENSE at the commit it was built from, GSM8K's files at their commit,
-      # Hugging Face files under huggingface/ with the blobs Xet keeps there once for the whole cache) are named and
-      # hashed in the importers, so the key changes whenever a pin does.
+      # The pinned files (the BFCL wheel and the LICENSE at the commit it was built from, GSM8K's and MGSM's files at
+      # their commits, Hugging Face files under huggingface/ with the blobs Xet keeps there once for the whole cache)
+      # are named and hashed in the importers, so the key changes whenever a pin does.
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/datasets
@@ -34,6 +34,7 @@ jobs:
         run: git lfs pull --include 'corpus/**/*.jsonl.zst' --exclude ''
       - run: uv run bellwether import bfcl --check
       - run: uv run bellwether import gsm8k --check
+      - run: uv run bellwether import mgsm --check
       - run: uv run bellwether import shapes --check
       - uses: actions/cache@v6
         with:
