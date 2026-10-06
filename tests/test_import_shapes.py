@@ -229,6 +229,17 @@ def test_a_gsm8k_row_whose_solution_gives_no_reasoning_is_left_out_with_its_reas
     assert skipped == [("GSM8K test row 1", "the solution has no text before its last line")]
 
 
+def test_distinct_cases_count_a_request_and_message_once_whatever_the_name_notes_or_origin():
+    tea, tee = [{"role": "user", "content": "Tea"}], [{"role": "user", "content": "Tee"}]
+    lines = [
+        {"name": "a", "request": {"messages": tea}, "message": {"content": "Yes."}, "origin": {"row": 0}},
+        {"name": "b", "request": {"messages": tea}, "message": {"content": "Yes."}, "origin": {"row": 1}},
+        {"name": "c", "request": {"messages": tee}, "message": {"content": "Yes."}, "origin": {"row": 2}},
+        {"name": "d", "request": {"messages": tea}, "message": {"content": "No."}, "origin": {"row": 3}},
+    ]
+    assert shapes.distinct_cases(lines) == 3
+
+
 def test_the_size_caps_every_set(tmp_path, monkeypatch):
     assert [len(lines) for lines in build(tmp_path, monkeypatch, size=2).values()] == [2, 2, 2, 2, 2, 2]
 
@@ -336,7 +347,12 @@ TEST = "grade_school_math/data/test.jsonl"
 
 
 def serve(
-    tmp_path, monkeypatch, wheel_license: str = "Apache 2.0", gsm8k_license: bytes = MIT, members=MEMBERS
+    tmp_path,
+    monkeypatch,
+    wheel_license: str = "Apache 2.0",
+    gsm8k_license: bytes = MIT,
+    members=MEMBERS,
+    test_file: bytes = TEST_FILE,
 ) -> None:
     """Stand in for both fetchers, so the pinned files come from ``tmp_path`` and never the network.
 
@@ -360,7 +376,7 @@ def serve(
         assert sha256 == {"LICENSE": mit_sha256, TEST: gsm8k.SHA256["test"]}[path]
         served = tmp_path / "served" / path
         served.parent.mkdir(parents=True, exist_ok=True)
-        served.write_bytes({"LICENSE": gsm8k_license, TEST: TEST_FILE}[path])
+        served.write_bytes({"LICENSE": gsm8k_license, TEST: test_file}[path])
         return served
 
     monkeypatch.setattr(pypi, "fetch", fetch_wheel)
@@ -385,7 +401,7 @@ def test_the_command_writes_then_checks_from_the_pinned_sources_alone(tmp_path, 
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 cases" in out
+    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 lines, 2 distinct cases" in out
     assert f"{corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}" in out
     assert sorted(path.name for path in (corpus / "parse").iterdir()) == sorted(committed + SET_FILES)
     assert all((corpus / "parse" / name).read_text() == UNREADABLE for name in committed)
@@ -423,3 +439,15 @@ def test_the_command_stops_on_a_category_without_parse_cases_and_writes_nothing(
     with pytest.raises(ValueError, match="no parse case in BFCL parallel"):
         main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)])
     assert not (tmp_path / "corpus").exists()
+
+
+def test_the_command_prints_lines_and_distinct_cases_per_set(tmp_path, monkeypatch, capsys):
+    # One parse case per category, cycled against four rows whose solutions come twice each: every case comes twice.
+    members = {**MEMBERS, f"{DATA}/BFCL_v4_simple_python.json": MEMBERS[f"{DATA}/BFCL_v4_simple_python.json"][:1]}
+    members[f"{DATA}/possible_answer/BFCL_v4_simple_python.json"] = [bfcl_answer("simple_python_0", "Café ☕")]
+    serve(tmp_path, monkeypatch, members=members, test_file=jsonl([JANET, TICKETS, JANET, TICKETS]))
+    corpus = tmp_path / "corpus"
+    assert main(["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
+    out = capsys.readouterr().out.splitlines()
+    names = sorted(shapes.set_name(shape) for shape in shapes.SHAPES)
+    assert out[:6] == [f"{corpus / 'parse' / f'{name}.jsonl'}: 4 lines, 2 distinct cases" for name in names]

@@ -34,6 +34,7 @@ its importer on every import. This module, like the importers it builds on, impo
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -184,6 +185,13 @@ def run_of(rows: list, one: str, many: str) -> str:
     return f"{one} {rows[0]}" if len(rows) == 1 else f"{len(rows)} {many}, {rows[0]} to {rows[-1]}"
 
 
+def distinct_cases(lines: list[dict]) -> int:
+    """How many distinct cases the lines hold: a parse case is its request and its message, compared as the JSON the set
+    file holds, keys in their order. Lines that differ only in name, notes or origin are one case.
+    """
+    return len({json.dumps([line["request"], line["message"]], ensure_ascii=False) for line in lines})
+
+
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
     """Write every set, and remove ``shapes-*`` files no message shape writes any more."""
     return corpus_sets.write(sets, corpus_dir, f"{DATASET}-")
@@ -217,7 +225,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"{args.corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}")
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} lines, {distinct_cases(lines)} distinct cases")
     report_skipped(skipped)
     write_sets(sets, args.corpus)
     return 0
