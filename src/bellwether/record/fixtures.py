@@ -128,5 +128,7 @@ def write_fixture_file(path: Path, cases: dict[str, dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = "".join(f"{line}\n" for line in lines).encode("utf-8")
     if is_compressed(path):
+        if path.is_file() and not is_lfs_pointer(path) and plain_text(path).encode("utf-8") == data:
+            return  # the same content keeps its bytes, so a compressor upgrade makes no new LFS object
         data = zstandard.ZstdCompressor(level=ZSTD_LEVEL).compress(data)
     path.write_bytes(data)

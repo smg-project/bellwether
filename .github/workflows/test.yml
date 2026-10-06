@@ -28,9 +28,11 @@ jobs:
       - name: Fetch the benchmark sets this pull request changes
         if: github.event_name == 'pull_request'
         shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
           # 400 paths per pull keeps each --include argument well under Linux's 131,072-byte cap.
-          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- 'fixtures/**/*.jsonl.zst' \
+          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- 'fixtures/**/*.jsonl.zst' \
             | xargs -r -n 400 sh -c 'git lfs pull --include "$(printf "%s," "$@" | sed "s/,$//")" --exclude ""' sh
       - run: uv run pytest -q

@@ -90,13 +90,14 @@ def run(args: argparse.Namespace) -> int:
                     witnesses_dropped += 1
             lines[case_id] = line
         removed = len(set(previous) - set(lines))
-        other.unlink(missing_ok=True)
         if lines:
             write_fixture_file(out, lines)
             tables[(args.kind, set_name)] = set_tables.entry(form, plain_text(out), len(lines), rejected)
         else:
             out.unlink(missing_ok=True)
             tables.pop((args.kind, set_name), None)
+        # Only once the new file is written, so a failed write keeps the set in its old form.
+        other.unlink(missing_ok=True)
         summary = [f"{len(lines)} cases recorded"]
         if witnesses_kept:
             summary.append(f"{witnesses_kept} with witnesses kept")

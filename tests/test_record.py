@@ -6,6 +6,7 @@ import re
 import subprocess
 
 import pytest
+import zstandard
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
 from bellwether import unpack as unpack_module
@@ -1071,3 +1072,34 @@ def test_fetch_pulls_in_batches_that_stay_under_the_argument_limit(tmp_path, mon
     assert sorted(p for include in includes for p in include.split(",")) == sorted(
         p.relative_to(tmp_path).as_posix() for p in paths
     )
+
+
+def test_rewriting_an_unchanged_compressed_set_keeps_its_bytes(tmp_path):
+    # A zstandard upgrade may compress the same content to other bytes; that must not make a new LFS object.
+    path = tmp_path / "set.jsonl.zst"
+    lines = render_cases("a", "b")
+    write_fixture_file(path, lines)
+    other_bytes = zstandard.ZstdCompressor(level=3).compress(plain_text(path).encode("utf-8"))
+    path.write_bytes(other_bytes)
+
+    write_fixture_file(path, lines)
+
+    assert path.read_bytes() == other_bytes
+    write_fixture_file(path, render_cases("a"))
+    assert path.read_bytes() != other_bytes
+
+
+def test_record_keeps_the_old_form_when_the_new_file_cannot_be_written(tmp_path, tiny_model, monkeypatch):
+    status, out_dir = record(
+        tmp_path, tiny_model, ("bench-x", [{"name": "bench-x-0", "request": {"messages": [user("X")]}}])
+    )
+    assert status == 0 and (out_dir / "bench-x.jsonl").is_file()
+    write_jsonl(tmp_path / "corpus" / "render" / "bench-x.jsonl", [imported("bench-x-0", "X")])
+
+    def refuse(path, cases):
+        raise ValueError("schema")
+
+    monkeypatch.setattr("bellwether.record.write_fixture_file", refuse)
+    with pytest.raises(ValueError, match="schema"):
+        main(record_argv(tmp_path, tiny_model))
+    assert (out_dir / "bench-x.jsonl").is_file()
