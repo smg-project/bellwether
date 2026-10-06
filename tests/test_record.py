@@ -1728,6 +1728,35 @@ def test_record_refuses_a_manifest_that_lists_no_oracle_inputs(tmp_path, tiny_mo
     assert f"{path} lists no oracle inputs; `bellwether manifests` writes them" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("refused", ["another member", "no inputs listed"])
+def test_record_refuses_before_it_reads_the_corpus(tmp_path, tiny_model, monkeypatch, refused, capsys):
+    def read_corpus(*args):
+        raise AssertionError("record read the corpus before it refused")
+
+    monkeypatch.setattr("bellwether.record.load_corpus", read_corpus)
+    fixtures = tmp_path / "fixtures"
+    if refused == "another member":
+        inputs = oracle_inputs(str(tiny_model), "local")
+        write_manifest(fixtures, "tiny-chat", "acme/Tiny-Chat", inputs=inputs)
+        write_manifest(fixtures, "tiny-chat-mini", str(tiny_model), inputs=inputs, group="tiny-chat")
+    else:
+        write_manifest(fixtures, "tiny-chat", str(tiny_model))
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert "bellwether record: " in capsys.readouterr().err
+
+
+def test_record_refuses_a_checkpoint_whose_oracle_inputs_it_cannot_read(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path / "hub"))
+    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", True)
+    write_manifest(tmp_path / "fixtures", "tiny-chat", "acme/Tiny-Chat", inputs={"tokenizer.json": "a" * 64})
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, "acme/Tiny-Chat")) == 1
+
+    assert f"cannot read the oracle inputs of acme/Tiny-Chat at {HUB_REVISION}: " in capsys.readouterr().err
+    assert not (tmp_path / "fixtures" / "tiny-chat" / "render").exists()
+
+
 def test_record_refuses_two_manifests_that_name_each_other_as_their_group(tmp_path, tiny_model, capsys):
     # A hand-edited group must not send the operator from one checkpoint to the other and back.
     fixtures = tmp_path / "fixtures"

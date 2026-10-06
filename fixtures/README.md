@@ -92,7 +92,8 @@ same files when run again, so new downloads or another checkpoint are a change t
 list and the manifests.
 
 `record --model <id>` refuses a member, naming the group to record instead, and refuses a checkpoint whose inputs at
-the pinned revision differ from its manifest's list, naming the files; it exits 1 in both cases, recording nothing.
+the pinned revision cannot be read or differ from its manifest's list, naming the files; it exits 1 before it reads the
+corpus, recording nothing.
 
 `record --model <id>` finds the manifest whose `model` is that id, reads the corpus under
 `corpus/<kind>/`, and writes `fixtures/<slug>/<kind>/<set>.jsonl`: one line per case, sorted by id,

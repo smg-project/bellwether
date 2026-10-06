@@ -135,8 +135,9 @@ another list: what the engines' registries name, with no revision or downloads u
 uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
 
-`record` first checks the manifest: it refuses a group member, naming the group to record instead, and a checkpoint
-whose oracle inputs at the pinned revision are not the ones its manifest lists, naming the files that differ.
+`record` checks the manifest before it reads the corpus: it refuses a group member, naming the group to record instead,
+and a checkpoint whose oracle inputs at the pinned revision cannot be read or are not the ones its manifest lists,
+naming the files that differ.
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
 case under `corpus/render/` through the checkpoint's own chat template at the pinned revision
