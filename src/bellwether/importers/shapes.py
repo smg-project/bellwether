@@ -15,14 +15,20 @@ pair i gives case i of every set, so the six sets hold the same pairs:
 
 - the request and the calls are the BFCL case's, so the calls answer the request; the sets without calls keep the
   request and its tools, since a model may answer without calling;
-- the reasoning is GSM8K's worked solution as the GSM8K importer gives it, calculator annotations included;
-- the content is GSM8K's final answer, as written after ``#### ``, in a fixed sentence (``CONTENT``). The solution's own
-  last line is part of the reasoning, carries annotations, and does not always hold the final answer as written.
+- the reasoning and the content are GSM8K's worked solution as the GSM8K importer gives it, as written and with its
+  calculator annotations, split at its last line (``split_solution``): the lines before it are the reasoning, and the
+  last line is the content.
 
-The content is synthetic and the text does not answer the request: what a case probes is its shape. ``origin`` keeps
-both sources' origins whole, as their importers write them, under ``parts``: the BFCL case's, then the GSM8K row's. Each
-source's license is checked by its importer on every import. This module, like the importers it builds on, imports
-nothing beyond the standard library.
+Why the last line. GSM8K writes one step per line, so a line is the dataset's own unit of text, where a last sentence
+would need a sentence splitter, which a title such as "Mr." defeats. The last step is the one that states the result, as
+an answer does after reasoning. The two parts together are the solution as written, so a message holds no text that
+GSM8K did not write, and none twice. The final answer after ``#### `` is not used: on its own it is a bare number, the
+same in many rows, and GSM8K's own reasoning sets hold it already as their content. A row whose solution would leave
+either part empty is left out with its reason.
+
+The text does not answer the request: what a case probes is its shape. ``origin`` keeps both sources' origins whole, as
+their importers write them, under ``parts``: the BFCL case's, then the GSM8K row's. Each source's license is checked by
+its importer on every import. This module, like the importers it builds on, imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
@@ -48,7 +54,6 @@ CATEGORIES = (
     "live_parallel_multiple",
 )
 SPLIT = "test"  # GSM8K's split the text comes from
-CONTENT = "The answer is {}."  # the content: GSM8K's final answer, as written after "#### ", in a fixed sentence
 # Each message shape by the parts its message holds, in the order a model writes them; one set per shape.
 SHAPES = (
     "reasoning",
@@ -76,6 +81,19 @@ def message_for(shape: str, reasoning: str, content: str, calls: list[dict]) -> 
     return message
 
 
+def split_solution(solution: str) -> tuple[str, str]:
+    """The reasoning and the content of a GSM8K worked solution: the lines before its last line, and its last line.
+
+    Both keep the text as written, calculator annotations included. ``gsm8k.Unusable`` when either would be empty.
+    """
+    steps, _, last = solution.rpartition("\n")
+    if not steps.strip():
+        raise gsm8k.Unusable("the solution has no text before its last line")
+    if not last.strip():
+        raise gsm8k.Unusable("the solution's last line is empty")
+    return steps, last
+
+
 def interleave(lists: list[list]) -> list:
     """The items of every list, one from each in turn, in list order; a list that runs out is passed over."""
     longest = max((len(items) for items in lists), default=0)
@@ -100,8 +118,8 @@ def build_sets(
     """One parse set per message shape, from the BFCL wheel and GSM8K's test file through their importers' builders.
 
     The calls are BFCL's parse cases of ``CATEGORIES``, interleaved; a category without any stops the import. The texts
-    are GSM8K's reasoning-content parse cases of ``SPLIT``. Each pair gives the i-th case of every set: the request and
-    calls of the call, the reasoning and content of the text.
+    are the solutions of GSM8K's reasoning-content parse cases of ``SPLIT``, each split by ``split_solution``. Each pair
+    gives the i-th case of every set: the request and calls of the call, the reasoning and content of the text.
 
     Every row the import reads and does not use is appended to ``skipped`` as ``(what, why)``: by name, each BFCL row
     without a parse case and each GSM8K row without a case, with their importers' reasons; then the parse cases of each
@@ -116,12 +134,18 @@ def build_sets(
     calls = interleave(list(cases.values()))
     owners = interleave([[category] * len(lines) for category, lines in cases.items()])  # each call's category
     gsm8k_skipped: list[tuple[str, str]] = []
-    texts = gsm8k.build_sets({SPLIT: test_file}, gsm8k_skipped)[("parse", gsm8k.set_name(SPLIT, "reasoning-content"))]
+    gsm8k_lines = gsm8k.build_sets({SPLIT: test_file}, gsm8k_skipped)[
+        ("parse", gsm8k.set_name(SPLIT, "reasoning-content"))
+    ]
+    texts = []  # (GSM8K line, reasoning, content)
+    for gsm8k_line in gsm8k_lines:
+        try:
+            texts.append((gsm8k_line, *split_solution(gsm8k_line["message"]["reasoning_content"])))
+        except gsm8k.Unusable as err:
+            gsm8k_skipped.append((f"{SPLIT} row {gsm8k_line['origin']['row']}", str(err)))
     pairs = pair(calls, texts, SIZE if size is None else size)
     sets: dict[tuple[str, str], list[dict]] = {("parse", set_name(shape)): [] for shape in SHAPES}
-    for index, (bfcl_line, gsm8k_line) in enumerate(pairs):
-        reasoning = gsm8k_line["message"]["reasoning_content"]
-        content = CONTENT.format(gsm8k_line["message"]["content"])
+    for index, (bfcl_line, (gsm8k_line, reasoning, content)) in enumerate(pairs):
         origin = {"dataset": DATASET, "parts": [bfcl_line["origin"], gsm8k_line["origin"]]}
         for shape in SHAPES:
             name = set_name(shape)
@@ -133,7 +157,7 @@ def build_sets(
         skipped.extend((f"BFCL {row}", why) for row, why in bfcl_skipped)
         skipped.extend((f"GSM8K {row}", why) for row, why in gsm8k_skipped)
         count = len(pairs)
-        skipped.extend(after_pairs(calls[count:], owners[count:], texts[count:], count))
+        skipped.extend(after_pairs(calls[count:], owners[count:], [text[0] for text in texts[count:]], count))
     return sets
 
 

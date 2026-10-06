@@ -120,9 +120,17 @@ each category and the GSM8K rows that come after the 1000 pairs, one run each (1
 
 - the request and the calls are the BFCL case's; the shapes without calls keep the request and its tools, since a
   model may answer without calling;
-- the reasoning is the GSM8K solution as `gsm8k-test-reasoning-content` holds it, calculator annotations included;
-- the content is the final answer, as written after `#### `, in a fixed sentence (`The answer is 18.` for test row 0).
-  The solution's last line already belongs to the reasoning and does not always hold the final answer as written.
+- the reasoning and the content are the GSM8K solution as `gsm8k-test-reasoning-content` holds it, as written with its
+  calculator annotations, split at its last line: the lines before it are the reasoning, and the last line is the
+  content (`She makes 9 * 2 = $<<9*2=18>>18 every day at the farmer’s market.` for test row 0).
+
+GSM8K writes one step per line, and its last line is the step that states the result: in each of the 1000 test rows the
+pairs take, it holds the final answer, 979 times as written after `#### ` and 21 times with other digit grouping
+(`70,000` for `70000`). A line is the dataset's own unit, where a last sentence would need a sentence splitter (nine of
+those last lines hold a title such as `Mr.`). The two parts together rebuild each solution as written, so a message
+holds no text GSM8K did not write, and none twice. The content sets hold 1000 distinct contents, where the final answer
+alone would give 296, and `gsm8k-test-reasoning-content` holds that answer already. A row whose solution has no text
+before its last line, or an empty last line, would be left out with its reason; the pinned test file has none.
 
 A message has `content: ""` where its shape has no content but has reasoning or calls, and the content-only message has
 no `reasoning_content`. The text does not answer the request: what a case probes is its shape. `origin` is

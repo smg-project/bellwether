@@ -98,14 +98,15 @@ def fake_wheel(tmp_path, license: str = "Apache 2.0", members: dict[str, list[di
     return path
 
 
-SOLUTION = "Janet sells 16 - 3 - 4 = <<16-3-4=9>>9 duck eggs a day.\nShe makes 9 * 2 = $<<9*2=18>>18 every day."
-TICKETS = "They sold 2,000 + 125 = <<2000+125=2125>>2,125 tickets."
-TEST_FILE = jsonl(
-    [
-        {"question": "How much does Janet make?", "answer": SOLUTION + "\n#### 18"},
-        {"question": "How many tickets?", "answer": TICKETS + "\n#### 2,125"},
-    ]
-)
+# Each solution as GSM8K writes it, one step per line with calculator annotations: the steps before the last line,
+# which become the reasoning, and the last line, which becomes the content.
+JANET_STEPS = "Janet sells 16 - 3 - 4 = <<16-3-4=9>>9 duck eggs a day."
+JANET_LAST = "She makes 9 * 2 = $<<9*2=18>>18 every day."
+TICKETS_STEPS = "They sold 2,000 tickets, then 125 more."
+TICKETS_LAST = "They sold 2,000 + 125 = <<2000+125=2125>>2,125 tickets."
+JANET = {"question": "How much does Janet make?", "answer": f"{JANET_STEPS}\n{JANET_LAST}\n#### 18"}
+TICKETS = {"question": "How many tickets?", "answer": f"{TICKETS_STEPS}\n{TICKETS_LAST}\n#### 2,125"}
+TEST_FILE = jsonl([JANET, TICKETS])
 
 
 def build(
@@ -166,7 +167,7 @@ def test_a_case_takes_its_request_and_calls_from_bfcl_and_its_text_from_gsm8k(tm
             "store": False,
             "tools": TOOLS,
         },
-        "message": {"reasoning_content": SOLUTION, "content": "The answer is 18.", "tool_calls": [call("Café ☕")]},
+        "message": {"reasoning_content": JANET_STEPS, "content": JANET_LAST, "tool_calls": [call("Café ☕")]},
         "notes": "shape reasoning-content-calls: BFCL simple_python simple_python_0, GSM8K test row 0",
         "origin": {"dataset": "shapes", "parts": [BFCL_ORIGIN, GSM8K_ORIGIN]},
     }
@@ -196,11 +197,36 @@ def test_every_set_holds_the_same_pairs_in_its_own_shape(tmp_path, monkeypatch):
         ]
         assert all(line["request"]["tools"] == TOOLS for line in lines)
     assert sets[("parse", "shapes-content-calls")][1]["message"] == {
-        "content": "The answer is 2,125.",
+        "content": TICKETS_LAST,
         "tool_calls": [call("tea"), call("coffee")],
     }
-    assert sets[("parse", "shapes-reasoning")][2]["message"] == {"reasoning_content": SOLUTION, "content": ""}
-    assert sets[("parse", "shapes-content")][1]["message"] == {"content": "The answer is 2,125."}
+    assert sets[("parse", "shapes-reasoning")][2]["message"] == {"reasoning_content": JANET_STEPS, "content": ""}
+    assert sets[("parse", "shapes-content")][1]["message"] == {"content": TICKETS_LAST}
+
+
+def test_the_reasoning_and_the_content_are_the_solution_split_at_its_last_line():
+    assert shapes.split_solution(f"{JANET_STEPS}\n{JANET_LAST}") == (JANET_STEPS, JANET_LAST)
+    # Lines before the last stay as written, a blank one included.
+    assert shapes.split_solution("A = <<1+1=2>>2.\n\nB.\nSo C = <<2*2=4>>4.") == (
+        "A = <<1+1=2>>2.\n\nB.",
+        "So C = <<2*2=4>>4.",
+    )
+    for solution, reason in [
+        ("Two and two make <<2+2=4>>4.", "the solution has no text before its last line"),
+        (" \nTwo and two make <<2+2=4>>4.", "the solution has no text before its last line"),
+        ("Two and two.\n ", "the solution's last line is empty"),
+    ]:
+        with pytest.raises(gsm8k.Unusable, match=reason):
+            shapes.split_solution(solution)
+
+
+def test_a_gsm8k_row_whose_solution_gives_no_reasoning_is_left_out_with_its_reason(tmp_path, monkeypatch):
+    one_line = {"question": "How many?", "answer": "Two and two make <<2+2=4>>4.\n#### 4"}
+    skipped: list[tuple[str, str]] = []
+    sets = build(tmp_path, monkeypatch, test_file=jsonl([JANET, one_line, TICKETS]), skipped=skipped)
+    for lines in sets.values():
+        assert [line["origin"]["parts"][1]["row"] for line in lines] == [0, 2, 0]
+    assert skipped == [("GSM8K test row 1", "the solution has no text before its last line")]
 
 
 def test_the_size_caps_every_set(tmp_path, monkeypatch):
