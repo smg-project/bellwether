@@ -1074,6 +1074,7 @@ def lfs_clone(git_sandbox, monkeypatch) -> pathlib.Path:
     write_manifest(source / "fixtures", "m", "acme/M")
     write_fixture_file(source / "fixtures" / "m" / "render" / "common.jsonl", render_cases("a"))
     write_fixture_file(source / "fixtures" / "m" / "render" / "bench-x.jsonl.zst", render_cases("x-0", "x-1"))
+    write_compressed(source / "corpus" / "render" / "big-x.jsonl.zst", [{"name": "big-x-0", "request": {}}])
     git(source, "add", "-A")
     git(source, "commit", "-q", "-m", "fixtures")
     git(source, "push", "-q", remote.as_uri(), "main")
@@ -1090,6 +1091,17 @@ def test_unpack_fetches_the_sets_a_default_clone_holds_as_pointers(lfs_clone, mo
     source = lfs_clone.parent / "source" / "fixtures" / "m" / "render"
     assert (out / "m" / "render" / "bench-x.jsonl").read_text() == plain_text(source / "bench-x.jsonl.zst")
     assert (out / "m" / "render" / "common.jsonl").read_text() == (source / "common.jsonl").read_text()
+
+
+@needs_git_lfs
+def test_a_compressed_corpus_set_is_kept_in_git_lfs_and_a_default_clone_fetches_it(lfs_clone):
+    # .lfsconfig keeps a clone from fetching the fixture sets only: record and import --check read the corpus whole.
+    listed = subprocess.run(["git", "lfs", "ls-files", "--name-only"], cwd=lfs_clone, capture_output=True, text=True)
+    assert "corpus/render/big-x.jsonl.zst" in listed.stdout.split()
+    fetched = lfs_clone / "corpus" / "render" / "big-x.jsonl.zst"
+    assert not is_lfs_pointer(fetched)
+    assert plain_text(fetched) == plain_text(lfs_clone.parent / "source" / "corpus" / "render" / "big-x.jsonl.zst")
+    assert is_lfs_pointer(lfs_clone / "fixtures" / "m" / "render" / "bench-x.jsonl.zst")
 
 
 @needs_git

@@ -16,12 +16,22 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev
-      # The pinned files (the BFCL wheel and the LICENSE at the commit it was built from, GSM8K's files at their commit)
-      # are named and hashed in the importers, so the key changes whenever a pin does.
+      # The pinned files (the BFCL wheel and the LICENSE at the commit it was built from, GSM8K's files at their commit,
+      # Hugging Face files under huggingface/ with the blobs Xet keeps there once for the whole cache) are named and
+      # hashed in the importers, so the key changes whenever a pin does.
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/datasets
           key: bellwether-datasets-${{ hashFiles('src/bellwether/importers/**') }}
+      # An import past corpus_sets.LIMIT keeps every set compressed in Git LFS, and --check reads them whole; the
+      # checkout leaves Git LFS files as pointers. Their objects are cached by the pointers, so an unchanged set is
+      # fetched once.
+      - uses: actions/cache@v6
+        with:
+          path: .git/lfs/objects
+          key: lfs-corpus-${{ hashFiles('corpus/**/*.jsonl.zst') }}
+      - name: Fetch the corpus sets kept in Git LFS
+        run: git lfs pull --include 'corpus/**/*.jsonl.zst' --exclude ''
       - run: uv run bellwether import bfcl --check
       - run: uv run bellwether import gsm8k --check
       - run: uv run bellwether import shapes --check

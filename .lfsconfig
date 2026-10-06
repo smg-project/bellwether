@@ -2,4 +2,6 @@
 	# A clone fetches no benchmark set. bellwether unpack fetches the ones it writes; to fetch one yourself, run
 	#   git lfs pull --include 'fixtures/<slug>/<kind>/<set>.jsonl.zst' --exclude ''
 	# with the path from the repository root. Without --exclude '', this fetchexclude wins and nothing is fetched.
+	# Compressed corpus sets (corpus/**/*.jsonl.zst, an import past corpus_sets.LIMIT) are fetched: record and
+	# import --check read them whole, and there is one copy per dataset, not one per model.
 	fetchexclude = fixtures/**/*.jsonl.zst
