@@ -70,8 +70,8 @@ SHAPES = (
 def message_for(shape: str, reasoning: str, content: str, calls: list[dict]) -> dict:
     """The assistant message of one shape, in the form the other parse cases use.
 
-    ``content`` is ``""`` when the shape has no content but has reasoning or calls, as in BFCL's messages; the
-    content-only message has no ``reasoning_content`` key, as in GSM8K's content messages.
+    ``content`` is ``""`` when the shape has no content but has reasoning or calls, as in BFCL's messages; a shape
+    without reasoning (``content``, ``content-calls``) has no ``reasoning_content`` key, as in GSM8K's content messages.
     """
     parts = shape.split("-")
     message: dict = {}
