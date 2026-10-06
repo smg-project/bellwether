@@ -164,12 +164,23 @@ row: the turn's messages and no system message, with the functions of the row's 
 tools, less those `missed_function` holds back for a later turn. The functions come from the
 class-to-file map in the wheel's source, parsed with `ast`, and go through the same language hint
 and `convert_to_tool`. The parse message is the turn's gold calls in order: each call string is
-parsed with `ast`, positional arguments take the function doc's parameter order, and each call is
+parsed with `ast`, a value passed by position takes the parameter of the class method's `def`,
+read from the class's source with `ast` (BFCL's executor runs the call on the class, and
+`purchase_insurance`'s doc lists two of its parameters the other way round), and each call is
 held to the same checker rules. That gives 600 render cases and 425 parse cases; the 175 miss_func
 and miss_param rows whose first turn has no gold call stay render-only. Later turns wait for a
 decision: each of their requests carries the results of the earlier calls, which only BFCL's
-simulators produce. long_context comes with them, where it differs: it changes only the results
-the simulator returns, so its first requests repeat base's (195 of 200 are the same).
+simulators produce.
+
+The three sets repeat cases: 481 of the 600 render cases are distinct requests, and 309 of the 425
+parse cases distinct pairs of request and message. 117 of miss_param's first requests and 114 of its
+119 parse cases equal base's, and in base and in miss_func row 43 repeats row 40 (`corpus/README.md`
+has the counts per set). They stay until the corpus's rule for repeats lands with #35: a case whose
+request, and for a parse case its message, equals an earlier case's is left out and named.
+
+long_context is left out for size. Its first turns would add 200 render and 200 parse cases, 9.8 MB,
+taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB at which a source moves to the
+fixtures' form (Storage).
 
 ## Recording
 

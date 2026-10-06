@@ -55,11 +55,29 @@ checks every request and call against BFCL's own code, in a throwaway environmen
 
 A multi_turn case is the first turn of a BFCL multi_turn row. Its request is the first one the weekly run sends for
 the row: the turn's user message, with the functions of the row's classes as tools, less any BFCL holds back until a
-later turn. Its message is that turn's gold calls in order, read from BFCL's Python call strings. Later turns are not
-imported yet: each of their requests carries the results of the earlier calls, which only BFCL's own simulators
-produce, and whether to run them is a decision for later. The fourth multi_turn category, long_context, comes with the
-later turns, where it differs: it changes only the results BFCL's simulator returns, so its first requests repeat
-base's (195 of 200 are the same).
+later turn. Its message is that turn's gold calls in order, read from BFCL's Python call strings; a value passed by
+position takes the parameter of the class method's `def`, as BFCL's executor binds it. Later turns are not imported
+yet: each of their requests carries the results of the earlier calls, which only BFCL's own simulators produce, and
+whether to run them is a decision for later.
+
+The three multi_turn sets repeat cases. Of their 600 render cases, 481 are distinct requests, and of their 425 parse
+cases, 309 are distinct pairs of request and message. A case repeats an earlier one when its request, and for a parse
+case its message, equals that of a case before it in the order the import writes them (base, miss_func, miss_param):
+
+| Set | Render cases | Repeats | Parse cases | Repeats |
+|---|---|---|---|---|
+| `bfcl-multi-turn-base` | 200 | 1 | 200 | 1 |
+| `bfcl-multi-turn-miss-func` | 200 | 1 | 106 | 1 |
+| `bfcl-multi-turn-miss-param` | 200 | 117 | 119 | 114 |
+
+In base and in miss_func, row 43's first turn repeats row 40's. miss_func holds a function back in every row, so none
+of its first requests is base's, while 117 of miss_param's 200 first requests and 114 of its 119 parse cases equal
+base's. The sets keep every row until the corpus's rule for repeats lands with #35: a repeat is left out and named,
+which keeps 481 render and 309 parse cases of these three sets.
+
+The fourth multi_turn category, long_context, is left out for size. Its first turns would add 200 render and 200 parse
+cases, 9.8 MB, taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB a source may keep as plain JSON Lines
+(`docs/benchmark-sets.md`, Storage).
 
 A GSM8K case is one grade school math problem. Its request is the question as a single user turn, with no system
 prompt, tools or sampling parameters. Its parse cases take the assistant message from the published answer, the worked

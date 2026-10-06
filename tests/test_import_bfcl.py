@@ -841,5 +841,5 @@ WEEKLY = (
 )
 
 
-def test_the_import_takes_the_weekly_categories_in_order_but_leaves_long_context_for_the_later_turns():
+def test_the_import_takes_the_weekly_categories_in_order_but_leaves_long_context_out():
     assert bfcl.CATEGORIES == tuple(category for category in WEEKLY if category != "multi_turn_long_context")
