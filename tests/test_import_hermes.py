@@ -169,14 +169,19 @@ CONVERSATION = row(
 )
 
 
-def call(id_: str, city: str) -> dict:
-    return {"id": id_, "type": "function", "function": {"name": "get_weather", "arguments": f'{{"city": "{city}"}}'}}
+def call(city: str, id_: str | None = None) -> dict:
+    """A get_weather call as a parse case expects it, or, given ``id_``, as the history holds it."""
+    found = {"type": "function", "function": {"name": "get_weather", "arguments": f'{{"city": "{city}"}}'}}
+    return found if id_ is None else {"id": id_, **found}
 
 
 def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_case_per_assistant_turn():
     render, parse = hermes.row_cases(CONVERSATION, 7, "glaive_func_calling")
     user = {"role": "user", "content": "Weather in Paris and Zürich?"}
-    both = {"content": "", "tool_calls": [call("call_0", "Paris"), call("call_1", "Zürich")]}
+    # A parse case expects its calls as a parser returns them, without ids; the history gives each call the id
+    # call_<n>, numbered across the conversation, for the tool message that answers it to name.
+    both = {"content": "", "tool_calls": [call("Paris"), call("Zürich")]}
+    made = {"role": "assistant", "content": "", "tool_calls": [call("Paris", "call_0"), call("Zürich", "call_1")]}
     results = [
         {
             "role": "tool",
@@ -191,15 +196,16 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
     ]
     answer = {"content": "Sunny in Paris, snow in Zürich."}
     again = {"role": "user", "content": "And tomorrow in Paris?"}
-    tomorrow = {"content": "", "tool_calls": [call("call_2", "Paris")]}
+    tomorrow = {"content": "", "tool_calls": [call("Paris")]}
+    tomorrow_made = {"role": "assistant", "content": "", "tool_calls": [call("Paris", "call_2")]}
     result = {"role": "tool", "tool_call_id": "call_2", "content": results[0]["content"]}
-    history = [user, {"role": "assistant", **both}, *results, {"role": "assistant", **answer}, again]
+    history = [user, made, *results, {"role": "assistant", **answer}, again]
 
     def request(messages):
         return {"messages": messages, "tools": [WEATHER], "add_generation_prompt": True}
 
-    def origin(turn):
-        return {
+    def origin(turn, written=False):
+        found = {
             "dataset": "hermes",
             "source": f"hf:datasets/NousResearch/hermes-function-calling-v1@{REVISION}",
             "sha256": "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
@@ -209,6 +215,8 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
             "turn": turn,
             "license": "Apache-2.0",
         }
+        # A case whose request holds a call holds ids bellwether wrote, and its origin says so.
+        return {**found, "written": ["tool call ids"]} if written else found
 
     notes = "Hermes glaive_func_calling row 7 turn {}: Weather / Forecast"
     assert render == [
@@ -222,19 +230,16 @@ def test_a_conversation_gives_a_render_case_per_answered_user_turn_and_a_parse_c
             "name": "hermes-glaive-func-calling-7-5",
             "request": request(history),
             "notes": notes.format(5),
-            "origin": origin(5),
+            "origin": origin(5, written=True),
         },
     ]
     assert [(line["name"], line["request"]["messages"], line["message"]) for line in parse] == [
         ("hermes-glaive-func-calling-7-2", [user], both),
-        ("hermes-glaive-func-calling-7-4", [user, {"role": "assistant", **both}, *results], answer),
+        ("hermes-glaive-func-calling-7-4", [user, made, *results], answer),
         ("hermes-glaive-func-calling-7-6", history, tomorrow),
-        (
-            "hermes-glaive-func-calling-7-8",
-            [*history, {"role": "assistant", **tomorrow}, result],
-            {"content": "Sunny again."},
-        ),
+        ("hermes-glaive-func-calling-7-8", [*history, tomorrow_made, result], {"content": "Sunny again."}),
     ]
+    assert [line["origin"] for line in parse] == [origin(2), origin(4, True), origin(6, True), origin(8, True)]
     assert parse[0] == {
         "name": "hermes-glaive-func-calling-7-2",
         "request": request([user]),

@@ -10,7 +10,9 @@ requests and assistant messages:
   checkpoint's template renders them from ``tools``; what else it holds stays (``system_message``);
 - a ``human`` turn is a user message;
 - a ``gpt`` turn is an assistant message: its prose is ``content`` and each ``<tool_call>`` block one call
-  (``split_calls``), with the id ``call_<n>``, numbered across the conversation;
+  (``split_calls``). A parse case expects the calls as a parser returns them, without ids; in the history each call
+  has the id ``call_<n>``, numbered across the conversation, which bellwether writes and ``origin`` marks
+  (``WRITTEN``);
 - each ``<tool_response>`` block of a ``tool`` turn is a tool message answering the call in the same position.
 
 Every assistant turn is a parse case and every user turn an assistant turn answers is a render case. A row with no
@@ -47,9 +49,9 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 82.3 MB of plain JSON
+# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 82.7 MB of plain JSON
 # Lines, past the 50 MB one source's sets may take (corpus_sets.LIMIT, which write enforces); every second row makes
-# 44.6 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
+# 44.7 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
 # equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
 # repeats one of func_calling_singleturn's.
 STRIDE = 2
@@ -87,6 +89,11 @@ TOOL_PROMPTS = (
         "{tool_call}\n</tool_call>",
     ),
 )
+
+
+# The text bellwether writes into a Hermes case that the dataset does not have, as ``origin`` names it: the id of each
+# call in a request's history, and the ``tool_call_id`` of the tool message that answers it.
+WRITTEN = "tool call ids"
 
 
 class Unmappable(ValueError):
@@ -175,11 +182,18 @@ def set_name(config: str) -> str:
     return "hermes-" + config.replace("_", "-")
 
 
-def origin(config: str, row: dict, index: int, turn: int) -> dict:
-    """Where a case came from: the file, the row by its index and its id, and the turn the case ends at."""
+def origin(config: str, row: dict, index: int, turn: int, request: dict) -> dict:
+    """Where a case came from: the file, the row by its index and its id, and the turn the case ends at.
+
+    ``written`` lists the text bellwether wrote into the case rather than took from the row: ``WRITTEN`` when the
+    request holds a call, whose id, and the ``tool_call_id`` that names it, the dataset does not have.
+    """
     filename, sha256 = CONFIGS[config]
     found = {"dataset": "hermes", "source": SOURCE, "sha256": sha256, "file": filename}
-    return {**found, "row": index, "row_id": row["id"], "turn": turn, "license": LICENSE}
+    found = {**found, "row": index, "row_id": row["id"], "turn": turn, "license": LICENSE}
+    if any("tool_calls" in message for message in request["messages"]):
+        found["written"] = [WRITTEN]
+    return found
 
 
 def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict]]:
@@ -223,19 +237,21 @@ def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict
                 render.append(_line(config, row, index, turn, _request(messages, tools)))
         elif source == "gpt":
             content, found = split_calls(text)
-            message: dict = {"content": content}
-            calls = []
+            expected = []
             for call in found:
                 if call["name"] not in declared:
                     raise Unmappable(f"a call to {call['name']}, which the row's tools do not declare")
                 arguments = json.dumps(call["arguments"], ensure_ascii=False)
-                function = {"name": call["name"], "arguments": arguments}
-                calls.append({"id": f"call_{made}", "type": "function", "function": function})
-                made += 1
-            if calls:
-                message["tool_calls"] = calls
+                expected.append({"type": "function", "function": {"name": call["name"], "arguments": arguments}})
+            message: dict = {"content": content}
+            if expected:
+                message["tool_calls"] = expected
             parse.append(_line(config, row, index, turn, _request(messages, tools), message))
-            messages.append({"role": "assistant", **message})
+            # The history gives each call an id for the tool message that answers it to name; a parser makes up its
+            # own, so the expected message holds none.
+            calls = [{"id": f"call_{made + n}", **call} for n, call in enumerate(expected)]
+            made += len(calls)
+            messages.append({"role": "assistant", "content": content, **({"tool_calls": calls} if calls else {})})
         else:
             raise Unmappable(f"a turn from {source!r}")
     return render, parse
@@ -269,7 +285,7 @@ def _line(config: str, row: dict, index: int, turn: int, request: dict, message:
         line["message"] = message
     topic = " / ".join(part for part in (row.get("category"), row.get("subcategory")) if part)
     line["notes"] = f"Hermes {config} row {index} turn {turn}: {topic}"
-    line["origin"] = origin(config, row, index, turn)
+    line["origin"] = origin(config, row, index, turn, request)
     return line
 
 
