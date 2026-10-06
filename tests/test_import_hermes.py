@@ -281,6 +281,16 @@ def test_a_tool_that_is_not_an_openai_function_tool_is_unmappable():
         hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
 
 
+def test_a_row_whose_tools_declare_one_name_twice_is_unmappable():
+    # 44 glaive_func_calling rows taken do, 42 of them with two different definitions: a call to that name could be
+    # held to either, and no engine is asked to choose.
+    fahrenheit = {**WEATHER, "function": {**WEATHER["function"], "description": "Weather in a city, in Fahrenheit."}}
+    for tools in (json.dumps([WEATHER, WEATHER]), json.dumps([WEATHER, fahrenheit])):
+        turns = [("system", GLAIVE.replace(TOOLS, tools)), ("human", "Weather in Paris?"), ("gpt", PARIS)]
+        with pytest.raises(hermes.Unmappable, match="two tools under one name"):
+            hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
+
+
 def test_a_row_without_tools_sends_none_and_keeps_its_system_message():
     plain = "You are a helpful assistant, with no access to external functions."  # 865 glaive_func_calling rows
     turns = [("system", plain), ("human", "Hi"), ("gpt", "Hello!")]

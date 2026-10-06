@@ -49,9 +49,9 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 81.6 MB of plain JSON
+# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 80.6 MB of plain JSON
 # Lines, past the 50 MB one source's sets may take (corpus_sets.LIMIT, which write enforces); every second row makes
-# 44.2 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
+# 43.6 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
 # equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
 # repeats one of func_calling_singleturn's.
 STRIDE = 2
@@ -258,7 +258,10 @@ def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict
 
 
 def _tools(field: str) -> list[dict]:
-    """The row's ``tools`` field as the request's tools, each ``{"type": "function", "function": {"name", ...}}``."""
+    """The row's ``tools`` field as the request's tools, each ``{"type": "function", "function": {"name", ...}}``.
+
+    Each name is declared once: a call to a name declared twice could be held to either definition.
+    """
     tools = json.loads(field) or []
     for tool in tools:
         if not (
@@ -268,6 +271,9 @@ def _tools(field: str) -> list[dict]:
             and isinstance(tool["function"].get("name"), str)
         ):
             raise Unmappable("a tool that is not an OpenAI function tool")
+    names = [tool["function"]["name"] for tool in tools]
+    if len(set(names)) < len(names):
+        raise Unmappable("two tools under one name")
     return tools
 
 
