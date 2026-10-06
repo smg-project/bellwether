@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest
+from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest, load_manifests
 from bellwether.record import sets as set_tables
 from bellwether.storage import (
     is_lfs_pointer,
@@ -33,7 +33,7 @@ def selected(fixtures: Path, model: str | None) -> list[Manifest]:
     """The manifest of every model under ``fixtures``, or of ``model`` only, which must have one."""
     if model is not None:
         return [find_manifest(fixtures, model)]
-    return [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
+    return load_manifests(fixtures)
 
 
 def set_files(manifest: Manifest) -> list[tuple[str, str, Path]]:

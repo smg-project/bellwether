@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bellwether.inputs import oracle_inputs
-from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifest, slug_for
+from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifest, load_manifests, slug_for
 from bellwether.record import sets as set_tables
 
 INPUTS_HEADER = (
@@ -106,13 +106,7 @@ def _is_date(text: str) -> bool:
 
 
 def existing_manifests(fixtures: Path) -> dict[str, Manifest]:
-    found: dict[str, Manifest] = {}
-    for path in sorted(fixtures.glob("*/manifest.toml")):
-        manifest = load_manifest(path)
-        if manifest.model in found:
-            raise ValueError(f"{found[manifest.model].path} and {path} are both manifests of {manifest.model}")
-        found[manifest.model] = manifest
-    return found
+    return {manifest.model: manifest for manifest in load_manifests(fixtures)}
 
 
 def check_listed(checkpoints: list[Checkpoint], existing: dict[str, Manifest]) -> None:

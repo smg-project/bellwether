@@ -17,7 +17,7 @@ from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.inputs import oracle_inputs
-from bellwether.manifest import find_manifest, load_manifest, slug_for
+from bellwether.manifest import find_manifest, load_manifest, load_manifests, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
@@ -131,6 +131,18 @@ def test_find_manifest_matches_the_model_id_exactly(tmp_path):
     assert find_manifest(tmp_path, "acme/Tiny-Chat").slug == "tiny-chat"
     with pytest.raises(FileNotFoundError, match="manifests exist for: acme/Tiny-Chat"):
         find_manifest(tmp_path, "acme/tiny-chat")
+
+
+def test_every_command_reads_the_manifests_through_one_loader_that_refuses_two_of_one_model(tmp_path):
+    # record and unpack find a manifest by model, and count and manifests read them all; two manifests of one model
+    # would leave which one counts to the order of their directories.
+    first = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat")
+    second = write_manifest(tmp_path, "tiny-chat-copy", "acme/Tiny-Chat")
+    message = f"{first} and {second} are both manifests of acme/Tiny-Chat"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        load_manifests(tmp_path)
+    with pytest.raises(ValueError, match=re.escape(message)):
+        find_manifest(tmp_path, "acme/Tiny-Chat")
 
 
 def test_slug_is_the_lowercase_last_path_segment():

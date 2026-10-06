@@ -119,13 +119,23 @@ def _tier(path: Path, tier: object) -> int | None:
     return tier
 
 
-def find_manifest(fixtures_dir: Path, model: str) -> Manifest:
-    """The manifest whose ``model`` is ``model``; models are matched exactly, never by slug."""
-    seen = []
+def load_manifests(fixtures_dir: Path) -> list[Manifest]:
+    """Every manifest under ``fixtures_dir``, sorted by path, the one place the commands read them all. Two manifests
+    of one model are refused, since which one counts would be left to the order of their directories."""
+    found: dict[str, Manifest] = {}
     for path in sorted(fixtures_dir.glob("*/manifest.toml")):
         manifest = load_manifest(path)
+        if manifest.model in found:
+            raise ValueError(f"{found[manifest.model].path} and {path} are both manifests of {manifest.model}")
+        found[manifest.model] = manifest
+    return list(found.values())
+
+
+def find_manifest(fixtures_dir: Path, model: str) -> Manifest:
+    """The manifest whose ``model`` is ``model``; models are matched exactly, never by slug."""
+    manifests = load_manifests(fixtures_dir)
+    for manifest in manifests:
         if manifest.model == model:
             return manifest
-        seen.append(manifest.model)
-    known = ", ".join(seen) or "none"
+    known = ", ".join(manifest.model for manifest in manifests) or "none"
     raise FileNotFoundError(f"no manifest under {fixtures_dir} for model {model!r}; manifests exist for: {known}")

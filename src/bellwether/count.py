@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from bellwether import jsonl, storage
-from bellwether.manifest import KINDS, load_manifest
+from bellwether.manifest import KINDS, load_manifests
 from bellwether.record import sets as set_tables
 
 HAND_WRITTEN = "hand-written"
@@ -44,8 +44,7 @@ def counts(fixtures: Path, corpus: Path) -> list[dict]:
     """Cases per checkpoint, kind and source, from each group's ``sets.toml``: no fixture set is read."""
     source_of = set_sources(corpus)
     rows: list[dict] = []
-    for manifest_path in sorted(fixtures.glob("*/manifest.toml")):
-        manifest = load_manifest(manifest_path)
+    for manifest in load_manifests(fixtures):
         tally: Counter[tuple[str, str]] = Counter()
         for (kind, name), table in set_tables.read(fixtures / manifest.group_slug / set_tables.FILE).items():
             tally[(kind, source_of.get((kind, name), HAND_WRITTEN))] += table["cases"]
