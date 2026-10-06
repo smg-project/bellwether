@@ -21,7 +21,9 @@ def fetch(repo: str, revision: str, filename: str, sha256: str) -> Path:
     """The cached path of ``filename`` in the dataset ``repo`` at commit ``revision``, checked against ``sha256``."""
     import huggingface_hub
 
-    path = Path(huggingface_hub.hf_hub_download(repo, filename, repo_type="dataset", revision=revision))
+    # token=False: the files are public, and an importer that needs no token reads none; with the default, the call
+    # would look one up (HF_TOKEN, then the token file, refreshing a browser login) and send it on every request.
+    path = Path(huggingface_hub.hf_hub_download(repo, filename, repo_type="dataset", revision=revision, token=False))
     pinned.check(f"{repo}@{revision} {filename}", pinned.sha256_of_file(path), sha256)
     return path
 
