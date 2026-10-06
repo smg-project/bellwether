@@ -12,9 +12,11 @@ and the tokenizer's eos, when it has one (``SamplingParams.update_from_generatio
 output is the text before the first stop id in the rendered turn, after which the turn may hold only
 whitespace and further stop ids. A template that writes no end marker (GLM's) gives the whole turn,
 provided the next message, a user message after content or a tool message after tool calls, opens
-with a stop id. Any other turn is reported and not recorded. The line records the stop id and where
-it was found, in the turn or in the next message. transformers' ``generate`` stops on the generation
-config's ids alone; where that would end the output elsewhere (Qwen3.5-9B's config lists only
+with a stop id. Any other turn is reported and not recorded, and so is a message whose own text
+(content, reasoning, a call's name or arguments) holds a stop id, since generation would stop inside
+it. The line records the stop id and where it was found, in the turn or in the next message.
+transformers' ``generate`` stops on the generation config's ids alone; where that would end the
+output elsewhere (Qwen3.5-9B's config lists only
 ``<|endoftext|>``, and its turns end with the tokenizer's ``<|im_end|>``), the output still ends
 where vLLM stops, as serving engines do, and the line and the run say so. The generation config must
 be cached at the revision or known absent: offline, transformers takes a file that is merely not
@@ -52,7 +54,7 @@ from __future__ import annotations
 import copy
 import functools
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,6 +101,7 @@ class RoundtripOracle:
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
         check_parse_call_arguments(message)
         assistant = {"role": "assistant", **as_vllm_gives_it(message)}
+        self.check_no_stop_id_in_the_message(assistant)
         rendered = self.tokenizer.apply_chat_template(
             [*messages, assistant], tokenize=False, add_generation_prompt=False, **kwargs
         )
@@ -130,7 +133,7 @@ class RoundtripOracle:
             name = self.tokenizer.convert_ids_to_tokens(cut.stop_id)
             raise ValueError(
                 f"the turn goes on after stop id {cut.stop_id} ({name!r}): {turn[len(cut.text) :][:80]!r}; "
-                "the template renders part of the message after generation stops"
+                "the template writes more of the turn after the point where generation stops"
             )
         text = cut.text
         output_ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
@@ -146,6 +149,24 @@ class RoundtripOracle:
         if elsewhere is not None:
             end_of_turn["hf_generate"] = elsewhere
         return OutputText(text, output_ids, output_pieces, finish_reason, end_of_turn)
+
+    def check_no_stop_id_in_the_message(self, assistant: dict) -> None:
+        """No string of the message, as the template gets it, may hold a stop id.
+
+        Generation stops at the first stop id, and the turn is searched by id, so a stop token in the message's own
+        content, reasoning or call arguments would end the output inside the message: the case would be recorded
+        short when only whitespace follows the token, and refused as if the template went on after generation stops
+        otherwise. ``</s>`` is ordinary HTML and a stop token of several checkpoints. Each string is tokenized on its
+        own, as the output is; a call's arguments are read as the template gets them, decoded, keys included.
+        """
+        for where, text in strings_of(assistant):
+            for token in self.tokenizer.encode(text, add_special_tokens=False):
+                if token in self.stop_ids:
+                    name = self.tokenizer.convert_ids_to_tokens(token)
+                    raise ValueError(
+                        f"the message's own text holds stop id {token} ({name!r}) in {where}: generation stops there, "
+                        "so no output carries the message whole"
+                    )
 
     def where_generate_stops_instead(
         self, turn: str, cut: Cut, with_next_message: Callable[[], str | None]
@@ -317,6 +338,20 @@ def next_messages(message: dict) -> list[dict]:
         }
         for call in calls
     ]
+
+
+def strings_of(value: object, path: str = "") -> Iterator[tuple[str, str]]:
+    """Every string in ``value``, each key of a mapping included, with where it is (``tool_calls[0].function.name``)."""
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            where = f"{path}.{key}" if path else str(key)
+            yield where, str(key)
+            yield from strings_of(item, where)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from strings_of(item, f"{path}[{index}]")
 
 
 def as_vllm_gives_it(message: dict) -> dict:

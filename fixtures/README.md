@@ -70,7 +70,9 @@ turn may hold only whitespace and further stop ids (Phi-4-mini writes `<|end|><|
 turn with no stop id is the output whole when the next message (a user message after content, one
 tool message per call after tool calls) opens with one, right after the turn and on a token
 boundary: GLM writes no end marker, and its `<|user|>` and `<|observation|>` are in its generation
-config. Any other case is reported and not recorded. The provenance's `end_of_turn` holds the
+config. Any other case is reported and not recorded, and so is a case whose message's own text
+(content, reasoning, a call's name or arguments, as the template gets them) holds a stop id, since
+generation would stop inside the message. The provenance's `end_of_turn` holds the
 `stop_id` and the step that found it (`found_by`: `turn` or `next-message`): vLLM's final token ids
 end with that id, while its text is dropped.
 

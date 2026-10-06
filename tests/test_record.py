@@ -919,6 +919,63 @@ def test_a_turn_that_goes_on_after_its_stop_id_fails_the_case(tiny_model, tmp_pa
     assert (out.text, out.end_of_turn["stop_id"]) == ("Hello", token_id(model, "<|end|>"))
 
 
+@pytest.fixture(scope="session")
+def endoftext_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """Qwen3's stop set on the tiny model: `<|im_end|>`, which ends its turns, and `<|endoftext|>`."""
+    model = tiny_variant(tiny_model, tmp_path_factory, "endoftext-chat", TEMPLATE, tokens=("<|endoftext|>",))
+    write_generation_config(model, "<|im_end|>", "<|endoftext|>")
+    return model
+
+
+def call_with(arguments: str) -> dict:
+    return {"type": "function", "function": {"name": "get_weather", "arguments": arguments}}
+
+
+# `<|endoftext|>` with its angle brackets written as JSON escapes; the template gets the decoded text.
+ESCAPED_ENDOFTEXT = chr(92) + "u003c|endoftext|" + chr(92) + "u003e"
+
+
+@pytest.mark.parametrize(
+    ("message", "where"),
+    [
+        ({"content": "It is <|endoftext|>"}, "content"),
+        ({"content": "It is <|endoftext|> and more"}, "content"),
+        ({"reasoning_content": "Say <|endoftext|> first.", "content": "Done."}, "reasoning_content"),
+        (
+            {"content": "", "tool_calls": [call_with('{"city": "<|endoftext|>"}')]},
+            "tool_calls[0].function.arguments.city",
+        ),
+        (
+            {"content": "", "tool_calls": [call_with('{"city": "' + ESCAPED_ENDOFTEXT + '"}')]},
+            "tool_calls[0].function.arguments.city",
+        ),
+        (
+            {"content": "", "tool_calls": [call_with('{"<|endoftext|>": "Paris"}')]},
+            "tool_calls[0].function.arguments.<|endoftext|>",
+        ),
+    ],
+    ids=["content-end", "content-middle", "reasoning", "call-arguments", "call-arguments-escaped", "argument-name"],
+)
+def test_a_stop_id_in_the_message_s_own_text_fails_the_case(endoftext_model, message, where):
+    # Generation stops at the first stop id, so no output carries a message whose own text holds one. The turn is
+    # searched by id: with the stop token at the end of the content the case was recorded short, and anywhere else it
+    # was refused as if the template had rendered the rest of the message after generation stops. `</s>`, a stop token
+    # of several checkpoints, is also ordinary HTML.
+    request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
+    stop = token_id(endoftext_model, "<|endoftext|>")
+    expected = f"the message's own text holds stop id {stop} ('<|endoftext|>') in {where}:"
+    with pytest.raises(ValueError, match=re.escape(expected)):
+        RoundtripOracle(str(endoftext_model), "local").render_output(request, message)
+
+
+def test_a_special_token_that_is_not_a_stop_id_stays_in_the_output(endoftext_model):
+    # The corpus has messages whose text holds `</think>` or `<tool_call>`: only a stop id fails a case.
+    out = RoundtripOracle(str(endoftext_model), "local").render_output(
+        {"messages": [user("Hi")]}, {"content": "Write <think> here."}
+    )
+    assert out.text == "Write <think> here."
+
+
 # GLM's shape: no message is closed; each opens with its role tag, and a tool message needs its call's id here.
 ROLE_TAG_TEMPLATE = (
     "{%- for m in messages %}"
