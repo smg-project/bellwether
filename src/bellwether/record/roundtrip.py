@@ -335,7 +335,7 @@ def stop_at_next_message(tokenizer, prompt: str, rendered: str, continued: str, 
     turn, tail = rendered[len(prompt) :], continued[len(prompt) :]
     encoded = tokenizer(tail, add_special_tokens=False, return_offsets_mapping=True)
     for token, (start, end) in zip(encoded["input_ids"], encoded["offset_mapping"], strict=True):
-        if end <= len(turn) or start == end:
+        if end <= len(turn):  # the turn's own, a zero-width token at its end (trim_offsets) among them
             continue
         name = tokenizer.convert_ids_to_tokens(token)
         if start == len(turn) and token in stop_ids:

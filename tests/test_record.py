@@ -10,7 +10,7 @@ import subprocess
 import huggingface_hub.constants
 import pytest
 import zstandard
-from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
@@ -1130,6 +1130,39 @@ def test_a_token_that_straddles_the_end_of_the_turn_fails_the_case(tiny_model, t
     reason = f"no token starts where the turn ends once the next message follows it {first}"
     with pytest.raises(ValueError, match=re.escape(reason)):
         RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+
+
+def trimmed_offsets_variant(tiny_model, tmp_path_factory, name: str, template: str) -> pathlib.Path:
+    """The role-tag variant with GPT-2's ByteLevel post-processor and ``trim_offsets``, as JetBrains' Mellum2 ships it:
+    a token of spaces alone gets a zero-width offset, after its spaces."""
+    model = tiny_variant(tiny_model, tmp_path_factory, name, template, tokens=ROLE_TAGS)
+    tokenizer = Tokenizer.from_file(str(model / "tokenizer.json"))
+    tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
+    tokenizer.save(str(model / "tokenizer.json"))
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    return model
+
+
+def test_a_zero_width_token_neither_hides_nor_stands_in_for_the_stop_id_that_opens_the_next_message(
+    tiny_model, tmp_path_factory
+):
+    # Spaces the template writes between the turn and the next message are a token that starts after the turn's end,
+    # zero-width under trim_offsets: no token starts where the turn ends, and the reason names that first token.
+    template = ROLE_TAG_TEMPLATE.replace(
+        "{%- else %}{{ '<|user|>' + m['content'] }}", "{%- else %}{{ '  <|user|>' + m['content'] }}"
+    )
+    model = trimmed_offsets_variant(tiny_model, tmp_path_factory, "spaced-tag-chat", template)
+    with pytest.raises(
+        ValueError, match=r"no token starts where the turn ends .*\(the first one after it is 'Ġ+' \(\d+\)\)"
+    ):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    # Spaces that end the turn itself are a zero-width token at its end, and the stop id after them still ends it.
+    model = trimmed_offsets_variant(tiny_model, tmp_path_factory, "trimmed-role-tag-chat", ROLE_TAG_TEMPLATE)
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello  "})
+    assert (out.text, out.end_of_turn) == (
+        "Hello  ",
+        {"stop_id": token_id(model, "<|user|>"), "found_by": "next-message"},
+    )
 
 
 def test_a_turn_with_no_stop_id_that_nothing_follows_fails_the_case(tiny_model, tmp_path_factory):
