@@ -2,9 +2,10 @@
 
 A set file holds one JSON line per case, in the order the importer built them, each ending in "\\n". ``json.dumps``
 keeps each line's keys in the order the importer built them and writes non-ASCII text raw (``ensure_ascii=False``),
-so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes.
-``report`` and ``report_skipped`` print what an import keeps and leaves out, in the same words for every importer.
-This module imports nothing beyond the standard library.
+so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes. One
+importer's sets stay plain JSON Lines up to ``LIMIT`` bytes in all, and ``write`` refuses more. ``report`` and
+``report_skipped`` print what an import keeps and leaves out, in the same words for every importer. This module imports
+nothing beyond the standard library.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import json
 from pathlib import Path
 
 KINDS = ("render", "parse")
+# A source whose corpus passes 50 MB moves to the fixtures' storage form (docs/benchmark-sets.md, Storage); in bytes.
+LIMIT = 50_000_000
 
 
 def _json(value) -> str:
@@ -109,13 +112,20 @@ def write(
     """Write every set and ``files``, and remove the ``<prefix>*`` set files the import no longer writes.
 
     ``files`` are the import's other files, such as a dataset's license, as bytes by path under ``corpus_dir``. The
-    prefix is the importer's.
+    prefix is the importer's. Sets that take more than ``LIMIT`` bytes in all are refused before anything is written.
     """
+    contents = {key: text(lines).encode("utf-8") for key, lines in sets.items()}
+    size = sum(len(content) for content in contents.values())
+    if size > LIMIT:
+        raise ValueError(
+            f"the {prefix}* sets take {size} bytes, past the {LIMIT} one source may take as plain JSON Lines; such a "
+            "source moves to the fixtures' storage form (docs/benchmark-sets.md, Storage)"
+        )
     written = []
-    for (kind, name), lines in sorted(sets.items()):
+    for (kind, name), content in sorted(contents.items()):
         path = corpus_dir / kind / f"{name}.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(text(lines).encode("utf-8"))
+        path.write_bytes(content)
         written.append(path)
     for relative, content in sorted((files or {}).items()):
         path = corpus_dir / relative
