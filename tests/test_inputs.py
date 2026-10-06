@@ -76,6 +76,61 @@ def test_only_the_fields_that_choose_the_tokenizer_count_in_the_model_config(che
     assert oracle_inputs(str(checkpoint), "local")["config.json"] != before["config.json"]
 
 
+def canonical(**fields) -> str:
+    return sha256(json.dumps(fields, sort_keys=True).encode())
+
+
+def test_without_a_generation_config_the_model_config_gives_the_stop_ids_text_config_included(checkpoint):
+    # The end of a turn reads generation_config.json, else config.json through GenerationConfig.from_model_config,
+    # which takes a value the top level leaves unset from text_config. A model type transformers does not know is read
+    # as written: its class is the vendor's code, which never runs.
+    (checkpoint / "generation_config.json").unlink()
+    (checkpoint / "configuration_acme.py").write_text('raise RuntimeError("the vendor\'s code ran")\n')
+    config = {"model_type": "acme_chat", "auto_map": {"AutoConfig": "configuration_acme.AcmeConfig"}}
+    (checkpoint / "config.json").write_text(json.dumps({**config, "text_config": {"eos_token_id": 7}}))
+    inputs = oracle_inputs(str(checkpoint), "local")
+    assert "generation_config.json" not in inputs
+    expected = canonical(
+        model_type="acme_chat", tokenizer_class=None, bos_token_id=None, eos_token_id=7, pad_token_id=None
+    )
+    assert inputs["config.json"] == expected
+
+
+def test_the_stop_ids_of_a_model_type_transformers_knows_carry_its_class_defaults(checkpoint):
+    # {"model_type": "llama"} states no token ids; LlamaConfig's are bos 1 and eos 2, which from_model_config gives.
+    (checkpoint / "generation_config.json").unlink()
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "llama"}))
+    expected = canonical(model_type="llama", tokenizer_class=None, bos_token_id=1, eos_token_id=2, pad_token_id=None)
+    assert oracle_inputs(str(checkpoint), "local")["config.json"] == expected
+
+
+def test_the_model_config_s_stop_ids_count_only_where_no_generation_config_gives_them(checkpoint):
+    config = checkpoint / "config.json"
+    before = oracle_inputs(str(checkpoint), "local")
+    config.write_text(json.dumps({"model_type": "qwen3", "hidden_size": 64, "eos_token_id": 9}))
+    assert oracle_inputs(str(checkpoint), "local") == before
+    (checkpoint / "generation_config.json").unlink()
+    without = oracle_inputs(str(checkpoint), "local")["config.json"]
+    config.write_text(json.dumps({"model_type": "qwen3", "hidden_size": 64, "eos_token_id": 10}))
+    assert oracle_inputs(str(checkpoint), "local")["config.json"] != without
+
+
+def test_each_named_chat_template_is_an_input_and_nothing_else_in_their_directory(checkpoint):
+    # transformers reads every additional_chat_templates/<name>.jinja, and takes tool_use when a request has tools.
+    named = checkpoint / "additional_chat_templates"
+    (named / "older").mkdir(parents=True)
+    (named / "tool_use.jinja").write_text("{{ tools }}")
+    (named / "rag.jinja").write_text("{{ documents }}")
+    (named / "README.md").write_text("Notes.")
+    (named / "older" / "tool_use.jinja").write_text("{{ messages }}")
+    inputs = oracle_inputs(str(checkpoint), "local")
+    assert [name for name in inputs if name.startswith("additional_chat_templates/")] == [
+        "additional_chat_templates/rag.jinja",
+        "additional_chat_templates/tool_use.jinja",
+    ]
+    assert inputs["additional_chat_templates/tool_use.jinja"] == sha256(b"{{ tools }}")
+
+
 OLD, NEW = "1" * 40, "2" * 40
 
 

@@ -64,10 +64,13 @@ for now; embedding, reranking and classification models are out.
 - **Checkpoint groups.** Checkpoints whose oracle inputs are byte-identical render and parse
   identically, so a group is recorded once and each checkpoint's row names its group.
   - **The oracle inputs** are every file the oracle reads for the model: the tokenizer files, the
-    chat template, the generation config (for the end of turn), and, for a vendor-code oracle, the
-    vendor's files. From `config.json` they take only the two fields that choose the tokenizer
-    class (`model_type`, `tokenizer_class`), and from the generation config only its token ids
-    (`eos_token_id`, `bos_token_id`, `pad_token_id`), so sampling defaults do not split a group.
+    chat templates (the named ones in `additional_chat_templates/` too), the generation config (for
+    the end of turn), and, for a vendor-code oracle, the vendor's files. From `config.json` they
+    take only the two fields that choose the tokenizer class (`model_type`, `tokenizer_class`), and
+    from the generation config only its token ids (`eos_token_id`, `bos_token_id`, `pad_token_id`),
+    so sampling defaults do not split a group. A checkpoint that ships no generation config has the
+    end of turn read those ids from `config.json`, through `GenerationConfig.from_model_config`
+    (`text_config` included), so there they count as part of `config.json`.
   - **Membership.** The manifest lists each input with its sha256, and membership is equality of
     those lists, checked when recording. As a check on the list itself, the weekly job also
     records one other member of each group and compares the results, so a file the list misses
