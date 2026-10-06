@@ -160,7 +160,7 @@ NOT_STRINGS = "carries a value that is not a string, which the category's checke
 
 
 class Unanswerable(ValueError):
-    """A BFCL ground truth that no call can satisfy under BFCL's own checker."""
+    """A BFCL ground truth for which no call the rule builds passes BFCL's own checker."""
 
 
 def pick(options: list):
@@ -298,8 +298,8 @@ def build_sets(
     """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
 
     A Java or JavaScript row gets its parse case only when every value it carries is a string (``string_valued``), and
-    a row whose ground truth no call satisfies gets none (``Unanswerable``); each such row is appended to ``skipped``
-    with its reason.
+    a row for which no call the rule builds passes BFCL's checker gets none (``Unanswerable``); each such row is
+    appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}

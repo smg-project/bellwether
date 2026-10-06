@@ -90,9 +90,15 @@ weekly run pins (2026.3.23).
   one call per ground-truth entry:
   - each parameter takes its first acceptable value that is not the "may be omitted" marker;
   - a parameter that can only be omitted is left out, and nested objects follow the same rule;
+  - a parameter the function does not declare is left out when the answer allows it, since BFCL's
+    checker refuses it;
   - arguments are JSON written with raw Unicode, as the hand-written cases are.
 
-  BFCL's checker accepts every call built this way. The irrelevance and relevance categories are
+  Each call is held to BFCL's own checker rules. A row where no call this rule builds passes the
+  checker gets no parse case, and the import names it with its reason (5 rows at this pin). Java
+  and JavaScript rows get a parse case only where every value is a string: BFCL's checker refuses
+  any other type there, and their ground truth stores converted values. The other 76 rows stay
+  render-only until their string forms land (#26). The irrelevance and relevance categories are
   render-only: they have no answer to round-trip.
 - **Sets and provenance.** One set per BFCL category, `corpus/{render,parse}/bfcl-<category>.jsonl`;
   case names are `bfcl-<row id>`. Each line carries `origin`: dataset, source
@@ -103,7 +109,9 @@ weekly run pins (2026.3.23).
   `corpus/README.md` lists each imported dataset with its license and attribution, and a dataset's
   license is checked before its sets land.
 
-The single-turn categories give 3641 render cases and 2501 parse cases per checkpoint group.
+The single-turn categories give 3641 render cases and 2420 parse cases per checkpoint group: 2501
+rows have a ground truth, and 76 Java and JavaScript rows and 5 rows no built call answers stay
+render-only.
 
 ## Recording
 
