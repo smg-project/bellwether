@@ -871,6 +871,43 @@ def test_the_command_writes_first_turn_parse_cases_and_names_the_rows_without_a_
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
 
 
+def test_the_command_leaves_out_a_multi_turn_first_turn_that_repeats_an_earlier_category(tmp_path, monkeypatch, capsys):
+    # As 117 of miss_param's first requests are base's: miss_param_0 asks what base_0 asks, of the same classes.
+    row = {key: value for key, value in MT_ROW.items() if key != "missed_function"}
+    other = dict(row, question=[[{"role": "user", "content": "Mail Al"}], *row["question"][1:]])
+    rows = {
+        "multi_turn_base": [(row, "send(to='Bo')")],
+        "multi_turn_miss_param": [(row, "send(to='Bo')"), (other, "send(to='Al')")],
+    }
+    members = {
+        BACKEND_CONFIG: BACKEND,
+        "bfcl_eval/data/multi_turn_func_doc/mail.json": MAIL_DOCS,
+        "bfcl_eval/data/multi_turn_func_doc/cafe.json": CAFE_DOCS,
+        f"{SOURCES}/mail.py": MAIL_SOURCE,
+        f"{SOURCES}/cafe.py": CAFE_SOURCE,
+    }
+    for category, entries in rows.items():
+        questions, answers = [], []
+        for index, (question, call) in enumerate(entries):
+            questions.append(dict(question, id=f"{category}_{index}"))
+            answers.append({"id": f"{category}_{index}", "ground_truth": [[call], [], ["sort()"]]})
+        members[f"bfcl_eval/data/BFCL_v4_{category}.json"] = questions
+        members[f"bfcl_eval/data/possible_answer/BFCL_v4_{category}.json"] = answers
+    monkeypatch.setattr(bfcl, "CATEGORIES", tuple(rows))
+    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: fake_wheel(tmp_path, members))
+    corpus = tmp_path / "corpus"
+    assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
+    assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out.count("no case bfcl-multi-turn-miss-param-0: it repeats bfcl-multi-turn-base-0") == 2
+    render, parse = (corpus / kind / "bfcl-multi-turn-miss-param.jsonl" for kind in ("render", "parse"))
+    assert f"{render}: 1 cases, 1 left out as repeats" in out
+    assert f"{parse}: 1 cases, 1 left out as repeats, 1 distinct messages" in out
+    assert f"{corpus}: 4 cases in the 4 BFCL sets, 2 left out as repeats, 2 distinct messages" in out
+    for path in (render, parse):
+        assert [case.name for case in read_cases(path)] == ["bfcl-multi-turn-miss-param-1"]
+
+
 # The categories smg's weekly run sends, in its order (.github/workflows/nightly-bfcl.yml in smg).
 WEEKLY = (
     "simple_python",

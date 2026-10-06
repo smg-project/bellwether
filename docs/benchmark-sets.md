@@ -167,16 +167,15 @@ and `convert_to_tool`. The parse message is the turn's ground-truth calls in ord
 string is parsed with `ast`, a value passed by position takes the parameter of the class method's
 `def`, read from the class's source with `ast` (BFCL's executor runs the call on the class, and
 `purchase_insurance`'s doc lists two of its parameters the other way round), and each call is
-held to the same checker rules. That gives 600 render cases and 425 parse cases; the 175 miss_func
-and miss_param rows whose first turn has no ground-truth call stay render-only. Later turns wait
-for a decision: each of their requests carries the results of the earlier calls, which only BFCL's
-simulators produce.
+held to the same checker rules. That gives 600 render cases and 425 parse cases before the rule for
+repeats; the 175 miss_func and miss_param rows whose first turn has no ground-truth call stay
+render-only. Later turns wait for a decision: each of their requests carries the results of the
+earlier calls, which only BFCL's simulators produce.
 
-The three sets repeat cases: 481 of the 600 render cases are distinct requests, and 309 of the 425
-parse cases distinct pairs of request and message. 117 of miss_param's first requests and 114 of its
-119 parse cases equal base's, and in base and in miss_func row 43 repeats row 40 (`corpus/README.md`
-has the counts per set). They stay until the corpus's rule for repeats lands with #35: a case whose
-request, and for a parse case its message, equals an earlier case's is left out and named.
+The rule for repeats leaves out 119 of those render cases and 116 of those parse cases, so the three
+sets hold 481 and 309: 117 of miss_param's first requests and 114 of its 119 parse cases equal
+base's, and in base and in miss_func row 43 repeats row 40 (`corpus/README.md` has the counts per
+set). The 309 parse cases carry 163 distinct messages.
 
 long_context is left out for size. Its first turns would add 200 render and 200 parse cases, 9.8 MB,
 taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB at which a source moves to the
@@ -309,8 +308,8 @@ All-model figures, from the 45-model probe (BFCL single-turn alone):
 - **Git's packing:** the plain files of all 45 pack into 61 MB, because the same requests recur in
   every model's files. But a checkout still writes every byte, so the working tree would be several
   gigabytes now and tens of gigabytes later, before GSM8K and tau2 add theirs.
-- **The BFCL corpus:** 42.6 MB plain and 1.1 MB packed now, with the multi_turn first turns; the
-  single-turn sets alone are 17.9 MB plain, 0.8 MB packed.
+- **The BFCL corpus:** 36.8 MB plain and 1.2 MB packed now, with the multi_turn first turns and
+  without repeats; the single-turn sets alone are 17.9 MB plain, 0.8 MB packed.
 
 Decision:
 

@@ -44,7 +44,7 @@ together.
 
 | Dataset | Sets | Source | License | Attribution |
 |---|---|---|---|---|
-| BFCL | `bfcl-<category>` for 16 of the 17 categories of smg's weekly run. The 13 single-turn categories: 3635 render cases, one per row except 6 `live_irrelevance` rows that repeat an earlier case; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them), with 2233 distinct messages among them. Three multi_turn categories, `bfcl-multi-turn-{base,miss-func,miss-param}`, first turn only: 600 render cases, one per row; 425 parse cases, one per row whose first turn has a ground-truth call (175 miss_func and miss_param rows have none). The import names every row it gives no parse case | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import; the wheel has no LICENSE file, so the import copies `LICENSE` from `github:ShishirPatil/gorilla@6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`, the commit the wheel was built from (sha256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`), to `corpus/licenses/bfcl-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
+| BFCL | `bfcl-<category>` for 16 of the 17 categories of smg's weekly run. The 13 single-turn categories: 3635 render cases, one per row except 6 `live_irrelevance` rows that repeat an earlier case; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them), with 2233 distinct messages among them. Three multi_turn categories, `bfcl-multi-turn-{base,miss-func,miss-param}`, first turn only: 481 render cases, one per row except 119 that repeat an earlier case; 309 parse cases, one per row whose first turn has a ground-truth call (175 miss_func and miss_param rows have none) except 116 that repeat an earlier case, with 163 distinct messages among them. The import names every row it gives no parse case | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import; the wheel has no LICENSE file, so the import copies `LICENSE` from `github:ShishirPatil/gorilla@6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`, the commit the wheel was built from (sha256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`), to `corpus/licenses/bfcl-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
 | GSM8K | `gsm8k-train` and `gsm8k-test`: 7473 and 1319 render cases, one per row; `gsm8k-<split>-reasoning-content` and `gsm8k-<split>-content`: the same rows as parse cases, one set per message shape (no row of the pinned files is left out: every row is usable, and no case repeats an earlier one; all 17584 messages are distinct) | `github:openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c`; sha256 `17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465` (`grade_school_math/data/train.jsonl`), `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` (`grade_school_math/data/test.jsonl`), `86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b` (`LICENSE`) | MIT, checked against the LICENSE file's sha256 on every import and copied to `corpus/licenses/gsm8k-LICENSE` | Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
@@ -60,20 +60,18 @@ passed by position takes the parameter of the class method's `def`, as BFCL's ex
 imported yet: each of their requests carries the results of the earlier calls, which only BFCL's own simulators
 produce, and whether to run them is a decision for later.
 
-The three multi_turn sets repeat cases. Of their 600 render cases, 481 are distinct requests, and of their 425 parse
-cases, 309 are distinct pairs of request and message. A case repeats an earlier one when its request, and for a parse
-case its message, equals that of a case before it in the order the import writes them (base, miss_func, miss_param):
+The three multi_turn sets repeat cases, and the rule for repeats leaves out 119 of their 600 render cases and 116 of
+their 425 parse cases, in the order the import builds them (base, miss_func, miss_param):
 
-| Set | Render cases | Repeats | Parse cases | Repeats |
+| Set | Render cases | Left out as repeats | Parse cases | Left out as repeats |
 |---|---|---|---|---|
-| `bfcl-multi-turn-base` | 200 | 1 | 200 | 1 |
-| `bfcl-multi-turn-miss-func` | 200 | 1 | 106 | 1 |
-| `bfcl-multi-turn-miss-param` | 200 | 117 | 119 | 114 |
+| `bfcl-multi-turn-base` | 199 | 1 | 199 | 1 |
+| `bfcl-multi-turn-miss-func` | 199 | 1 | 105 | 1 |
+| `bfcl-multi-turn-miss-param` | 83 | 117 | 5 | 114 |
 
 In base and in miss_func, row 43's first turn repeats row 40's. miss_func holds a function back in every row, so none
 of its first requests is base's, while 117 of miss_param's 200 first requests and 114 of its 119 parse cases equal
-base's. The sets keep every row until the corpus's rule for repeats lands with #35: a repeat is left out and named,
-which keeps 481 render and 309 parse cases of these three sets.
+base's.
 
 The fourth multi_turn category, long_context, is left out for size. Its first turns would add 200 render and 200 parse
 cases, 9.8 MB, taking the BFCL corpus from 42.6 MB to 52.4 MB, past the 50 MB a source may keep as plain JSON Lines
