@@ -16,18 +16,10 @@ from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import (
-    canonical_line,
-    is_lfs_pointer,
-    lfs_pull_command,
-    plain_text,
-    read_fixture_file,
-    schema_path,
-    validator,
-    write_fixture_file,
-)
+from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
+from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 

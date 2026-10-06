@@ -16,7 +16,7 @@ from pathlib import Path
 
 from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest
 from bellwether.record import sets as set_tables
-from bellwether.record.fixtures import (
+from bellwether.storage import (
     COMPRESSED_SUFFIX,
     is_lfs_pointer,
     lfs_include,

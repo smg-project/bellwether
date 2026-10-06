@@ -12,11 +12,12 @@ import sys
 
 from bellwether import __version__
 from bellwether.manifest import find_manifest
+from bellwether.storage import COMPRESSED_SUFFIX, plain_text
 
 from . import sets as set_tables
 from .chunks import chunk_plans
 from .corpus import Case, load_corpus
-from .fixtures import COMPRESSED_SUFFIX, plain_text, read_fixture_file, write_fixture_file
+from .fixtures import read_fixture_file, write_fixture_file
 from .reference import SOURCE as RENDER_SOURCE
 from .reference import HfTemplateOracle
 from .roundtrip import SOURCE as PARSE_SOURCE
