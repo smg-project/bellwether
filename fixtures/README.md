@@ -4,6 +4,7 @@ One directory per checkpoint, named by a lowercase slug of the Hugging Face id:
 
 ```
 fixtures/
+  models.tsv               # the checkpoints the manifests are built from, with their downloads (see below)
   kimi-k3/
     manifest.toml          # model, pinned revision, tier, oracle inputs, authority order, parser names
     render/*.jsonl         # request -> prompt token ids
@@ -72,12 +73,17 @@ tables of a new group are left out until someone maps them. A manifest that `bel
 `[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"), and
 restating it for each checkpoint is the sponsor's call.
 
-`bellwether manifests --models <file>` writes them all. The file has one row per checkpoint,
-`model<TAB>revision<TAB>downloads<TAB>tier`; the command computes each checkpoint's inputs at its revision from the
-Hugging Face cache (`HF_HUB_OFFLINE=1` reads the cache only), groups equal ones, and prints the groups. A group that is
-already recorded keeps its slug; a new group takes its most-downloaded member's. The list names every checkpoint that
-has a manifest. The command keeps every line a person wrote in an existing manifest, never moves a recorded group's
-revision, and writes the same files when run again.
+`bellwether manifests` writes them all from the list beside them, `fixtures/models.tsv` (`--models` reads another
+file). The list has one row per checkpoint, `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier`: `downloads` is the
+Hub's count over the last 30 days and `day` the day it was read, and both are `-` where nobody read a count. The
+command computes each checkpoint's inputs at its revision from the Hugging Face cache (`HF_HUB_OFFLINE=1` reads the
+cache only), groups equal ones, and prints the groups. A group that is already recorded keeps its slug; a new group
+takes its most-downloaded member's, a member with a count before one without, ties going to the first model id. The
+list names every checkpoint that has a manifest, and the tests check that each manifest pins the list's revision and
+tier and that each group recorded nowhere has the list's most-downloaded member as its primary. The command keeps
+every line a person wrote in an existing manifest, never moves a recorded group's revision, and writes the same files
+when run again, so new downloads or another checkpoint are a change to the list, reviewed as a diff of the list and
+the manifests.
 
 `record --model <id>` refuses a member, naming the group to record instead, and refuses a checkpoint whose inputs at
 the pinned revision differ from its manifest's list, naming the files; it exits 1 in both cases, recording nothing.

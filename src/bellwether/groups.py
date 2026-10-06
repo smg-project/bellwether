@@ -1,14 +1,18 @@
 """bellwether manifests: group checkpoints by their oracle inputs and write each checkpoint's manifest.
 
-Reads a list of checkpoints, one ``model<TAB>revision<TAB>downloads<TAB>tier`` row each (blank lines and lines that
-start with ``#`` are skipped), computes each checkpoint's oracle inputs at its revision (``bellwether.inputs``), and
-groups the checkpoints whose inputs are equal (docs/benchmark-sets.md, "Which models" and "Fixture ids"). A group is
-recorded once, under the slug of its primary:
+Reads a list of checkpoints, ``fixtures/models.tsv`` unless ``--models`` names another, one
+``model<TAB>revision<TAB>downloads<TAB>day<TAB>tier`` row each (blank lines and lines that start with ``#`` are
+skipped). ``downloads`` is the Hub's count over the last 30 days and ``day`` the day it was read; both are ``-`` for a
+checkpoint whose count nobody read. The list is committed beside the manifests it builds, so a rebuild is a diff of
+both. The command computes each checkpoint's oracle inputs at its revision (``bellwether.inputs``), and groups the
+checkpoints whose inputs are equal (docs/benchmark-sets.md, "Which models" and "Fixture ids"). A group is recorded
+once, under the slug of its primary:
 
 - a group that holds a recorded primary, one whose directory has a ``sets.toml``, keeps it, since fixture ids are
   cited by their slug and a slug never changes once recorded. Two recorded primaries whose inputs have become equal
   are refused: merging them retires one slug's ids, which is a person's call;
-- otherwise the most-downloaded member is the primary, ties going to the first model id, and the group takes its slug.
+- otherwise the most-downloaded member is the primary, a member with a count before one without, ties going to the
+  first model id, and the group takes its slug.
 
 Each checkpoint's manifest stays where it is, or is written under its own slug. The command sets ``revision``, ``tier``,
 ``group`` (on members only) and ``[inputs]``, and keeps every other line of an existing manifest: comments,
@@ -24,6 +28,7 @@ second run over the same list writes the same files.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import sys
@@ -37,6 +42,8 @@ from bellwether.record import sets as set_tables
 INPUTS_HEADER = (
     "[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)"
 )
+LIST = "models.tsv"  # the list of checkpoints, beside the manifests it builds
+NOT_READ = "-"
 _REVISION = re.compile(r"""(revision\s*=\s*)("[^"]*"|'[^']*')""")
 _SET_HERE = re.compile(r"(tier|group)\s*=")
 
@@ -45,7 +52,8 @@ _SET_HERE = re.compile(r"(tier|group)\s*=")
 class Checkpoint:
     model: str
     revision: str
-    downloads: int
+    downloads: int | None  # the Hub's count over the last 30 days; None when nobody read it
+    day: str | None  # the day the count was read, YYYY-MM-DD
     tier: int
 
 
@@ -63,19 +71,38 @@ def read_list(path: Path) -> list[Checkpoint]:
             continue
         where = f"{path}:{number}"
         fields = [field.strip() for field in line.split("\t")]
-        if len(fields) != 4:
-            raise ValueError(f"{where}: expected model, revision, downloads and tier, separated by tabs")
-        model, revision, downloads, tier = fields
+        if len(fields) != 5:
+            raise ValueError(f"{where}: expected model, revision, downloads, day and tier, separated by tabs")
+        model, revision, downloads, day, tier = fields
         if not is_pinned(model, revision):
             raise ValueError(f"{where}: revision {revision!r} is not a commit; list the 40-character commit hash")
-        if not re.fullmatch(r"[0-9]+", downloads):
-            raise ValueError(f"{where}: downloads must be a whole number, got {downloads!r}")
+        if downloads != NOT_READ and not re.fullmatch(r"[0-9]+", downloads):
+            raise ValueError(
+                f"{where}: downloads must be a whole number, or - where no count was read, got {downloads!r}"
+            )
+        if day != NOT_READ and not _is_date(day):
+            raise ValueError(f"{where}: day must be the date the downloads were read, YYYY-MM-DD, got {day!r}")
+        if (downloads == NOT_READ) != (day == NOT_READ):
+            raise ValueError(f"{where}: a count goes with the day it was read: give both, or - for both")
         if tier not in {str(t) for t in TIERS}:
             raise ValueError(f"{where}: tier must be 1, 2 or 3, got {tier!r}")
         if model in checkpoints:
             raise ValueError(f"{where}: {model} is listed twice")
-        checkpoints[model] = Checkpoint(model, revision, int(downloads), int(tier))
+        read = downloads != NOT_READ
+        checkpoints[model] = Checkpoint(
+            model, revision, int(downloads) if read else None, day if read else None, int(tier)
+        )
     return list(checkpoints.values())
+
+
+def _is_date(text: str) -> bool:
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
+        return False
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
 
 
 def existing_manifests(fixtures: Path) -> dict[str, Manifest]:
@@ -148,6 +175,12 @@ def read_inputs(checkpoints: list[Checkpoint]) -> tuple[dict[str, dict[str, str]
     return found, unread
 
 
+def rank(checkpoint: Checkpoint) -> tuple:
+    """The order in which a group's members become its primary: most downloads first, a member whose count nobody
+    read after every member with one, ties to the first model id."""
+    return (checkpoint.downloads is None, -(checkpoint.downloads or 0), checkpoint.model)
+
+
 def assign(
     checkpoints: list[Checkpoint],
     inputs: dict[str, dict[str, str]],
@@ -167,7 +200,7 @@ def assign(
                 f"the recorded groups {slugs} have equal oracle inputs; merging them retires one slug's fixture ids, "
                 "which is a person's call"
             )
-        ranked = sorted(members, key=lambda c: (-c.downloads, c.model))
+        ranked = sorted(members, key=rank)
         primary = recorded[0] if recorded else ranked[0]
         groups.append(Group(directory[primary.model].name, primary, [c for c in ranked if c is not primary]))
     return sorted(groups, key=lambda group: group.slug)
@@ -237,7 +270,7 @@ def describe(groups: list[Group]) -> str:
 
 def run(args: argparse.Namespace) -> int:
     try:
-        checkpoints = read_list(args.models)
+        checkpoints = read_list(args.models or args.fixtures / LIST)
         existing = existing_manifests(args.fixtures)
         check_listed(checkpoints, existing)
         directory = directories(checkpoints, existing, args.fixtures)

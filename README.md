@@ -115,15 +115,19 @@ the code says rather than by memory.
 ## Checkpoint groups and manifests
 
 ```bash
-HF_HUB_OFFLINE=1 uv run bellwether manifests --models models.tsv
+HF_HUB_OFFLINE=1 uv run bellwether manifests
 ```
 
-Reads one `model<TAB>revision<TAB>downloads<TAB>tier` row per checkpoint, computes each one's oracle inputs (the
-tokenizer files, the chat template, and the few fields of `config.json` and `generation_config.json` that the oracle
-depends on) at the pinned revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and
-writes every checkpoint's `fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the
-recorded one if there is one, else its most-downloaded member's. The others' manifests name the group and hold no
-fixtures. It prints each group with its members and their tiers. `fixtures/README.md` describes the manifest.
+Reads the list of checkpoints committed beside the manifests, `fixtures/models.tsv` (`--models` names another file):
+one `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier` row per checkpoint, with the Hub's downloads over the last 30
+days and the day they were read. It computes each one's oracle inputs (the tokenizer files, the chat template, and the
+few fields of `config.json` and `generation_config.json` that the oracle depends on) at the pinned revision from the
+Hugging Face cache, groups the checkpoints whose inputs are equal, and writes every checkpoint's
+`fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the recorded one if there is one,
+else its most-downloaded member's. The others' manifests name the group and hold no fixtures. It prints each group with
+its members and their tiers. Run again over the same list, it writes the same files, so a change to the list is
+reviewed as a diff of the list and the manifests. `fixtures/README.md` describes both. `models.jsonl` (below) is
+another list: what the engines' registries name, with no revision or downloads until the Hub is read.
 
 ## Recording render fixtures
 

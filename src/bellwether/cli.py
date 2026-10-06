@@ -81,7 +81,10 @@ def build_parser() -> argparse.ArgumentParser:
         "manifests", help="group checkpoints by their oracle inputs and write each checkpoint's manifest"
     )
     manifests.add_argument(
-        "--models", type=Path, required=True, help="the checkpoints: rows of model<TAB>revision<TAB>downloads<TAB>tier"
+        "--models",
+        type=Path,
+        help="the list of checkpoints, rows of model<TAB>revision<TAB>downloads<TAB>day<TAB>tier "
+        "(default: models.tsv in the fixture root)",
     )
     manifests.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     manifests.set_defaults(func=manifests_run)
