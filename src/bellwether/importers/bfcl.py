@@ -408,7 +408,6 @@ def run(args: argparse.Namespace) -> int:
     for row_id, why in skipped:
         rows_by_reason.setdefault(why, []).append(row_id)
     for why, row_ids in rows_by_reason.items():
-        shown = ", ".join(row_ids[:3]) + (", ..." if len(row_ids) > 3 else "")
-        print(f"no parse case for {len(row_ids)} row(s) ({shown}): {why}")
+        print(f"no parse case for {len(row_ids)} row(s) ({', '.join(row_ids)}): {why}")
     write_sets(sets, args.corpus)
     return 0

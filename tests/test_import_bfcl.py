@@ -409,6 +409,24 @@ def java_sets(tmp_path, answers: list[dict], skipped: list | None = None):
         return bfcl.build_sets(wheel, categories=("simple_java",), skipped=skipped)
 
 
+def test_the_command_names_every_row_it_gives_no_parse_case(tmp_path, monkeypatch, capsys):
+    ids = [f"simple_java_{i}" for i in range(1, 6)]
+    rows = [{"id": i, "question": [[{"role": "user", "content": "Box"}]], "function": JAVA_FN} for i in ids]
+    answers = [{"id": i, "ground_truth": [{"Box.make": {"size": [5]}}]} for i in ids]
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_simple_java.json": rows,
+            "bfcl_eval/data/possible_answer/BFCL_v4_simple_java.json": answers,
+        },
+    )
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_java",))
+    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    assert main(["import", "bfcl", "--corpus", str(tmp_path / "corpus")]) == 0
+    out = capsys.readouterr().out
+    assert f"no parse case for 5 row(s) ({', '.join(ids)}): {bfcl.NOT_STRINGS}" in out
+
+
 def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
     sets = java_sets(
         tmp_path,
