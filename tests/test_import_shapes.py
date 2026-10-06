@@ -240,26 +240,6 @@ def test_a_gsm8k_row_whose_solution_gives_no_reasoning_is_left_out_with_its_reas
     assert skipped == [("GSM8K test row 1", "the solution has no text before its last line")]
 
 
-def test_build_sets_leaves_repeats_out_through_the_shared_rule_and_names_them(tmp_path, monkeypatch):
-    handed: list[list[tuple[str, str]]] = []
-
-    def leave_out_repeats(sets):
-        """Keep each set's first case and report its second as a repeat of the first."""
-        handed.append(list(sets))
-        kept = {key: lines[:1] for key, lines in sets.items()}
-        return kept, [(lines[1]["name"], lines[0]["name"]) for lines in sets.values()]
-
-    monkeypatch.setattr(corpus_sets, "leave_out_repeats", leave_out_repeats)
-    skipped: list[tuple[str, str]] = []
-    sets = build(tmp_path, monkeypatch, skipped=skipped)
-    names = [shapes.set_name(shape) for shape in shapes.SHAPES]
-    assert handed == [[("parse", name) for name in names]]
-    assert {key: [line["name"] for line in lines] for key, lines in sets.items()} == {
-        ("parse", name): [f"{name}-0"] for name in names
-    }
-    assert skipped == [(f"{name}-1", f"it repeats {name}-0") for name in names]
-
-
 def test_the_size_caps_every_set(tmp_path, monkeypatch):
     assert [len(lines) for lines in build(tmp_path, monkeypatch, size=2).values()] == [2, 2, 2, 2, 2, 2]
 
@@ -428,7 +408,7 @@ def test_the_command_writes_then_checks_from_the_pinned_sources_alone(tmp_path, 
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 cases" in out
+    assert f"{corpus / 'parse' / 'shapes-content-calls.jsonl'}: 2 cases, 2 distinct messages" in out
     assert f"{corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}" in out
     assert sorted(path.name for path in (corpus / "parse").iterdir()) == sorted(committed + SET_FILES)
     assert all((corpus / "parse" / name).read_text() == UNREADABLE for name in committed)
@@ -482,13 +462,17 @@ def test_the_command_leaves_out_and_names_each_case_that_repeats_an_earlier_one(
     serve(tmp_path, monkeypatch, members=members, test_file=jsonl([JANET, TICKETS, JANET, TICKETS]))
     monkeypatch.setattr(shapes, "SIZE", 4)
     corpus = tmp_path / "corpus"
-    assert main(["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]) == 0
+    argv = ["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out.splitlines()
     names = [shapes.set_name(shape) for shape in shapes.SHAPES]
+    each = "2 cases, 2 left out as repeats, 2 distinct messages"
     assert out == [
-        *[f"{corpus / 'parse' / f'{name}.jsonl'}: 2 cases, 2 left out as repeats" for name in sorted(names)],
-        f"{corpus}: 12 cases in the 6 shapes sets, 12 left out as repeats",
-        *[f"no case for {name}-{i}: it repeats {name}-{i - 2}" for name in names for i in (2, 3)],
+        *[f"no case {name}-{i}: it repeats {name}-{i - 2}" for name in names for i in (2, 3)],
+        *[f"{corpus / 'parse' / f'{name}.jsonl'}: {each}" for name in sorted(names)],
+        f"{corpus}: 12 cases in the 6 shapes sets, 12 left out as repeats, 12 distinct messages",
+        f"{corpus}: the shapes sets equal a fresh import of {bfcl.SOURCE} and {gsm8k.SOURCE}",
     ]
     assert [case.name for case in read_cases(corpus / "parse" / "shapes-content.jsonl")] == [
         "shapes-content-0",
@@ -502,3 +486,27 @@ def test_the_command_stops_when_a_source_has_fewer_cases_than_the_pairs_and_writ
     with pytest.raises(ValueError, match="4 pairs need 4 BFCL parse cases and 4 GSM8K rows; there are 3 and 3"):
         main(["import", "shapes", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path)])
     assert not (tmp_path / "corpus").exists()
+
+
+def test_the_command_hands_the_built_sets_to_the_shared_rule_and_keeps_what_it_keeps(tmp_path, monkeypatch, capsys):
+    handed: list[dict] = []
+
+    def leave_out_repeats(sets):
+        """Keep each set's first case and report the others as repeats of it."""
+        handed.append({key: [line["name"] for line in lines] for key, lines in sets.items()})
+        kept = {key: lines[:1] for key, lines in sets.items()}
+        return kept, [(line["name"], lines[0]["name"]) for lines in sets.values() for line in lines[1:]]
+
+    monkeypatch.setattr(corpus_sets, "leave_out_repeats", leave_out_repeats)
+    serve(tmp_path, monkeypatch)
+    monkeypatch.setattr(shapes, "SIZE", 3)
+    corpus = tmp_path / "corpus"
+    argv = ["import", "shapes", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    assert main([*argv, "--check"]) == 0
+    names = [shapes.set_name(shape) for shape in shapes.SHAPES]
+    assert handed == [{("parse", name): [f"{name}-{i}" for i in range(3)] for name in names}] * 2
+    assert [case.name for case in read_cases(corpus / "parse" / "shapes-content.jsonl")] == ["shapes-content-0"]
+    assert capsys.readouterr().out.splitlines()[:12] == [
+        f"no case {name}-{i}: it repeats {name}-0" for name in names for i in (1, 2)
+    ]
