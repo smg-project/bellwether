@@ -1,3 +1,4 @@
+import errno
 import json
 import pathlib
 import shutil
@@ -186,6 +187,37 @@ def test_manifests_refuses_to_merge_two_recorded_groups(tmp_path, hub, capsys):
     assert manifests(tmp_path, (alpha, "local", 10, DAY, 1), (beta, "local", 50, DAY, 1)) == 1
     assert "the recorded groups alpha and beta have equal oracle inputs" in capsys.readouterr().err
     assert tree(fixtures) == before
+
+
+def test_manifests_checks_every_manifest_before_writing_any(tmp_path, hub, capsys):
+    # alpha's recorded manifest sits in a directory whose name is not a slug, so beta, whose inputs are alpha's, could
+    # not name the group: nothing is written, alpha's manifest included.
+    alpha, beta = str(hub / "alpha"), str(hub / "beta")
+    fixtures = tmp_path / "fixtures"
+    write_by_hand(fixtures, "alpha_chat", alpha, recorded=True)
+    before = tree(fixtures)
+    assert manifests(tmp_path, (alpha, "local", 10, DAY, 1), (beta, "local", 50, DAY, 1)) == 1
+    err = capsys.readouterr().err
+    member = fixtures / "beta" / "manifest.toml"
+    assert f"{member}: `group` must be the slug of its group's primary, got 'alpha_chat'" in err
+    assert "bellwether manifests: nothing was written" in err
+    assert tree(fixtures) == before
+
+
+def test_manifests_reports_a_manifest_it_cannot_write(tmp_path, hub, monkeypatch, capsys):
+    alpha, gamma = str(hub / "alpha"), str(hub / "gamma")
+    write_text = pathlib.Path.write_text
+
+    def disk_full_at_gamma(self, *args, **kwargs):
+        if self.parent.name == "gamma":
+            raise OSError(errno.ENOSPC, "No space left on device", str(self))
+        return write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", disk_full_at_gamma)
+    assert manifests(tmp_path, (alpha, "local", 10, DAY, 1), (gamma, "local", 5, DAY, 3)) == 1
+    err = capsys.readouterr().err
+    assert f"No space left on device: '{tmp_path / 'fixtures' / 'gamma' / 'manifest.toml'}'" in err
+    assert "bellwether manifests: stopped after writing 1 of 2 manifests, in slug order" in err
 
 
 @pytest.mark.parametrize(

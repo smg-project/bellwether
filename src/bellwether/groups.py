@@ -21,8 +21,9 @@ before groups share predates the design's two sources of truth (docs/benchmark-s
 authority order waits for the sponsor's approval (AGENTS.md); parser names stay unknown until someone maps them. A
 recorded manifest's revision does not move here, since its fixtures were recorded at it. The list names every checkpoint
 that has a manifest, as the design's one list of checkpoints does: grouped without it, a listed checkpoint with the same
-inputs would become a second primary. Nothing is written unless every checkpoint was read and every check passed, and a
-second run over the same list writes the same files.
+inputs would become a second primary. Nothing is written unless every checkpoint was read, every check passed and every
+manifest the run would write reads back as written; a write that fails stops the run, saying how many manifests were
+written before it. A second run over the same list writes the same files.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bellwether.inputs import oracle_inputs
-from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifest, load_manifests, slug_for
+from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifests, parse_manifest, slug_for
 from bellwether.record import sets as set_tables
 
 INPUTS_HEADER = (
@@ -235,7 +236,13 @@ def _string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def write_manifests(groups: list[Group], inputs: dict[str, dict[str, str]], directory: dict[str, Path]) -> None:
+def manifest_texts(
+    groups: list[Group], inputs: dict[str, dict[str, str]], directory: dict[str, Path]
+) -> dict[Path, str]:
+    """Each checkpoint's manifest as it will be written, in slug order, every one read back and checked before any is
+    written: a group whose slug a member cannot name (a primary in a directory whose name is not a slug) stops the run
+    with nothing written."""
+    texts: dict[Path, str] = {}
     for group in groups:
         for checkpoint in (group.primary, *group.others):
             path = directory[checkpoint.model] / "manifest.toml"
@@ -245,11 +252,11 @@ def write_manifests(groups: list[Group], inputs: dict[str, dict[str, str]], dire
                 text = f"model    = {_string(checkpoint.model)}\nrevision = {_string(checkpoint.revision)}\n"
             named = None if checkpoint is group.primary else group.slug
             fields = (checkpoint.revision, checkpoint.tier, named, inputs[checkpoint.model])
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(with_fields(text, *fields), encoding="utf-8")
-            written = load_manifest(path)
+            texts[path] = with_fields(text, *fields)
+            written = parse_manifest(path, texts[path])
             if (written.revision, written.tier, written.group, written.inputs) != fields:
-                raise RuntimeError(f"{path}: the manifest does not read back as written")
+                raise ValueError(f"{path}: the manifest would not read back as written")
+    return texts
 
 
 def describe(groups: list[Group]) -> str:
@@ -273,11 +280,24 @@ def run(args: argparse.Namespace) -> int:
         if unread:
             raise ValueError("\n".join(f"cannot read the oracle inputs of {line}" for line in unread))
         groups = assign(checkpoints, inputs, existing, directory)
+        texts = manifest_texts(groups, inputs, directory)
     except (OSError, ValueError) as err:
         for line in str(err).splitlines():
             print(f"bellwether manifests: {line}", file=sys.stderr)
         print("bellwether manifests: nothing was written", file=sys.stderr)
         return 1
-    write_manifests(groups, inputs, directory)
+    written = 0
+    try:
+        for path, text in texts.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+            written += 1
+    except OSError as err:
+        print(f"bellwether manifests: {err}", file=sys.stderr)
+        print(
+            f"bellwether manifests: stopped after writing {written} of {len(texts)} manifests, in slug order",
+            file=sys.stderr,
+        )
+        return 1
     sys.stdout.write(describe(groups))
     return 0

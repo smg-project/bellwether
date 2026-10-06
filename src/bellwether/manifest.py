@@ -63,8 +63,18 @@ def is_pinned(model: str, revision: str) -> bool:
 
 def load_manifest(path: Path) -> Manifest:
     try:
-        data = tomllib.loads(path.read_text())
-    except ValueError as err:  # not TOML, or not text: the message does not say which file
+        text = path.read_text(encoding="utf-8")
+    except ValueError as err:  # not text: the message does not say which file
+        raise ValueError(f"{path}: {err}") from None
+    return parse_manifest(path, text)
+
+
+def parse_manifest(path: Path, text: str) -> Manifest:
+    """The manifest ``text`` gives at ``path``, checked as ``load_manifest`` checks a file, without reading or writing
+    one."""
+    try:
+        data = tomllib.loads(text)
+    except ValueError as err:  # not TOML: the message does not say which file
         raise ValueError(f"{path}: {err}") from None
     for key in ("model", "revision"):
         if not isinstance(data.get(key), str) or not data[key]:
@@ -111,7 +121,7 @@ def _group(path: Path, group: object) -> str | None:
     if group is None:
         return None
     if not isinstance(group, str) or not _SLUG.fullmatch(group):
-        raise ValueError(f"{path}: `group` must be the slug of its group's primary")
+        raise ValueError(f"{path}: `group` must be the slug of its group's primary, got {group!r}")
     if group == path.parent.name:
         raise ValueError(f"{path}: `group` names this manifest's own directory; a group's primary has no `group`")
     return group
