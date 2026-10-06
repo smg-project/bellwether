@@ -1,4 +1,4 @@
-"""Command line entry point: ``bellwether gaps | record | verify | report``.
+"""Command line entry point: ``bellwether gaps | record | import | count | verify | report``.
 
 ``gaps`` (M1) and ``record --kind render --oracle reference`` (M2) are implemented. The other
 subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs exit
@@ -13,7 +13,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from bellwether import __version__
+from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
+from bellwether.importers import run as import_run
 from bellwether.record import run as record_run
 
 NOT_IMPLEMENTED = 2
@@ -52,7 +54,36 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--oracle", required=True, choices=["reference", "vllm", "sglang"])
     record.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     record.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    record.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="record only this corpus set (repeat for more); other sets' fixture files are left as they are",
+    )
     record.set_defaults(func=record_run)
+
+    importer = sub.add_parser("import", help="write corpus sets from a public dataset at a pinned revision")
+    importer.add_argument("dataset", choices=["bfcl"], help="the dataset to import")
+    importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    importer.add_argument(
+        "--cache",
+        type=Path,
+        default=Path.home() / ".cache" / "bellwether" / "datasets",
+        help="where pinned files are kept",
+    )
+    importer.add_argument(
+        "--check",
+        action="store_true",
+        help="compare a fresh import with the corpus instead of writing it; exit 1 on a difference",
+    )
+    importer.set_defaults(func=import_run)
+
+    count = sub.add_parser("count", help="cases per model, kind and source")
+    count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    count.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    count.set_defaults(func=count_run)
 
     verify = sub.add_parser("verify", help="replay fixtures against SMG fronting the scripted mock engine")
     verify.add_argument("--smg", required=True, help="SMG base URL, e.g. http://127.0.0.1:30000")

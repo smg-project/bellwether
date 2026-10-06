@@ -92,9 +92,11 @@ the code says rather than by memory.
 uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
 
-Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every case
-under `corpus/render/` through the checkpoint's own chat template at the pinned revision
-(`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`: per case the
+Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
+hand-written case under `corpus/render/` through the checkpoint's own chat template at the pinned
+revision (`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`. An
+imported set (`corpus/README.md`) is left out, and named on stdout, until the storage form of
+`docs/benchmark-sets.md` lands; `--set NAME` records only the named sets. Per case the file holds the
 request, the prompt token ids, the rendered text and the oracle versions. A re-run replaces each
 reference, keeps the witnesses already recorded for an unchanged request, and removes cases and sets
 the corpus no longer has. A case the template cannot render is reported on

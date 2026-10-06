@@ -20,3 +20,31 @@ turn of `request` through the model's template; the text after the generation pr
 
 Cases are inputs, so they may be written by hand or imported from a vendor catalogue; the
 recorded results next to them under `fixtures/` may not.
+
+## Imported sets
+
+Sets named `<dataset>-<split>` are written by `bellwether import <dataset>` and are never edited by hand: a
+change to one is a change to its importer, and `bellwether import <dataset> --check` (run in CI) fails when a
+set differs from a fresh import. Each line adds `origin`: the dataset, its source pinned by version, the sha256 of
+what was downloaded, the file and row inside it (and, for a parse case, the file its message came from), and the
+dataset's license.
+
+| Dataset | Sets | Source | License | Attribution |
+|---|---|---|---|---|
+| BFCL | `bfcl-<category>` for the 13 single-turn categories of smg's weekly run: 3641 render cases, one per row; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them) | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
+
+A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
+case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
+BFCL's "may be omitted" marker, and each call held to BFCL's own parameter rules: a parameter its function does not
+declare is left out when the answer allows it. `docs/benchmark-sets.md` has the rules; `scripts/bfcl_equivalence.py`
+checks every request and call against BFCL's own code, in a throwaway environment.
+
+Set names starting with `bfcl-` belong to the importer: `bellwether import bfcl` deletes any `bfcl-*.jsonl` it did
+not write. Name hand-written sets otherwise.
+
+`--check` reads the pinned wheel from `~/.cache/bellwether/datasets` and downloads it on a miss. It then needs PyPI to
+still serve that exact file: a yanked release still does when pinned by version; a release deleted from PyPI does not,
+and the check fails until the importer pins another.
+
+Until the benchmark sets' storage form lands (`docs/benchmark-sets.md`, Storage), `bellwether record` without
+`--set` leaves the imported sets out and names them; `--set NAME` records the named sets as plain JSON Lines.

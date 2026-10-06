@@ -436,6 +436,33 @@ def test_corpus_rejects_a_message_that_is_not_an_object(tmp_path):
         read_cases(path)
 
 
+def test_corpus_keeps_the_origin_of_an_imported_case(tmp_path):
+    path = tmp_path / "set.jsonl"
+    origin = {"dataset": "bfcl", "row": "simple_python_0"}
+    write_jsonl(
+        path,
+        [
+            {"name": "a", "request": {"messages": []}, "origin": origin},
+            {"name": "b", "request": {"messages": []}},
+        ],
+    )
+    assert [case.origin for case in read_cases(path)] == [origin, None]
+
+
+def test_corpus_rejects_an_origin_that_is_not_an_object(tmp_path):
+    path = tmp_path / "set.jsonl"
+    write_jsonl(path, [{"name": "a", "request": {"messages": []}, "origin": "bfcl"}])
+    with pytest.raises(ValueError, match="`origin` must be an object"):
+        read_cases(path)
+
+
+def test_corpus_rejects_an_origin_that_names_no_dataset(tmp_path):
+    path = tmp_path / "set.jsonl"
+    write_jsonl(path, [{"name": "a", "request": {"messages": []}, "origin": {"row": "x"}}])
+    with pytest.raises(ValueError, match=r"set\.jsonl:1: `origin` must name its `dataset`"):
+        read_cases(path)
+
+
 def test_record_other_kinds_and_oracles_are_not_implemented(tmp_path, tiny_model, capsys):
     argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "sglang", "--fixtures", str(tmp_path)]
     assert main(argv) == 2
@@ -504,3 +531,63 @@ def test_committed_fixtures_are_canonical_sorted_and_valid(path):
         if case["kind"] == "parse":
             assert len(case["output_pieces"]) == len(case["output_ids"])
             assert "".join(case["output_pieces"]) == case["reference"]["text"]
+
+
+def record_argv(tmp_path, tiny_model, *extra: str) -> list[str]:
+    argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "reference"]
+    return argv + ["--fixtures", str(tmp_path / "fixtures"), "--corpus", str(tmp_path / "corpus"), *extra]
+
+
+def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, tiny_model):
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("extra", [{"name": "b", "request": {"messages": [user("B")]}}]),
+    )
+    assert status == 0
+    extra_before = (out_dir / "extra.jsonl").read_text()
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a2", "request": {"messages": [user("A")]}}])
+    (tmp_path / "corpus" / "render" / "extra.jsonl").unlink()
+
+    assert main(record_argv(tmp_path, tiny_model, "--set", "common")) == 0
+
+    ids = [json.loads(line)["id"] for line in (out_dir / "common.jsonl").read_text().splitlines()]
+    assert ids == ["tiny-chat/render/a2"]
+    assert (out_dir / "extra.jsonl").read_text() == extra_before
+
+
+def test_record_without_set_leaves_imported_sets_to_the_storage_form(tmp_path, tiny_model, capsys):
+    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
+    status, out_dir = record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bfcl-x", [imported]),
+    )
+    assert status == 0
+    assert sorted(p.name for p in out_dir.iterdir()) == ["common.jsonl"]
+    assert "1 imported set left out until the storage form lands: bfcl-x" in capsys.readouterr().out
+
+
+def test_record_without_set_keeps_the_fixtures_of_an_imported_set(tmp_path, tiny_model):
+    imported = {"name": "bfcl-x-0", "request": {"messages": [user("B")]}, "origin": {"dataset": "bfcl"}}
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bfcl-x", [imported]),
+    )
+    assert main(record_argv(tmp_path, tiny_model, "--set", "bfcl-x")) == 0
+    out_dir = tmp_path / "fixtures" / "tiny-chat" / "render"
+    recorded = (out_dir / "bfcl-x.jsonl").read_text()
+
+    assert main(record_argv(tmp_path, tiny_model)) == 0
+
+    assert (out_dir / "bfcl-x.jsonl").read_text() == recorded
+
+
+def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1
+    assert "no corpus set named missing" in capsys.readouterr().err

@@ -14,6 +14,11 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --extra dev
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/bellwether/datasets
+          key: bellwether-datasets-${{ hashFiles('src/bellwether/importers/**') }}
+      - run: uv run bellwether import bfcl --check
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -q
