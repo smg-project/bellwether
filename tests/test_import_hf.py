@@ -153,14 +153,40 @@ def test_card_license_is_the_top_level_license_of_the_front_matter():
     assert hf.card_license(CARD.replace("\n", "\r\n")) == "apache-2.0"
 
 
-def test_a_license_line_outside_the_front_matter_or_nested_in_it_does_not_count():
+def test_a_license_outside_the_front_matter_or_nested_in_it_does_not_count():
     assert hf.card_license("---\nconfigs:\n  - license: mit\n---\nlicense: mit\n") is None
     assert hf.card_license("# A dataset\nlicense: mit\n") is None
     assert hf.card_license("") is None
 
 
-def test_a_line_separator_inside_the_front_matter_does_not_start_a_line():
-    assert hf.card_license("---\npretty_name: a license: mit\n---\n") is None
+def test_only_the_license_key_counts_not_license_name_or_license_link():
+    assert hf.card_license("---\nlicense_name: gpl-3.0\nlicense_link: LICENSE\n---\n") is None
+
+
+# Each states gpl-3.0 as huggingface_hub reads a dataset card (DatasetCard): YAML ends a line at a lone CR, U+0085,
+# U+2028 and U+2029 as well as at "\n", and a key may be quoted or have a space before its colon. A reader that
+# missed one would pass a card that states a license as a card that states none.
+STATES_GPL = {
+    "a lone CR before the key": "---\npretty_name: a\rlicense: gpl-3.0\n---\n",
+    "a blank line before ---": "\n---\nlicense: gpl-3.0\n---\n",
+    "a double-quoted key": '---\n"license": gpl-3.0\n---\n',
+    "a single-quoted key": "---\n'license': gpl-3.0\n---\n",
+    "a space before the colon": "---\nlicense : gpl-3.0\n---\n",
+    "an indented --- in a block scalar": "---\ndescription: |\n  Rows.\n  ---\n  More.\nlicense: gpl-3.0\n---\n",
+    "U+2028 before the key": "---\npretty_name: a\u2028license: gpl-3.0\n---\n",
+    "U+0085 before the key": "---\npretty_name: a\x85license: gpl-3.0\n---\n",
+}
+
+
+@pytest.mark.parametrize("card", STATES_GPL.values(), ids=STATES_GPL.keys())
+def test_card_license_reads_the_front_matter_as_yaml(card):
+    assert hf.card_license(card) == "gpl-3.0"
+
+
+def test_a_card_that_opens_a_front_matter_huggingface_hub_does_not_find_is_refused():
+    # huggingface_hub 1.33 does not close the front matter at a --- followed by a lone CR, so it reads none here.
+    with pytest.raises(ValueError, match="opens with --- but huggingface_hub finds no front matter"):
+        hf.card_license("---\rlicense: gpl-3.0\r---\r# A dataset\r")
 
 
 def test_check_card_license_passes_the_reviewed_license_and_refuses_any_other():

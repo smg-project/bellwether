@@ -58,21 +58,21 @@ def fetch(repo: str, revision: str, filename: str, sha256: str, cache: Path = pi
     return path
 
 
-def card_license(card: str) -> str | None:
-    """The top-level ``license`` of the card's YAML front matter, or None when it states none.
+def card_license(card: str) -> object:
+    """The ``license`` of a dataset card's YAML front matter, as huggingface_hub reads a card; None when it states none.
 
-    A ``license`` nested under another key, or written after the front matter, does not count. Lines end at "\\n"
-    only, as YAML's do.
+    The front matter is read with ``huggingface_hub.DatasetCard``, the card reader of the Hub's own client, which
+    parses it with PyYAML: a ``license`` nested under another key, or written after the front matter, is not the card's.
+    The value is what YAML holds: a string, or a list for a card that states several. A card that opens with ``---``
+    but in which DatasetCard finds no front matter is refused: read as stating none, it would pass where a card that
+    states none was reviewed.
     """
-    lines = card.split("\n")
-    if lines[0].strip() != "---":
-        return None
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if line.startswith("license:"):
-            return line.split(":", 1)[1].strip()
-    return None
+    from huggingface_hub import DatasetCard
+
+    read = DatasetCard(card)
+    if read.text == card and card.lstrip().startswith("---"):
+        raise ValueError("the card opens with --- but huggingface_hub finds no front matter in it; review it by hand")
+    return read.data.license
 
 
 def check_card_license(repo: str, card: str, reviewed: str | None) -> None:
