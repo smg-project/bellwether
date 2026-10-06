@@ -34,4 +34,8 @@ def run(args: argparse.Namespace) -> int:
         from .glaive_v2 import run as run_glaive_v2
 
         return run_glaive_v2(args)
+    if args.dataset == "swehero":
+        from .swehero import run as run_swehero
+
+        return run_swehero(args)
     raise ValueError(f"no importer for {args.dataset!r}")
