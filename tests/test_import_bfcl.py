@@ -1,6 +1,6 @@
 import pytest
 
-from bellwether.importers import pypi
+from bellwether.importers import bfcl, pypi
 
 WHEEL = "pkg-1.0-py3-none-any.whl"
 
@@ -59,3 +59,107 @@ def test_fetch_names_a_file_pypi_does_not_have(tmp_path, monkeypatch):
     monkeypatch.setattr(pypi.httpx, "get", lambda url, **k: Response(payload={"urls": []}))
     with pytest.raises(ValueError, match="has no file pkg-1.0-py3-none-any.whl"):
         pypi.fetch("pkg", "1.0", WHEEL, "0" * 64, cache=tmp_path)
+
+
+def fn(name: str, properties: dict, **extra) -> dict:
+    return {"name": name, "description": "Does it.", "parameters": {"type": "dict", "properties": properties}, **extra}
+
+
+def test_every_function_gets_its_language_hint():
+    for category, hint in [
+        ("simple_python", " Note that the provided function is in Python 3 syntax."),
+        ("live_multiple", " Note that the provided function is in Python 3 syntax."),
+        ("simple_java", " Note that the provided function is in Java 8 SDK syntax."),
+        ("simple_javascript", " Note that the provided function is in JavaScript syntax."),
+    ]:
+        assert bfcl.prepare_functions([fn("f", {})], category)[0]["description"] == "Does it." + hint
+
+
+def test_java_parameters_become_strings_that_say_their_type():
+    properties = {
+        "controller": {"type": "any", "description": "The controller."},
+        "count": {"type": "integer", "description": "How many."},
+        "names": {"type": "ArrayList", "description": "The names.", "items": {"type": "String"}},
+    }
+    [prepared] = bfcl.prepare_functions([fn("f", properties)], "simple_java")
+    assert prepared["parameters"]["properties"] == {
+        "controller": {
+            "type": "string",
+            "description": "The controller. This parameter can be of any type of Java object in string representation.",
+        },
+        "count": {
+            "type": "string",
+            "description": "How many. This is Java integer type parameter in string representation.",
+        },
+        "names": {
+            "type": "string",
+            "description": "The names. This is Java ArrayList type parameter in string representation."
+            " The list elements are of type String; they are not in string representation.",
+        },
+    }
+
+
+def test_a_javascript_dict_parameter_carries_its_schema_in_the_description():
+    schema = {"x": {"type": "integer", "description": "X."}}
+    point = {"type": "dict", "description": "A point.", "properties": schema}
+    [prepared] = bfcl.prepare_functions([fn("f", {"point": point})], "simple_javascript")
+    assert prepared["parameters"]["properties"]["point"] == {
+        "type": "string",
+        "description": "A point. This is JavaScript dict type parameter in string representation."
+        " The dictionary entries have the following schema; they are not in string representation."
+        ' {"x": {"type": "integer", "description": "X."}}',
+    }
+
+
+def test_a_float_becomes_a_number_with_its_format_and_a_note():
+    [tool] = bfcl.to_tools([fn("f", {"rate": {"type": "float", "description": "The rate."}})])
+    rate = tool["function"]["parameters"]["properties"]["rate"]
+    assert rate == {"type": "number", "description": "The rate. This is a float type value.", "format": "float"}
+    assert list(rate) == ["type", "description", "format"]
+
+
+def test_types_map_to_openapi_and_anything_else_becomes_a_string():
+    properties = {
+        "pair": {"type": "tuple", "description": "P."},
+        "big": {"type": "Bigint", "description": "B."},
+        "odd": {"type": "complex", "description": "O."},
+        "bare": {"description": "No type."},
+    }
+    [tool] = bfcl.to_tools([fn("f", properties)])
+    cast = tool["function"]["parameters"]["properties"]
+    assert [cast[k]["type"] for k in ("pair", "big", "odd", "bare")] == ["array", "integer", "string", "string"]
+    assert list(cast["bare"]) == ["description", "type"]
+
+
+def test_nested_properties_and_items_are_cast_as_bfcl_casts_them():
+    float_w = {"type": "float", "description": "W."}
+    float_v = {"type": "float", "description": "V."}
+    properties = {
+        "spec": {"type": "dict", "description": "S.", "properties": {"w": float_w}},
+        "rows": {"type": "list", "description": "R.", "items": {"type": "dict", "properties": {"v": float_v}}},
+        "grid": {"type": "array", "description": "G.", "items": {"type": "list", "items": {"type": "float"}}},
+    }
+    [tool] = bfcl.to_tools([fn("f", properties)])
+    cast = tool["function"]["parameters"]["properties"]
+    note = " This is a float type value."
+    assert cast["spec"]["properties"]["w"] == {"type": "number", "description": "W." + note, "format": "float"}
+    assert cast["rows"]["items"] == {
+        "type": "object",
+        "properties": {"v": {"type": "number", "description": "V." + note, "format": "float"}},
+    }
+    assert cast["grid"]["items"] == {"type": "array", "items": {"type": "number"}}
+
+
+def test_dotted_names_get_underscores_and_the_parameters_become_an_object():
+    original = fn("Geometry.createPresentation", {}, response={"type": "dict"})
+    [tool] = bfcl.to_tools([original])
+    assert tool == {
+        "type": "function",
+        "function": {
+            "name": "Geometry_createPresentation",
+            "description": "Does it.",
+            "parameters": {"type": "object", "properties": {}},
+            "response": {"type": "dict"},
+        },
+    }
+    assert original["name"] == "Geometry.createPresentation" and original["parameters"]["type"] == "dict"
