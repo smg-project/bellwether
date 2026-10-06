@@ -71,7 +71,7 @@ class OneModelHub:
     def list_models(self, org: str) -> list:
         return []
 
-    def model(self, model_id: str) -> Details | None:
+    def model(self, model_id: str, revision: str | None = None, tokenizer: str | None = None) -> Details | None:
         if model_id != "Qwen/Qwen3-8B":
             return None
         return Details(model_id, "b968826d", date(2025, 4, 27), 900, (), ("Qwen3ForCausalLM",), True, False)

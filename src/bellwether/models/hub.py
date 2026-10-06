@@ -76,8 +76,11 @@ class Hub(Protocol):
         """The organization's models; ``HubUnavailable`` when the Hub gives no listing."""
         ...
 
-    def model(self, model_id: str) -> Details | None:
-        """The model's details, ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer."""
+    def model(self, model_id: str, revision: str | None = None, tokenizer: str | None = None) -> Details | None:
+        """The model's details, ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer.
+
+        ``revision`` and ``tokenizer`` are vLLM's: the revision it loads, the repository it takes the tokenizer from.
+        """
         ...
 
 
@@ -112,20 +115,27 @@ class HfHub:
             raise HubUnavailable(org, _hub_error(err)) from err
         return [Listed(m.id, _day(m.created_at), m.downloads or 0, tuple(m.tags or ()), m.pipeline_tag) for m in models]
 
-    def model(self, model_id: str) -> Details | None:
-        """The model's details, ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer."""
+    def model(self, model_id: str, revision: str | None = None, tokenizer: str | None = None) -> Details | None:
+        """The model's details at ``revision``, its tokenizer's template read from ``tokenizer`` when one is given.
+
+        ``None`` when the Hub has no such model, ``HubUnavailable`` when it gives no answer.
+        """
         import httpx
         from huggingface_hub.errors import HfHubHTTPError, RepositoryNotFoundError
 
         try:
-            info = self._patiently(lambda: self.api.model_info(model_id))
+            info = self._patiently(lambda: self.api.model_info(model_id, revision=revision))
         except RepositoryNotFoundError:
             return None
         except (HfHubHTTPError, httpx.HTTPError) as err:
             raise HubUnavailable(model_id, _hub_error(err)) from err
         config = info.config or {}
         files = {sibling.rfilename for sibling in info.siblings or ()}
-        template, processor_only = self._tokenizer_template(info, config, files), False
+        if tokenizer is None:
+            template = self._tokenizer_template(info, config, files)
+        else:
+            template = self._template_of_tokenizer(tokenizer)
+        processor_only = False
         if template is False:  # nothing for the oracle; the processor's files may still hold one
             template = self._processor_template(info, files)
             processor_only = template is True
@@ -155,6 +165,17 @@ class HfHub:
             return False
         tokenizer_config = self._json_config(info, "tokenizer_config.json", INVALID_TOKENIZER_CONFIG)
         return tokenizer_config if isinstance(tokenizer_config, str) else bool(tokenizer_config.get("chat_template"))
+
+    def _template_of_tokenizer(self, repository: str) -> bool | str:
+        """The tokenizer template of the repository vLLM takes the tokenizer from, or why it could not be read."""
+        import httpx
+        from huggingface_hub.errors import HfHubHTTPError
+
+        try:
+            info = self._patiently(lambda: self.api.model_info(repository))
+        except (HfHubHTTPError, httpx.HTTPError) as err:
+            return _hub_error(err)
+        return self._tokenizer_template(info, info.config or {}, {sibling.rfilename for sibling in info.siblings or ()})
 
     def _processor_template(self, info: Any, files: set[str]) -> bool | str:
         """What only AutoProcessor reads: the legacy template file, or the processor config's template."""

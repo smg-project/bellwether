@@ -62,6 +62,7 @@ UNCHECKED = "unchecked"  # --registry-only: the Hub was not asked
 NOT_ON_HUB = "not-on-hub"  # a registry names it, the Hub has no such model
 NO_CHECKPOINT = "no-checkpoint-named"  # a registry entry names none; its row is keyed by the entry's name
 GATED = "gated"  # the files need an accepted license and a token
+NEEDS_VENDOR_CODE = "needs-vendor-code"  # vLLM loads it with trust_remote_code; the oracle would need that code
 NO_CHAT_TEMPLATE = "no-chat-template"  # the hf-template oracle has nothing to render with
 # The template is only in the processor's files, which the oracle (AutoTokenizer) does not read yet.
 PROCESSOR_CHAT_TEMPLATE = "processor-chat-template"
@@ -160,15 +161,18 @@ def order_key(model_id: str, tier: int | None, downloads: int | None) -> tuple[i
     return (_TIER_ORDER[tier], rank or 0, -(downloads or 0), model_id)
 
 
-def status_of(details: Details | None, checked: bool) -> str:
+def status_of(details: Details | None, checked: bool, vendor_code: bool = False) -> str:
+    """What stands in the way first: the Hub's answer, then what vLLM needs to load it, then the template."""
     if not checked:
-        return UNCHECKED
+        return NEEDS_VENDOR_CODE if vendor_code else UNCHECKED
     if details is None:
         return NOT_ON_HUB
     if details.gated:
         return GATED
     if details.unread:
         return details.unread
+    if vendor_code:
+        return NEEDS_VENDOR_CODE
     if not details.chat_template:
         return NO_CHAT_TEMPLATE
     if details.processor_only:

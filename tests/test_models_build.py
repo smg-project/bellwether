@@ -109,6 +109,7 @@ class FakeHub:
         self.listings, self.models, self.unavailable = listings, models, unavailable or {}
         self.listed: list[str] = []
         self.asked: list[str] = []
+        self.loads: dict[str, tuple[str | None, str | None]] = {}  # the revision and tokenizer each was asked with
 
     def list_models(self, org: str) -> list[Listed]:
         self.listed.append(org)
@@ -116,8 +117,9 @@ class FakeHub:
             raise HubUnavailable(org, self.unavailable[org])
         return self.listings.get(org, [])
 
-    def model(self, model_id: str) -> Details | None:
+    def model(self, model_id: str, revision: str | None = None, tokenizer: str | None = None) -> Details | None:
         self.asked.append(model_id)
+        self.loads[model_id] = (revision, tokenizer)
         if model_id in self.unavailable:
             raise HubUnavailable(model_id, self.unavailable[model_id])
         return self.models.get(model_id)
@@ -317,6 +319,55 @@ def test_a_registry_entry_that_names_no_checkpoint_is_a_row_under_its_name() -> 
     online = hub_rows(entries, hub, BUILT)
     assert [row for row in online if row.status == "no-checkpoint-named"] == expected
     assert hub.asked == ["Qwen/Qwen3-8B"]
+
+
+def test_without_the_hub_a_checkpoint_vllm_loads_with_vendor_code_says_so_and_keeps_vllms_revision() -> None:
+    kimi = ("moonshotai/Kimi-K3", "moonshotai/Kimi-K3-Base")
+    ernie = ("baidu/ERNIE-4.5-VL-28B-A3B-PT",)
+    entries = [
+        Entry("vllm", "KimiK3ForCausalLM", TEXT, True, False, kimi, vendor_code=True),
+        Entry("vllm", "Ernie4_5_VLMoeForConditionalGeneration", MULTIMODAL, True, True, ernie, True, "refs/pr/17"),
+        Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",)),
+    ]
+    rows = {row.model: (row.status, row.revision) for row in registry_only_rows(entries, BUILT)}
+    assert rows == {
+        "moonshotai/Kimi-K3": ("needs-vendor-code", None),
+        "moonshotai/Kimi-K3-Base": ("needs-vendor-code", None),  # an extra is loaded the same way
+        "baidu/ERNIE-4.5-VL-28B-A3B-PT": ("needs-vendor-code", "refs/pr/17"),  # the revision vLLM loads
+        "Qwen/Qwen3-8B": ("unchecked", None),
+    }
+
+
+def test_with_the_hub_a_row_is_read_at_vllms_revision_with_vllms_tokenizer_and_vendor_code_is_said() -> None:
+    moondream, hcx, gemma = (
+        "moondream/moondream3-preview",
+        "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
+        "google/gemma-3-1b-it",
+    )
+    pinned = "a6cdfd3464d1b767259cad23e164eaf39d3e3960"
+    entries = [
+        Entry(
+            "vllm", "Moondream3ForCausalLM", MULTIMODAL, True, True, (moondream,), True, None, "moondream/starmie-v1"
+        ),
+        Entry("vllm", "HCXVisionV2ForCausalLM", MULTIMODAL, True, True, (hcx,), True, pinned),
+        Entry("vllm", "Gemma3ForCausalLM", TEXT, True, False, (gemma,), vendor_code=True),
+        Entry("vllm", "Phi3SmallForCausalLM", TEXT, True, False, ("microsoft/Phi-3-small-8k-instruct",), True),
+    ]
+    models = {
+        moondream: details(moondream, date(2025, 9, 1), 5, ("Moondream3ForCausalLM",)),
+        hcx: details(hcx, date(2025, 12, 1), 5, ("HCXVisionV2ForCausalLM",), chat_template=False),
+        gemma: details(gemma, date(2025, 3, 10), 5, ("Gemma3ForCausalLM",), gated=True),
+    }
+    hub = FakeHub({}, models)
+    rows = {row.model: row.status for row in hub_rows(entries, hub, BUILT)}
+    assert rows == {
+        moondream: "needs-vendor-code",
+        hcx: "needs-vendor-code",  # before what its template says
+        gemma: "gated",  # out of reach comes first
+        "microsoft/Phi-3-small-8k-instruct": "not-on-hub",
+    }
+    assert hub.loads[moondream] == (None, "moondream/starmie-v1")
+    assert hub.loads[hcx] == (pinned, None)
 
 
 def test_a_registry_checkpoint_the_hub_could_not_be_asked_about_keeps_its_row_with_the_error() -> None:

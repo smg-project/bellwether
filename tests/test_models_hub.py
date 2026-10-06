@@ -54,7 +54,7 @@ class StubApi:
         return iter(ModelInfo(**m) for m in self.listings.get(kwargs["author"], []))
 
     def model_info(self, repo_id: str, **kwargs):
-        self.calls.append(("model_info", repo_id))
+        self.calls.append(("model_info", repo_id, kwargs.get("revision")))
         self._fail_first()
         if repo_id not in self.models:
             raise http_error(RepositoryNotFoundError, 404)
@@ -228,6 +228,26 @@ def test_a_template_only_the_processor_reads_has_its_own_status_and_the_tokenize
     hub = client(StubApi(models={"Qwen/Qwen3-VL-8B": info("Qwen/Qwen3-VL-8B", siblings=siblings)}), downloads)
     assert status_of(hub.model("Qwen/Qwen3-VL-8B"), checked=True) == status
     assert [filename for _, filename, _ in downloads.calls] == downloaded
+
+
+def test_details_are_read_at_the_revision_given_and_the_template_on_the_tokenizer_repository_given() -> None:
+    files = [{"rfilename": "config.json"}, {"rfilename": "tokenizer.json"}]
+    with_template = [*files, {"rfilename": "chat_template.jinja"}]
+    api = StubApi(
+        models={
+            "moondream/moondream3-preview": info("moondream/moondream3-preview", siblings=files),
+            "moondream/starmie-v1": info("moondream/starmie-v1", siblings=with_template),
+            "example/model": info("example/model", siblings=with_template),
+            "example/tokenizer": info("example/tokenizer", siblings=files),
+        }
+    )
+    hub = client(api)
+    assert hub.model(
+        "moondream/moondream3-preview", revision="refs/pr/1", tokenizer="moondream/starmie-v1"
+    ).chat_template
+    assert not hub.model("example/model", tokenizer="example/tokenizer").chat_template
+    assert ("model_info", "moondream/moondream3-preview", "refs/pr/1") in api.calls
+    assert ("model_info", "moondream/starmie-v1", None) in api.calls
 
 
 def test_a_template_the_hub_reads_from_the_tokenizer_config_needs_no_download() -> None:

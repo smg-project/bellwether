@@ -77,6 +77,41 @@ def test_vllm_reader_refuses_a_checkpoint_it_cannot_read_as_written() -> None:
         read_vllm(source)
 
 
+def test_vllm_reader_keeps_what_vllm_needs_to_load_a_checkpoint_vendor_code_a_revision_a_tokenizer() -> None:
+    source = (  # written as vLLM's registry writes them at the pin
+        "_TEXT_GENERATION_EXAMPLE_MODELS = {\n"
+        '    "KimiK3ForCausalLM": _HfExamplesInfo("moonshotai/Kimi-K3", trust_remote_code=True),\n'
+        '    "Qwen3ForCausalLM": _HfExamplesInfo("Qwen/Qwen3-8B"),\n'
+        "}\n"
+        "_MULTIMODAL_EXAMPLE_MODELS = {\n"
+        '    "Ernie4_5_VLMoeForConditionalGeneration": _HfExamplesInfo(\n'
+        '        "baidu/ERNIE-4.5-VL-28B-A3B-PT",\n'
+        "        trust_remote_code=True,\n"
+        '        revision="refs/pr/17",\n'
+        "    ),\n"
+        '    "Moondream3ForCausalLM": _HfExamplesInfo(\n'
+        '        "moondream/moondream3-preview",\n'
+        '        tokenizer="moondream/starmie-v1",\n'
+        "        trust_remote_code=True,\n"
+        "    ),\n"
+        "}\n"
+    )
+    entries = {e.name: e for e in read_vllm(source)}
+    assert [entries[name].vendor_code for name in entries] == [True, False, True, True]
+    assert entries["Ernie4_5_VLMoeForConditionalGeneration"].revision == "refs/pr/17"
+    assert entries["Moondream3ForCausalLM"].tokenizer == "moondream/starmie-v1"
+    assert (entries["Qwen3ForCausalLM"].revision, entries["Qwen3ForCausalLM"].tokenizer) == (None, None)
+
+
+def test_vllm_reader_refuses_a_load_setting_it_cannot_read_as_written() -> None:
+    source = (
+        '_TEXT_GENERATION_EXAMPLE_MODELS = {"XForCausalLM": _HfExamplesInfo("org/x", trust_remote_code=REMOTE)}\n'
+        "_MULTIMODAL_EXAMPLE_MODELS = {}\n"
+    )
+    with pytest.raises(ValueError, match="XForCausalLM"):
+        read_vllm(source)
+
+
 def test_vllm_reader_refuses_a_registry_without_its_generative_tables() -> None:
     with pytest.raises(ValueError, match="_MULTIMODAL_EXAMPLE_MODELS"):
         read_vllm('_TEXT_GENERATION_EXAMPLE_MODELS = {"XForCausalLM": _HfExamplesInfo("org/x")}\n')

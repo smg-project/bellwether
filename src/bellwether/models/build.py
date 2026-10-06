@@ -32,7 +32,7 @@ from .rules import (
 @dataclass(frozen=True)
 class Row:
     model: str
-    revision: str | None  # the Hub's sha when the list was built
+    revision: str | None  # the Hub's sha of the revision vLLM loads, else of the day; without the Hub, vLLM's own
     tier: int | None  # None where the Hub decides it and was not asked, or gave no answer
     status: str
     created: date | None
@@ -47,17 +47,35 @@ class _Named:
 
     Which engines name it, whether one calls it multimodal, and whether one gives it as an
     architecture's example (vLLM's default, an id in SGLang's docs) rather than as one of vLLM's
-    extra test models.
+    extra test models; and how vLLM loads it: with the vendor's code, at a revision of its own, with
+    the tokenizer of another repository.
     """
 
     sources: set[str] = field(default_factory=set)
     multimodal: bool = False
     example: bool = False
+    vendor_code: bool = False
+    revision: str | None = None
+    tokenizer: str | None = None
 
-    def add(self, sources: Iterable[str], multimodal: bool, example: bool) -> None:
+    def add(
+        self,
+        sources: Iterable[str],
+        multimodal: bool,
+        example: bool,
+        vendor_code: bool = False,
+        revision: str | None = None,
+        tokenizer: str | None = None,
+    ) -> None:
         self.sources.update(sources)
         self.multimodal = self.multimodal or multimodal
         self.example = self.example or example
+        self.vendor_code = self.vendor_code or vendor_code
+        self.revision = self.revision or revision
+        self.tokenizer = self.tokenizer or tokenizer
+
+    def merge(self, other: _Named) -> None:
+        self.add(other.sources, other.multimodal, other.example, other.vendor_code, other.revision, other.tokenizer)
 
 
 @dataclass
@@ -77,7 +95,11 @@ def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
             for index, model in enumerate(entry.checkpoints):
                 if is_hub_id(model) and not _is_set_aside(entry, model):
                     example = entry.engine != "vllm" or index == 0
-                    named.setdefault(model, _Named()).add([entry.engine], entry.multimodal, example)
+                    # vLLM's revision and tokenizer are those of the default; vendor code is the architecture's.
+                    own = (entry.revision, entry.tokenizer) if index == 0 else (None, None)
+                    named.setdefault(model, _Named()).add(
+                        [entry.engine], entry.multimodal, example, entry.vendor_code, *own
+                    )
     return named
 
 
@@ -132,7 +154,7 @@ def registry_only_rows(entries: Iterable[Entry], built: date) -> list[Row]:
     """The registries' checkpoints alone: no sha, date or downloads, so no row can be shown to be tier 2."""
     entries = list(entries)
     named = registry_checkpoints(entries)
-    rows = [_row(model, None, n.sources, n.multimodal, built, checked=False) for model, n in named.items()]
+    rows = [_row(model, None, n, built, checked=False) for model, n in named.items()]
     return ordered([*rows, *_rows_without_checkpoint(entries)])
 
 
@@ -148,8 +170,7 @@ def hub_rows(
         log(f"registries: no answer from the Hub for {', '.join(unanswered)}; their rows say why")
     text, multimodal = _registered(entries, found)
     rows = {
-        model: _row(model, f.details, f.named.sources, f.named.multimodal, built, checked=True, status=f.unavailable)
-        for model, f in found.items()
+        model: _row(model, f.details, f.named, built, checked=True, status=f.unavailable) for model, f in found.items()
     }
     # The organizations that publish a registered architecture: those of the engines' examples. vLLM's
     # extras add tiny, random and quantized test models from namespaces that publish none.
@@ -171,7 +192,7 @@ def hub_rows(
             if details is None or details.id in rows or not admits_details(details, text | multimodal):
                 continue
             is_multimodal = any(arch in multimodal for arch in details.architectures)
-            rows[details.id] = _row(details.id, details, {"hub"}, is_multimodal, built, checked=True)
+            rows[details.id] = _row(details.id, details, _Named({"hub"}, is_multimodal), built, checked=True)
             added += 1
         log(f"{org}: {len(listing)} listed, {added} added")
     return ordered([*rows.values(), *_rows_without_checkpoint(entries)])
@@ -185,13 +206,13 @@ def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, _Found]:
     found: dict[str, _Found] = {}
     for model in sorted(named):
         try:
-            details, unavailable = hub.model(model), None
+            details, unavailable = hub.model(model, named[model].revision, named[model].tokenizer), None
         except HubUnavailable as err:
             details, unavailable = None, err.status
         if details is not None and is_gpt_oss(details.id, details.architectures):
             continue
         merged = found.setdefault(details.id if details else model, _Found(details, unavailable=unavailable))
-        merged.named.add(named[model].sources, named[model].multimodal, named[model].example)
+        merged.named.merge(named[model])
     return found
 
 
@@ -214,26 +235,20 @@ def _registered(entries: list[Entry], found: dict[str, _Found]) -> tuple[set[str
 
 
 def _row(
-    model: str,
-    details: Details | None,
-    sources: Iterable[str],
-    multimodal: bool,
-    built: date,
-    checked: bool,
-    status: str | None = None,
+    model: str, details: Details | None, named: _Named, built: date, checked: bool, status: str | None = None
 ) -> Row:
     """One checkpoint's row; ``status``, when given, is the Hub's error in place of what its details say."""
     created = details.created if details else None
     answered = checked and status is None
     return Row(
         model=model,
-        revision=details.sha if details else None,
+        revision=details.sha if details else named.revision,
         tier=tier_of(model, created, built, is_current_chat(details)) if answered else tier_without_hub(model),
-        status=status or status_of(details, checked),
+        status=status or status_of(details, checked, named.vendor_code),
         created=created,
         downloads=details.downloads if details else None,
-        modality="multimodal" if multimodal else "text",
-        sources=tuple(sorted(sources)),
+        modality="multimodal" if named.multimodal else "text",
+        sources=tuple(sorted(named.sources)),
     )
 
 

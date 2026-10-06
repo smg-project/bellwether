@@ -32,6 +32,9 @@ class Entry:
     generative: bool
     multimodal: bool
     checkpoints: tuple[str, ...]  # as written, placeholders included; vLLM's default comes first
+    vendor_code: bool = False  # vLLM loads it with trust_remote_code=True
+    revision: str | None = None  # the revision of the default checkpoint vLLM loads, when it names one
+    tokenizer: str | None = None  # the repository vLLM takes the default checkpoint's tokenizer from, if not its own
 
 
 def read_pinned(
@@ -76,6 +79,7 @@ def _example_tables(tree: ast.Module) -> dict[str, ast.Dict]:
 
 
 def _vllm_entry(table: str, architecture: str, call: ast.Call) -> Entry:
+    keywords = {k.arg: k.value for k in call.keywords}
     return Entry(
         engine="vllm",
         name=architecture,
@@ -83,7 +87,20 @@ def _vllm_entry(table: str, architecture: str, call: ast.Call) -> Entry:
         generative=is_generative_architecture(table, architecture),
         multimodal=table == MULTIMODAL_TABLE,
         checkpoints=_checkpoints(architecture, call),
+        vendor_code=_literal(architecture, keywords, "trust_remote_code", bool) or False,
+        revision=_literal(architecture, keywords, "revision", str),
+        tokenizer=_literal(architecture, keywords, "tokenizer", str),
     )
+
+
+def _literal(architecture: str, keywords: dict[str | None, ast.expr], name: str, kind: type) -> object:
+    """A load setting as the registry writes it; one that is not a literal would need vLLM's code run to know."""
+    node = keywords.get(name)
+    if node is None or (isinstance(node, ast.Constant) and node.value is None):
+        return None
+    if isinstance(node, ast.Constant) and isinstance(node.value, kind):
+        return node.value
+    raise ValueError(f"vLLM's registry: {architecture} gives {name} as {ast.unparse(node)}, not as a literal")
 
 
 def _checkpoints(architecture: str, call: ast.Call) -> tuple[str, ...]:
