@@ -639,7 +639,7 @@ def test_a_multi_turn_row_offers_its_classes_functions_less_those_held_back():
     assert [f["name"] for f in bfcl.first_turn_functions(row, docs)] == ["send", "order", "pay"]
     row["missed_function"]["1"] = ["pay"]
     assert [f["name"] for f in bfcl.first_turn_functions(row, docs)] == ["send", "order"]
-    with pytest.raises(ValueError, match="holds back pay at the first turn"):
+    with pytest.raises(ValueError, match="multi_turn_miss_func_0: BFCL adds pay back at the first turn"):
         bfcl.first_turn_functions(dict(row, missed_function={"0": ["pay"]}), docs)
 
 

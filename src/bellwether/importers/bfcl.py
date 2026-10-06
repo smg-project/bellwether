@@ -424,17 +424,18 @@ def read_func_defs(wheel: zipfile.ZipFile) -> dict[str, dict[str, list[str]]]:
 def first_turn_functions(row: dict, docs: dict[str, list[dict]]) -> list[dict]:
     """The functions a multi_turn row offers at its first turn, as BFCL builds them.
 
-    BFCL gives a row the function docs of its ``involved_classes``, in that order, and takes out every function
-    ``missed_function`` holds back (``populate_test_cases_with_predefined_functions``, ``bfcl_eval/utils.py:772``).
-    The handler adds those back only at their own turn, with a fixed user message in place of the turn's
-    (``inference_multi_turn_FC``, ``bfcl_eval/model_handler/base_handler.py:176``). A row that holds a function back
-    at the first turn would change the first request, so it stops the import.
+    BFCL gives a row the function docs of its ``involved_classes``, in that order, and takes out the first function of
+    each name ``missed_function`` holds back (``populate_test_cases_with_predefined_functions``,
+    ``bfcl_eval/utils.py:772``). The handler adds those back only at their own turn, with a fixed user message in place
+    of the turn's (``inference_multi_turn_FC``, ``bfcl_eval/model_handler/base_handler.py:176``). A row that has a
+    function added back at the first turn would change the first request, so it stops the import.
     """
     functions = [doc for name in row["involved_classes"] for doc in docs[name]]
     for turn, names in row.get("missed_function", {}).items():
         if turn == "0":
             raise ValueError(
-                f"{row['id']} holds back {', '.join(names)} at the first turn, which this importer does not build"
+                f"{row['id']}: BFCL adds {', '.join(names)} back at the first turn, with a fixed user message in place"
+                " of the turn's, which this importer does not build"
             )
         for held in names:
             index = next((i for i, doc in enumerate(functions) if doc["name"] == held), None)
