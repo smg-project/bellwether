@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import copy
 import json
-from collections import Counter
 from dataclasses import dataclass
 
 from tokenizers.decoders import DecodeStream
@@ -80,6 +79,7 @@ class RoundtripOracle:
         rendered = self.tokenizer.apply_chat_template(
             [*messages, turn], tokenize=False, add_generation_prompt=False, **kwargs
         )
+        self.check_every_call_is_rendered(messages, kwargs, message, rendered)
         if not rendered.startswith(prompt):
             raise ValueError(
                 "the template does not extend the generation prompt when the turn is appended; "
@@ -90,12 +90,6 @@ class RoundtripOracle:
         if end not in turn:
             raise ValueError(f"the rendered turn carries no end-of-turn token {end!r}")
         text = turn[: turn.rindex(end)]
-        missing = calls_not_rendered(message, text)
-        if missing:
-            raise ValueError(
-                f"the template does not render every tool call (no {', '.join(missing)} in the output); "
-                "the output would not carry them"
-            )
         output_ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
         if self.tokenizer.decode(output_ids) != text:
             raise ValueError("the output text does not survive a tokenize-detokenize round trip")
@@ -105,6 +99,30 @@ class RoundtripOracle:
             raise ValueError("the output's tokens do not give back its text under the tokenizer's incremental decode")
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
         return OutputText(text, output_ids, output_pieces, finish_reason)
+
+    def check_every_call_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
+        """Every call of the message must reach the rendered turn.
+
+        Renaming a call, or adding a key to its arguments, must change what the template renders. A template that
+        drops tool calls (Phi-4-mini's, Hunyuan-A13B's) or renders only some of them would otherwise give an output a
+        parser cannot turn back into the message, and the case would be recorded lossy. Two renders per call; a
+        template that fails on the change has read the call.
+        """
+        for index, call in enumerate(message.get("tool_calls") or []):
+            for change in (renamed, with_marker_argument):
+                variant = {"role": "assistant", **as_vllm_gives_it(change(message, index))}
+                try:
+                    again = self.tokenizer.apply_chat_template(
+                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
+                    )
+                except Exception:
+                    continue
+                if again == rendered:
+                    raise ValueError(
+                        f"the template does not render every tool call: changing call {index} "
+                        f"({call['function']['name']}) leaves the rendered turn as it was, so the output would not "
+                        "carry it"
+                    )
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
@@ -156,11 +174,19 @@ def check_parse_call_arguments(message: dict) -> None:
             )
 
 
-def calls_not_rendered(message: dict, text: str) -> list[str]:
-    """The names of the message's calls the output does not carry, each at least as often as it is called.
+MARKER = "bellwether_marker"
 
-    A template that drops tool calls (Phi-4-mini's, Hunyuan-A13B's) or renders only some of them would otherwise
-    give an output a parser cannot turn back into the message, and the case would be recorded lossy.
-    """
-    wanted = Counter(call["function"]["name"] for call in message.get("tool_calls") or [])
-    return sorted(name for name, count in wanted.items() if text.count(name) < count)
+
+def renamed(message: dict, index: int) -> dict:
+    """A copy of the message whose call ``index`` is named ``MARKER``."""
+    message = copy.deepcopy(message)
+    message["tool_calls"][index]["function"]["name"] = MARKER
+    return message
+
+
+def with_marker_argument(message: dict, index: int) -> dict:
+    """A copy of the message whose call ``index`` carries one more argument, ``MARKER``."""
+    message = copy.deepcopy(message)
+    function = message["tool_calls"][index]["function"]
+    function["arguments"] = json.dumps({**json.loads(function["arguments"]), MARKER: MARKER})
+    return message

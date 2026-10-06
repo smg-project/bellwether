@@ -474,6 +474,26 @@ def test_a_template_that_renders_only_the_first_call_fails_the_case(tiny_model, 
         )
 
 
+def test_a_template_that_renders_only_the_last_call_fails_even_when_the_names_still_add_up(
+    tiny_model, tmp_path_factory
+):
+    # bfcl-live-parallel-8-4-0's shape: the second call's argument holds the first call's name, so counting names
+    # in the output finds two even when the first call is never rendered.
+    call = (
+        "{%- if loop.last %}{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] | tojson"
+        " + '</tool_call>' }}{%- endif %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "last-call-chat", assistant_template(call))
+    calls = [
+        {"type": "function", "function": {"name": "todo", "arguments": '{"type": "add"}'}},
+        {"type": "function", "function": {"name": "todo", "arguments": '{"content": "todo random"}'}},
+    ]
+    with pytest.raises(ValueError, match="does not render every tool call"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Two todos")]}, {"content": "", "tool_calls": calls}
+        )
+
+
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
