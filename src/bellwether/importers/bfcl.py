@@ -10,8 +10,38 @@ This module imports nothing beyond the standard library.
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
+import re
+import sys
+import zipfile
+from pathlib import Path
+
+PROJECT = "bfcl-eval"
+VERSION = "2026.3.23"
+WHEEL = "bfcl_eval-2026.3.23-py3-none-any.whl"
+SHA256 = "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a"
+LICENSE = "Apache-2.0"
+SOURCE = f"pypi:{PROJECT}=={VERSION}"
+DATA = "bfcl_eval/data"
+TEMPERATURE = 0.001
+# The single-turn categories of the weekly run (.github/workflows/nightly-bfcl.yml in smg), in its order.
+CATEGORIES = (
+    "simple_python",
+    "simple_java",
+    "simple_javascript",
+    "multiple",
+    "parallel",
+    "parallel_multiple",
+    "irrelevance",
+    "live_simple",
+    "live_multiple",
+    "live_parallel",
+    "live_parallel_multiple",
+    "live_irrelevance",
+    "live_relevance",
+)
 
 # bfcl_eval/constants/type_mappings.py, GORILLA_TO_OPENAPI
 TYPE_MAP = {
@@ -172,3 +202,130 @@ def message_for(answer: dict) -> dict:
         call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
         calls.append({"type": "function", "function": call})
     return {"content": "", "tool_calls": calls}
+
+
+def question_file(category: str) -> str:
+    return f"{DATA}/BFCL_v4_{category}.json"
+
+
+def answer_file(category: str) -> str:
+    return f"{DATA}/possible_answer/BFCL_v4_{category}.json"
+
+
+def _jsonl(wheel: zipfile.ZipFile, member: str) -> list[dict]:
+    return [json.loads(line) for line in wheel.read(member).decode("utf-8").splitlines() if line.strip()]
+
+
+def read_rows(wheel: zipfile.ZipFile, category: str) -> list[dict]:
+    return _jsonl(wheel, question_file(category))
+
+
+def read_answers(wheel: zipfile.ZipFile, category: str) -> dict[str, dict]:
+    if answer_file(category) not in wheel.namelist():
+        return {}
+    return {answer["id"]: answer for answer in _jsonl(wheel, answer_file(category))}
+
+
+def request_for(row: dict, category: str) -> dict:
+    """The body the weekly run sends for one row, without ``model``, in the order its client builds it."""
+    if len(row["question"]) != 1:
+        raise ValueError(f"{row['id']}: a single-turn row with {len(row['question'])} turns")
+    request = {"messages": row["question"][0], "temperature": TEMPERATURE, "store": False}
+    tools = to_tools(prepare_functions(row["function"], category))
+    if tools:
+        request["tools"] = tools
+    return request
+
+
+def case_name(row_id: str) -> str:
+    return "bfcl-" + re.sub(r"[^a-z0-9]+", "-", row_id.lower()).strip("-")
+
+
+def set_name(category: str) -> str:
+    return "bfcl-" + category.replace("_", "-")
+
+
+def origin(category: str, row_id: str, answered: bool = False) -> dict:
+    """Where a case came from; a parse case also names the file its message came from."""
+    found = {"dataset": "bfcl", "source": SOURCE, "sha256": SHA256, "file": question_file(category)}
+    if answered:
+        found["answer_file"] = answer_file(category)
+    return {**found, "row": row_id, "license": LICENSE}
+
+
+def build_sets(wheel: zipfile.ZipFile, categories: tuple[str, ...] | None = None) -> dict[tuple[str, str], list[dict]]:
+    """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer."""
+    sets: dict[tuple[str, str], list[dict]] = {}
+    seen: dict[str, str] = {}
+    for category in categories or CATEGORIES:
+        answers = read_answers(wheel, category)
+        render, parse = [], []
+        for row in read_rows(wheel, category):
+            name = case_name(row["id"])
+            if name in seen:
+                raise ValueError(f"rows {seen[name]!r} and {row['id']!r} both become the case name {name}")
+            seen[name] = row["id"]
+            request = request_for(row, category)
+            notes = f"BFCL {category} {row['id']}"
+            render.append({"name": name, "request": request, "notes": notes, "origin": origin(category, row["id"])})
+            if row["id"] in answers:
+                message = message_for(answers[row["id"]])
+                line = {"name": name, "request": request, "message": message, "notes": notes}
+                parse.append({**line, "origin": origin(category, row["id"], answered=True)})
+        sets[("render", set_name(category))] = render
+        if parse:
+            sets[("parse", set_name(category))] = parse
+    return sets
+
+
+def _text(lines: list[dict]) -> str:
+    return "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
+
+
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
+    """Write every set, and remove ``bfcl-*`` files no category writes any more."""
+    written = []
+    for (kind, name), lines in sorted(sets.items()):
+        path = corpus_dir / kind / f"{name}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(_text(lines).encode("utf-8"))
+        written.append(path)
+    for kind in ("render", "parse"):
+        for stale in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
+            if stale not in written:
+                stale.unlink()
+    return written
+
+
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
+    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
+    expected = {corpus_dir / kind / f"{name}.jsonl": _text(lines) for (kind, name), lines in sets.items()}
+    problems = []
+    for path, text in sorted(expected.items()):
+        if not path.is_file():
+            problems.append(f"{path}: missing")
+        elif path.read_bytes().decode("utf-8") != text:
+            problems.append(f"{path}: differs from a fresh import")
+    for kind in ("render", "parse"):
+        for path in sorted((corpus_dir / kind).glob("bfcl-*.jsonl")):
+            if path not in expected:
+                problems.append(f"{path}: no BFCL category writes it")
+    return problems
+
+
+def run(args: argparse.Namespace) -> int:
+    from . import pypi
+
+    with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
+        sets = build_sets(wheel)
+    if args.check:
+        problems = check_sets(sets, args.corpus)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        if not problems:
+            print(f"{args.corpus}: the BFCL sets equal a fresh import of {SOURCE}")
+        return 1 if problems else 0
+    for (kind, name), lines in sorted(sets.items()):
+        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    write_sets(sets, args.corpus)
+    return 0

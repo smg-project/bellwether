@@ -1,5 +1,9 @@
+import json
+import zipfile
+
 import pytest
 
+from bellwether.cli import main
 from bellwether.importers import bfcl, pypi
 
 WHEEL = "pkg-1.0-py3-none-any.whl"
@@ -205,3 +209,141 @@ def test_the_message_has_one_call_per_ground_truth_entry_with_json_arguments():
             {"type": "function", "function": {"name": "ping", "arguments": "{}"}},
         ],
     }
+
+
+def fake_wheel(tmp_path, members: dict[str, list[dict]]):
+    path = tmp_path / "bfcl.whl"
+    with zipfile.ZipFile(path, "w") as wheel:
+        metadata = "Metadata-Version: 2.1\nName: bfcl-eval\nLicense: Apache 2.0\n"
+        wheel.writestr("bfcl_eval-2026.3.23.dist-info/METADATA", metadata)
+        for name, rows in members.items():
+            wheel.writestr(name, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows))
+    return path
+
+
+DRINK = {"drink": {"type": "string", "description": "D."}}
+SIMPLE = {
+    "id": "simple_python_0",
+    "question": [[{"role": "user", "content": "Order a Café ☕"}]],
+    "function": [
+        {
+            "name": "Cafe.order",
+            "description": "Orders.",
+            "parameters": {"type": "dict", "properties": DRINK, "required": ["drink"]},
+        }
+    ],
+}
+ANSWER = {"id": "simple_python_0", "ground_truth": [{"Cafe.order": {"drink": ["Café ☕"]}}]}
+IRRELEVANT = {"id": "irrelevance_0", "question": [[{"role": "user", "content": "Hi"}]], "function": []}
+
+
+def build(tmp_path):
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE],
+            "bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json": [ANSWER],
+            "bfcl_eval/data/BFCL_v4_irrelevance.json": [IRRELEVANT],
+        },
+    )
+    with zipfile.ZipFile(path) as wheel:
+        return bfcl.build_sets(wheel, categories=("simple_python", "irrelevance"))
+
+
+def test_render_sets_for_every_category_and_parse_sets_where_an_answer_exists(tmp_path):
+    sets = build(tmp_path)
+    assert sorted(sets) == [
+        ("parse", "bfcl-simple-python"),
+        ("render", "bfcl-irrelevance"),
+        ("render", "bfcl-simple-python"),
+    ]
+    origin = {
+        "dataset": "bfcl",
+        "source": "pypi:bfcl-eval==2026.3.23",
+        "sha256": "3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a",
+        "file": "bfcl_eval/data/BFCL_v4_simple_python.json",
+        "row": "simple_python_0",
+        "license": "Apache-2.0",
+    }
+    request = {
+        "messages": [{"role": "user", "content": "Order a Café ☕"}],
+        "temperature": 0.001,
+        "store": False,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "Cafe_order",
+                    "description": "Orders. Note that the provided function is in Python 3 syntax.",
+                    "parameters": {"type": "object", "properties": DRINK, "required": ["drink"]},
+                },
+            }
+        ],
+    }
+    assert sets[("render", "bfcl-simple-python")] == [
+        {
+            "name": "bfcl-simple-python-0",
+            "request": request,
+            "notes": "BFCL simple_python simple_python_0",
+            "origin": origin,
+        }
+    ]
+    [parse] = sets[("parse", "bfcl-simple-python")]
+    assert list(parse) == ["name", "request", "message", "notes", "origin"]
+    assert parse["origin"] == {
+        **{k: origin[k] for k in ("dataset", "source", "sha256", "file")},
+        "answer_file": "bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json",
+        "row": "simple_python_0",
+        "license": "Apache-2.0",
+    }
+    assert list(parse["origin"]) == ["dataset", "source", "sha256", "file", "answer_file", "row", "license"]
+    assert parse["message"]["tool_calls"][0]["function"] == {"name": "Cafe_order", "arguments": '{"drink": "Café ☕"}'}
+    assert sets[("render", "bfcl-irrelevance")][0]["request"] == {
+        "messages": [{"role": "user", "content": "Hi"}],
+        "temperature": 0.001,
+        "store": False,
+    }
+
+
+def test_two_rows_with_one_case_name_stop_the_import(tmp_path):
+    twin = dict(SIMPLE, id="simple-python-0")
+    path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE, twin]})
+    with zipfile.ZipFile(path) as wheel, pytest.raises(ValueError, match="bfcl-simple-python-0"):
+        bfcl.build_sets(wheel, categories=("simple_python",))
+
+
+def test_written_sets_check_clean_and_a_changed_or_stale_file_is_reported(tmp_path):
+    sets, corpus = build(tmp_path), tmp_path / "corpus"
+    (corpus / "render").mkdir(parents=True)
+    (corpus / "render" / "common.jsonl").write_text("{}\n")
+    (corpus / "render" / "bfcl-old.jsonl").write_text("{}\n")
+    bfcl.write_sets(sets, corpus)
+    assert not (corpus / "render" / "bfcl-old.jsonl").exists()
+    assert (corpus / "render" / "common.jsonl").read_text() == "{}\n"
+    text = (corpus / "render" / "bfcl-simple-python.jsonl").read_bytes().decode("utf-8")
+    assert "Café ☕" in text and text.endswith("\n")
+    assert bfcl.check_sets(sets, corpus) == []
+    (corpus / "parse" / "bfcl-simple-python.jsonl").write_text("{}\n")
+    (corpus / "render" / "bfcl-stale.jsonl").write_text("{}\n")
+    assert bfcl.check_sets(sets, corpus) == [
+        f"{corpus / 'parse' / 'bfcl-simple-python.jsonl'}: differs from a fresh import",
+        f"{corpus / 'render' / 'bfcl-stale.jsonl'}: no BFCL category writes it",
+    ]
+
+
+def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE],
+            "bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json": [ANSWER],
+        },
+    )
+    monkeypatch.setattr(bfcl, "CATEGORIES", ("simple_python",))
+    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    corpus = tmp_path / "corpus"
+    assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 1
+    assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
+    assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
+    out = capsys.readouterr().out
+    assert f"{corpus / 'render' / 'bfcl-simple-python.jsonl'}: 1 cases" in out
