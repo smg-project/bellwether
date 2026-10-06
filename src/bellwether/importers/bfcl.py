@@ -122,3 +122,53 @@ def _cast(properties: dict) -> dict:
                 elif items["type"] == "object" and "properties" in items:
                     items["properties"] = _cast(items["properties"])
     return properties
+
+
+OMIT = object()
+
+
+def pick(options: list):
+    """The first acceptable value that is not BFCL's "may be omitted" marker (``""``), or ``OMIT``."""
+    for option in options:
+        if option != "":
+            return realize(option)
+    return OMIT
+
+
+def realize(option):
+    """An acceptable value as a call argument.
+
+    BFCL's checker (``dict_checker``, ``list_dict_checker``) reads a dict option as one list of acceptable values
+    per key, and a list of dicts as such dict options in order; anything else is the value itself.
+    """
+    if isinstance(option, dict):
+        return _realize_dict(option)
+    if isinstance(option, list) and option and all(isinstance(item, dict) for item in option):
+        return [_realize_dict(item) for item in option]
+    return option
+
+
+def _realize_dict(option: dict) -> dict:
+    value = {}
+    for key, acceptable in option.items():
+        if not isinstance(acceptable, list):
+            raise ValueError(f"dict option key {key!r} holds {acceptable!r}, not a list of acceptable values")
+        chosen = next((item for item in acceptable if item != ""), OMIT)
+        if chosen is not OMIT:
+            value[key] = chosen
+    return value
+
+
+def message_for(answer: dict) -> dict:
+    """The assistant message a parser must return for one BFCL ground truth: one call per entry, in order."""
+    calls = []
+    for entry in answer["ground_truth"]:
+        ((name, params),) = entry.items()
+        arguments = {}
+        for param, options in params.items():
+            value = pick(options)
+            if value is not OMIT:
+                arguments[param] = value
+        call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
+        calls.append({"type": "function", "function": call})
+    return {"content": "", "tool_calls": calls}

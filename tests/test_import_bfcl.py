@@ -163,3 +163,45 @@ def test_dotted_names_get_underscores_and_the_parameters_become_an_object():
         },
     }
     assert original["name"] == "Geometry.createPresentation" and original["parameters"]["type"] == "dict"
+
+
+def test_pick_takes_the_first_value_that_is_not_the_omission_marker():
+    assert bfcl.pick(["", 0]) == 0
+    assert bfcl.pick(["units", ""]) == "units"
+    assert bfcl.pick([None, ""]) is None
+    assert bfcl.pick([[[10, 20], [30, 40]]]) == [[10, 20], [30, 40]]
+    assert bfcl.pick([""]) is bfcl.OMIT
+
+
+def test_a_dict_option_takes_one_value_per_key_and_leaves_out_keys_that_can_only_be_omitted():
+    option = {
+        "size": ["large"],
+        "note": [""],
+        "temperature": ["", "hot"],
+        "pos": [{"lateral": 10.5, "longitudinal": 50}],
+    }
+    assert bfcl.realize(option) == {"size": "large", "temperature": "hot", "pos": {"lateral": 10.5, "longitudinal": 50}}
+
+
+def test_a_list_of_dict_options_realizes_each_dict():
+    option = [{"item": ["burgers"], "quantity": [5]}, {"item": ["chicken wings"], "quantity": [6]}]
+    assert bfcl.realize(option) == [{"item": "burgers", "quantity": 5}, {"item": "chicken wings", "quantity": 6}]
+
+
+def test_a_dict_option_whose_values_are_not_lists_is_refused():
+    with pytest.raises(ValueError, match="not a list of acceptable values"):
+        bfcl.realize({"size": "large"})
+
+
+def test_the_message_has_one_call_per_ground_truth_entry_with_json_arguments():
+    answer = {
+        "id": "x",
+        "ground_truth": [{"Cafe.order": {"drink": ["Café ☕"], "count": ["", 3], "note": [""]}}, {"ping": {}}],
+    }
+    assert bfcl.message_for(answer) == {
+        "content": "",
+        "tool_calls": [
+            {"type": "function", "function": {"name": "Cafe_order", "arguments": '{"drink": "Café ☕", "count": 3}'}},
+            {"type": "function", "function": {"name": "ping", "arguments": "{}"}},
+        ],
+    }
