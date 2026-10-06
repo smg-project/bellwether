@@ -1,5 +1,15 @@
 # bellwether
 
+> Given a request, what's expected tokens. Given a token, what's expected output text. With insane
+> amount of data. Then smg uses it in many places. Tokenizer, detokenization, gRPC router, and
+> symphony.
+>
+> Simo, 2026-10-06
+
+Bellwether holds expected values for several consumers in smg: the tokenizer crate (encoding and
+incremental decoding), the gRPC router's request path, and Symphony's parsers.
+`docs/benchmark-sets.md` says how they are recorded and read.
+
 Does SMG send the engine the same prompt tokens the model vendor's own code would, and does it
 turn the engine's tokens back into the same response? Bellwether answers that without a GPU.
 
