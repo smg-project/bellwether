@@ -1,0 +1,10 @@
+model    = "zai-org/GLM-4.7-Flash"
+revision = "7dd20894a642a0aa287e9827cb1a1f7f91386b67"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"    = "d63ad536c3c81880043e22ec7fd08db42b4d8fb7c89c7138bc562bfa25281375"
+"config.json"            = "528cefecce3cd174a1713c1c166c441c1fc0f78a0272c6c9d9bd51fc9bae0196"
+"generation_config.json" = "8702e4074821d0cbe4f5e8e0c4659f78b9fbabbb023ac597a23eb748df0e18e7"
+"tokenizer.json"         = "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"
+"tokenizer_config.json"  = "31a173e2797ddc8b72ac996803513e627fc28d7aad02cfcce321a431d865c86d"

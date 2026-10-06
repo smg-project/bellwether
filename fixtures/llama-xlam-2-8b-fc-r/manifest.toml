@@ -1,0 +1,10 @@
+model    = "Salesforce/Llama-xLAM-2-8b-fc-r"
+revision = "a0efe39a575ef33d1d233cb2e799ae053b636c0e"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "228a7438adda24be38305b9a20bf6b27cc0cdbcaa36bd012fa27a4bc42ba376a"
+"special_tokens_map.json" = "0395531e93c7044e93a878780f7cb866dfade6cf54c5ff5fb22b6229313d125f"
+"tokenizer.json"          = "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+"tokenizer_config.json"   = "0d9ad9eb12469400675836a90a28eb95dc117fdcb2bcc06e1728f05f34b24017"

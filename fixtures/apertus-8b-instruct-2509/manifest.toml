@@ -1,0 +1,11 @@
+model    = "swiss-ai/Apertus-8B-Instruct-2509"
+revision = "b946d40447b2b597999b9c86d44bee0b452c919f"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"     = "56f72c27fa2e565312a830b7315a455c79fb452fdbe7a5b7595d8a094f282b07"
+"config.json"             = "79422e3fe45066213bbf71d50cd293d29fa63cf1fab1d7605a1850cb24a4e9b1"
+"generation_config.json"  = "dd1fd499fa58138a07bcfef87f957adacb63f5ecf1a8db060254657ff1fe2a0c"
+"special_tokens_map.json" = "3a3f3af9c9cbc9cf89c719d3de130913dcd626ac5061cdf3cd9ff21728f9d58f"
+"tokenizer.json"          = "bb201fb226cde11f66c3cf51c5344fb37b1611f00c21e75c324546d854eff2e1"
+"tokenizer_config.json"   = "b89e07508603d6e1f2c8642f366c2469063c3eddae0585f1e67934ee98498ab1"

@@ -1,0 +1,11 @@
+model    = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+revision = "bf77c3174f68ad409e1c2aa60daeb46e32d1c606"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"     = "ab7813c3abdd9cb655905a410728b26c7884eca45ddfab8d9f931553485a7862"
+"config.json"             = "2397c77308fe6c71fd7ccb7b513da545dc6bc5d9ca8dfdb00367b219154b2851"
+"generation_config.json"  = "9c1cbe2f97765f5e7803bde7dfe6c7794300e40d61fa7e192032761f69d7c1bf"
+"special_tokens_map.json" = "e3a4f63da745f02317a45e00e6476c17fc66ac41faf14bb1b0be1f3211b0ca53"
+"tokenizer.json"          = "c6021eb6847e682f89aa52d5eb6e8c7d902a23acfc8137e25211cf84828f1592"
+"tokenizer_config.json"   = "3d568e506d0905285ae90a3fdd1482be7b6d0bf0b8ca9514d75dad4257b0827a"

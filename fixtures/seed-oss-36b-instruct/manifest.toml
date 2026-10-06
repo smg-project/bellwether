@@ -1,0 +1,11 @@
+model    = "ByteDance-Seed/Seed-OSS-36B-Instruct"
+revision = "497f1dca95ebdec98e41d517b9f060ee753c902f"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"     = "3f9e0dc4adeb8032287d0129dc75b6298fee8698a52ab41e863dbc89929330d3"
+"config.json"             = "c1cda17f3772a02593f9023d5b56afe745e66b281da6e5a732ae9b3e0329c962"
+"generation_config.json"  = "b3504aaafc737a2a225a371386ef34344fa6656805f330f0a4d858695c953de8"
+"special_tokens_map.json" = "2566e3f4a6db47cc6051b180e9f00314805857e16f2c6ac1d08fdbbb353d5f36"
+"tokenizer.json"          = "f6bd848f52451824a3033a9f1e67eea5b399a13c90f845a332d3a29537e05827"
+"tokenizer_config.json"   = "97d6fdf939d37045baeaa69fbaeacb2b88733e35869840f913a372c8aa92ee87"

@@ -1,0 +1,11 @@
+model    = "IFM/K2-Horizon-36B"
+revision = "cca48b6631d03c338a0e1d8beb0c392af8becbd3"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"chat_template.jinja"     = "a892cd0b0195599f283a8c706787520d9a6747640efb2f4dec4144b0abb62590"
+"config.json"             = "3fc9d4c10ad0bb5b127c6f594cebf641d1f2605537ea9b92f80aa34a0d20527a"
+"generation_config.json"  = "2e770419b22cd55fe910b60cc2c0ff133a849fec2cf8b80753d788235bbb89e5"
+"special_tokens_map.json" = "e9be461abfcb63da71fb65db470e075682e7573e469cc658aeeb6632a6144ae1"
+"tokenizer.json"          = "2fa69519ff1ee3ee55ac50927b00058e88b9eb90802fabaf3c6b05804601c53b"
+"tokenizer_config.json"   = "581375b2ce8d56d59f609f08a7165365ac53b6543f3442ef0117b4951b0d747c"
