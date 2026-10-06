@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import corpus_sets, hf
+from . import corpus_sets, github, hf
 
 REPO = "NousResearch/hermes-function-calling-v1"
 REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
@@ -36,6 +36,15 @@ SOURCE = f"hf:datasets/{REPO}@{REVISION}"
 LICENSE = "Apache-2.0"
 CARD_SHA256 = "a01aa1fe59858148f87d0a584e69bd4e33a9a3c70a177fe1517cad57ead45ae5"
 CARD_LICENSE = "apache-2.0"  # the license key of the reviewed card's YAML front matter; LICENSE is its SPDX name
+# Apache-2.0 4(a) asks that a copy of the License go with the work, and the dataset ships no LICENSE or NOTICE file, so
+# the import copies the License as the Apache Software Foundation publishes it (https://www.apache.org/licenses/
+# LICENSE-2.0.txt, the same bytes), from the foundation's website repository at the one commit that file has.
+LICENSE_OWNER, LICENSE_REPO = "apache", "www-site"
+LICENSE_COMMIT = "01b1be9fbc5cd93b6794f5653a58b9b863807f84"
+LICENSE_PATH = "content/licenses/LICENSE-2.0.txt"
+LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+# Where the import writes that copy, under the corpus root.
+LICENSE_COPY = "licenses/hermes-LICENSE"
 # The card's configs that hold tool calls, with their files and sha256. The json_mode_* configs are structured-output
 # cases, not tool calls, and are left for later.
 CONFIGS = {
@@ -350,19 +359,40 @@ def leave_out_repeats(
     return kept
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
-    """Write every set, and remove ``hermes-*`` files no config writes any more."""
-    return corpus_sets.write(sets, corpus_dir, "hermes-")
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the License copy, and remove ``hermes-*`` set files no config writes any more."""
+    written = corpus_sets.write(sets, corpus_dir, "hermes-")
+    copy = corpus_dir / LICENSE_COPY
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_bytes(license_text)
+    return [*written, copy]
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "hermes-", "Hermes config")
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
+    problems = corpus_sets.check(sets, corpus_dir, "hermes-", "Hermes config")
+    copy = corpus_dir / LICENSE_COPY
+    if not copy.is_file():
+        problems.append(f"{copy}: missing")
+    elif copy.read_bytes() != license_text:
+        problems.append(f"{copy}: differs from a fresh import")
+    return problems
+
+
+def check_license_text(text: bytes) -> None:
+    """Refuse a License text whose heading is not the Apache License 2.0's, so a pin moved to another text cannot pass
+    on its new hash alone."""
+    if text.split()[:4] != [b"Apache", b"License", b"Version", b"2.0,"]:
+        source = f"{LICENSE_OWNER}/{LICENSE_REPO}@{LICENSE_COMMIT} {LICENSE_PATH}"
+        raise ValueError(f"{source}: not the Apache License 2.0; review it before importing")
 
 
 def run(args: argparse.Namespace) -> int:
     card = hf.fetch(REPO, REVISION, hf.CARD, CARD_SHA256).read_bytes().decode("utf-8")
     hf.check_card_license(REPO, card, CARD_LICENSE)
+    pin = (LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256)
+    license_text = github.fetch(*pin, cache=args.cache).read_bytes()
+    check_license_text(license_text)
     rows = {
         config: read_rows(hf.fetch(REPO, REVISION, filename, sha256)) for config, (filename, sha256) in CONFIGS.items()
     }
@@ -370,7 +400,7 @@ def run(args: argparse.Namespace) -> int:
     repeated: list[tuple[str, str]] = []
     sets = build_sets(rows, skipped=skipped, repeated=repeated)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(sets, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -388,5 +418,5 @@ def run(args: argparse.Namespace) -> int:
         print(f"no cases for {len(indices)} row(s) of {config} ({', '.join(indices)}): {why}")
     for name, earlier in repeated:
         print(f"no case {name}: it repeats {earlier}")
-    write_sets(sets, args.corpus)
+    write_sets(sets, args.corpus, license_text)
     return 0

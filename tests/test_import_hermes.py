@@ -1,15 +1,17 @@
 import hashlib
 import json
 from collections import Counter
+from types import SimpleNamespace
 
 import huggingface_hub
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import hermes, hf
+from bellwether.importers import github, hermes, hf
 
 REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
 CARD = "---\nlicense: apache-2.0\ntask_categories:\n- text-generation\n---\n\n# Hermes Function-Calling V1\n"
+APACHE = b"\n                                 Apache License\n                           Version 2.0, January 2004\n"
 
 WEATHER = {
     "type": "function",
@@ -381,24 +383,25 @@ def test_written_sets_check_clean_and_a_changed_or_stale_hermes_file_is_reported
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "hermes-old"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
-    hermes.write_sets(sets, corpus)
+    hermes.write_sets(sets, corpus, APACHE)
     assert not (corpus / "render" / "hermes-old.jsonl").exists()
     for name in ("common", "bfcl-simple-python"):
         assert (corpus / "render" / f"{name}.jsonl").read_text() == "{}\n"
     text = (corpus / "parse" / "hermes-glaive-func-calling.jsonl").read_bytes().decode("utf-8")
     assert "Zürich" in text and text.endswith("\n") and len(text.splitlines()) == 4
-    assert hermes.check_sets(sets, corpus) == []
+    assert hermes.check_sets(sets, corpus, APACHE) == []
     (corpus / "parse" / "hermes-glaive-func-calling.jsonl").write_text("{}\n")
     (corpus / "render" / "hermes-stale.jsonl").write_text("{}\n")
-    assert hermes.check_sets(sets, corpus) == [
+    assert hermes.check_sets(sets, corpus, APACHE) == [
         f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'hermes-stale.jsonl'}: no Hermes config writes it",
     ]
 
 
-def serve(tmp_path, monkeypatch, card: str = CARD, **rows: list[dict]) -> list[tuple]:
+def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE, **rows: list[dict]) -> SimpleNamespace:
     """``hf_hub_download`` served from files written here, each pinned by its sha256 in place of the dataset's: the
-    card, and each config's rows (no config given: none). Returns the downloads asked for, as (repo, file, options).
+    card, and each config's rows (no config given: none); and ``github.fetch`` serving ``license_text``. Returns the
+    downloads asked for: ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256).
     """
     paths = {hf.CARD: tmp_path / "hub" / hf.CARD}
     paths[hf.CARD].parent.mkdir(parents=True)
@@ -416,7 +419,17 @@ def serve(tmp_path, monkeypatch, card: str = CARD, **rows: list[dict]) -> list[t
         return str(paths[filename])
 
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
-    return calls
+    fetched: list[tuple] = []
+
+    def fetch(owner, repo, commit, path, sha256, cache=None):
+        fetched.append((owner, repo, commit, path, sha256))
+        served = tmp_path / "github" / path
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_bytes(license_text)
+        return served
+
+    monkeypatch.setattr(github, "fetch", fetch)
+    return SimpleNamespace(hub=calls, github=fetched)
 
 
 def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_out_then_checks(
@@ -424,7 +437,7 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
 ):
     hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
     hey = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hey there!"))
-    calls = serve(
+    served = serve(
         tmp_path,
         monkeypatch,
         func_calling_singleturn=[ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome"), ORPHAN, ORPHAN],
@@ -445,7 +458,7 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
     assert main(["import", "hermes", "--corpus", str(corpus), "--check"]) == 0
     assert f"{corpus}: the Hermes sets equal a fresh import of hf:datasets/" in capsys.readouterr().out
     # Every file comes from the dataset at the pinned commit.
-    assert {(repo, options["revision"]) for repo, _, options in calls} == {
+    assert {(repo, options["revision"]) for repo, _, options in served.hub} == {
         ("NousResearch/hermes-function-calling-v1", REVISION)
     }
 
@@ -453,12 +466,46 @@ def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_ou
 def test_the_command_checks_the_cards_license_before_it_reads_any_row_and_writes_nothing_on_a_refusal(
     tmp_path, monkeypatch
 ):
-    calls = serve(tmp_path, monkeypatch, card=CARD.replace("apache-2.0", "mit"), func_calling=[ask("Paris")])
+    served = serve(tmp_path, monkeypatch, card=CARD.replace("apache-2.0", "mit"), func_calling=[ask("Paris")])
     corpus = tmp_path / "corpus"
     refusal = "the card's license is 'mit', not the reviewed 'apache-2.0'; review it before importing"
     with pytest.raises(ValueError, match=f"NousResearch/hermes-function-calling-v1 README.md: {refusal}"):
         main(["import", "hermes", "--corpus", str(corpus)])
-    assert [filename for _, filename, _ in calls] == ["README.md"] and not corpus.exists()
+    assert [filename for _, filename, _ in served.hub] == ["README.md"] and not corpus.exists()
+
+
+def test_the_command_writes_the_apache_license_next_to_the_sets(tmp_path, monkeypatch):
+    served = serve(tmp_path, monkeypatch)
+    corpus = tmp_path / "corpus"
+    assert main(["import", "hermes", "--corpus", str(corpus)]) == 0
+    assert (corpus / "licenses" / "hermes-LICENSE").read_bytes() == APACHE
+    # The dataset ships no LICENSE or NOTICE file; its card names apache-2.0, so the copy is the License as the Apache
+    # Software Foundation publishes it, from its website's repository at the one commit that file has.
+    commit, sha256 = "01b1be9fbc5cd93b6794f5653a58b9b863807f84", hermes.LICENSE_SHA256
+    assert served.github == [("apache", "www-site", commit, "content/licenses/LICENSE-2.0.txt", sha256)]
+    assert sha256 == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    serve(tmp_path, monkeypatch)
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "hermes-LICENSE"
+    argv = ["import", "hermes", "--corpus", str(corpus)]
+    assert main(argv) == 0
+    copy.unlink()
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
+
+
+def test_the_command_refuses_a_license_text_that_is_not_the_apache_license_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, license_text=b"MIT License\n\nCopyright (c) 2024\n")
+    with pytest.raises(ValueError, match="not the Apache License 2.0; review it before importing"):
+        main(["import", "hermes", "--corpus", str(tmp_path / "corpus")])
+    assert not (tmp_path / "corpus").exists()
 
 
 def real_rows(config: str) -> list[dict]:
