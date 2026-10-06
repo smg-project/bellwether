@@ -311,6 +311,15 @@ def test_render_sets_for_every_category_and_parse_sets_where_an_answer_exists(tm
     }
 
 
+def test_a_row_whose_text_holds_unicode_line_breaks_is_read_intact(tmp_path):
+    text = "Order a Café\u0085now"
+    row = dict(SIMPLE, question=[[{"role": "user", "content": text}]])
+    path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [row]})
+    with zipfile.ZipFile(path) as wheel:
+        [line] = bfcl.build_sets(wheel, categories=("simple_python",))[("render", "bfcl-simple-python")]
+    assert line["request"]["messages"] == [{"role": "user", "content": text}]
+
+
 def test_two_rows_with_one_case_name_stop_the_import(tmp_path):
     twin = dict(SIMPLE, id="simple-python-0")
     path = fake_wheel(tmp_path, {"bfcl_eval/data/BFCL_v4_simple_python.json": [SIMPLE, twin]})

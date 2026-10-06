@@ -250,7 +250,8 @@ def answer_file(category: str) -> str:
 
 
 def _jsonl(wheel: zipfile.ZipFile, member: str) -> list[dict]:
-    return [json.loads(line) for line in wheel.read(member).decode("utf-8").splitlines() if line.strip()]
+    """The rows of a JSON Lines member, split on "\\n" only: splitlines() also breaks inside strings on U+2028."""
+    return [json.loads(line) for line in wheel.read(member).decode("utf-8").split("\n") if line.strip()]
 
 
 def read_rows(wheel: zipfile.ZipFile, category: str) -> list[dict]:

@@ -31,7 +31,9 @@ class Case:
 def read_cases(path: Path) -> list[Case]:
     cases: list[Case] = []
     names: set[str] = set()
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    # Only "\n" ends a line: the writers keep U+2028 and the like raw inside strings, and splitlines() breaks on them.
+    # The empty piece after the final "\n" is skipped as a blank line.
+    for number, raw in enumerate(path.read_text(encoding="utf-8").split("\n"), start=1):
         if not raw.strip():
             continue
         try:

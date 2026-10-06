@@ -177,6 +177,18 @@ def test_corpus_fails_when_a_directory_that_exists_cannot_be_read(tmp_path):
         own.chmod(0o755)
 
 
+# Line breaks other than "\n" that JSON writes raw when ensure_ascii is off, as the corpus and fixture writers do.
+BREAKS = "one two\u0085three"
+
+
+def test_corpus_reads_a_case_whose_text_holds_unicode_line_breaks_intact(tmp_path):
+    path = tmp_path / "set.jsonl"
+    case = {"name": "a", "request": {"messages": [user(BREAKS)]}, "message": {"content": BREAKS}}
+    path.write_text(json.dumps(case, ensure_ascii=False) + "\n", encoding="utf-8")
+    [read] = read_cases(path)
+    assert read.request == {"messages": [user(BREAKS)]} and read.message == {"content": BREAKS}
+
+
 def test_reference_oracle_renders_the_checkpoint_template_and_its_ids(tiny_model):
     oracle = HfTemplateOracle(str(tiny_model), "local")
     rendered = oracle.render({"messages": [user("What is the capital of France?")]})
@@ -223,7 +235,7 @@ def test_record_writes_sorted_canonical_lines_with_provenance(tmp_path, tiny_mod
     status, out_dir = record(tmp_path, tiny_model, ("common", cases))
     assert status == 0
     text = (out_dir / "common.jsonl").read_text()
-    lines = [json.loads(line) for line in text.splitlines()]
+    lines = [json.loads(line) for line in text.removesuffix("\n").split("\n")]
     assert [line["id"] for line in lines] == ["tiny-chat/render/alpha", "tiny-chat/render/zulu"]
     first = lines[0]
     assert first["kind"] == "render" and first["model"] == str(tiny_model)
@@ -719,6 +731,19 @@ def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path)
             write_fixture_file(tmp_path / "y.jsonl", {"tiny-chat/parse/a": partial})
 
 
+def test_a_fixture_file_reads_a_case_whose_text_holds_unicode_line_breaks_intact(tmp_path):
+    line = {
+        "id": "tiny-chat/render/a",
+        "kind": "render",
+        "model": "m",
+        "request": {"messages": [user(BREAKS)]},
+        "reference": {"source": "hf-template", "text": BREAKS},
+    }
+    write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": line})
+    assert BREAKS in (tmp_path / "x.jsonl").read_text(encoding="utf-8")
+    assert read_fixture_file(tmp_path / "x.jsonl") == {"tiny-chat/render/a": line}
+
+
 COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
 
 
@@ -739,7 +764,9 @@ def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
     form = "zstd" if path.name.endswith(".zst") else "plain"
     expected = set_tables.entry(form, plain, table["cases"], table["rejected"])
     assert table == expected, f"{path}: its sets.toml table does not match the file"
-    lines = plain.splitlines()
+    # Only "\n" ends a line: U+2028 and the like stay raw inside a case's strings.
+    lines = plain.split("\n")
+    assert lines.pop() == "", f"{path}: the last line does not end in a newline"
     assert len(lines) == table["cases"]
     cases = [json.loads(line) for line in lines]
     assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
@@ -773,7 +800,8 @@ def test_record_set_records_only_the_named_sets_and_leaves_the_others(tmp_path, 
 
     assert main(record_argv(tmp_path, tiny_model, "--set", "common")) == 0
 
-    ids = [json.loads(line)["id"] for line in (out_dir / "common.jsonl").read_text().splitlines()]
+    text = (out_dir / "common.jsonl").read_text()
+    ids = [json.loads(line)["id"] for line in text.removesuffix("\n").split("\n")]
     assert ids == ["tiny-chat/render/a2"]
     assert (out_dir / "extra.jsonl").read_text() == extra_before
 
