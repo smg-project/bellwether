@@ -256,13 +256,13 @@ def fake_hub(tmp_path, verified: list[dict], test: list[dict], cards: dict[str, 
     Each source's card is ``CARD``, which states no license, unless ``cards`` gives its repository another.
     """
     files = {
-        (swebench.VERIFIED.repo, swebench.VERIFIED.file): write_parquet(tmp_path / "verified.parquet", verified),
-        (swebench.TEST.repo, swebench.TEST.file): write_parquet(tmp_path / "test.parquet", test),
+        (swebench.VERIFIED.dataset_id, swebench.VERIFIED.file): write_parquet(tmp_path / "verified.parquet", verified),
+        (swebench.TEST.dataset_id, swebench.TEST.file): write_parquet(tmp_path / "test.parquet", test),
     }
     for source in swebench.SOURCES:
         card = tmp_path / f"{source.family}-README.md"
-        card.write_text((cards or {}).get(source.repo, CARD))
-        files[(source.repo, "README.md")] = card
+        card.write_text((cards or {}).get(source.dataset_id, CARD))
+        files[(source.dataset_id, "README.md")] = card
     calls: list[tuple] = []
 
     def fetch(repo, revision, filename, sha256):
@@ -289,20 +289,20 @@ def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, m
         "1 SWE-bench test row(s) are also SWE-bench Verified rows; each is imported once, in the Verified sets" in out
     )
     assert f"{corpus}: the SWE-bench sets equal a fresh import" in out
-    cards = {(s.repo, s.revision, "README.md", s.card_sha256) for s in swebench.SOURCES}
-    rows = {(s.repo, s.revision, s.file, s.sha256) for s in swebench.SOURCES}
+    cards = {(s.dataset_id, s.revision, "README.md", s.card_sha256) for s in swebench.SOURCES}
+    rows = {(s.dataset_id, s.revision, s.file, s.sha256) for s in swebench.SOURCES}
     assert set(calls) == cards | rows and len(cards | rows) == 4
 
 
 @pytest.mark.parametrize("source", swebench.SOURCES, ids=lambda source: source.family)
 def test_the_command_refuses_a_dataset_card_that_states_a_license_and_writes_nothing(tmp_path, monkeypatch, source):
-    cards = {source.repo: "---\nlicense: mit\n---\n"}
+    cards = {source.dataset_id: "---\nlicense: mit\n---\n"}
     fetch, _ = fake_hub(tmp_path, [row()], [row(instance_id="django__django-10097")], cards=cards)
     monkeypatch.setattr(hf, "fetch", fetch)
-    with pytest.raises(
-        ValueError,
-        match=f"^{re.escape(source.repo)} README.md: the card's license is 'mit', not the reviewed None; review it",
-    ):
+    refused = (
+        f"^{re.escape(source.dataset_id)} README.md: the card's license is 'mit', not the reviewed None; review it"
+    )
+    with pytest.raises(ValueError, match=refused):
         main(["import", "swebench", "--corpus", str(tmp_path / "corpus")])
     assert not (tmp_path / "corpus").exists()
 

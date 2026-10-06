@@ -16,7 +16,6 @@ sets are written and checked by the set writer the importers share (``corpus_set
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import re
 import sys
@@ -33,21 +32,22 @@ class Source:
 
     family: str
     label: str
-    repo: str
+    dataset_id: str
     revision: str
     file: str
     sha256: str
     card_sha256: str
 
     @property
-    def source(self) -> str:
-        return f"hf://datasets/{self.repo}@{self.revision}"
+    def uri(self) -> str:
+        """The pinned revision, as ``origin.source`` names it."""
+        return f"hf://datasets/{self.dataset_id}@{self.revision}"
 
 
 VERIFIED = Source(
     family="verified",
     label="SWE-bench Verified",
-    repo="SWE-bench/SWE-bench_Verified",
+    dataset_id="SWE-bench/SWE-bench_Verified",
     revision="78f471bf655a3137b2e8a75af1501690ec009ec3",
     file="data/test-00000-of-00001.parquet",
     sha256="030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25",
@@ -56,7 +56,7 @@ VERIFIED = Source(
 TEST = Source(
     family="test",
     label="SWE-bench test",
-    repo="SWE-bench/SWE-bench",
+    dataset_id="SWE-bench/SWE-bench",
     revision="c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2",
     file="data/test-00000-of-00001.parquet",
     sha256="d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567",
@@ -136,7 +136,7 @@ def request_for(row: dict) -> dict:
     if not blank(row["hints_text"]):
         user += HINTS + row["hints_text"]
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    return {"messages": messages, "tools": [copy.deepcopy(SUBMIT_PATCH)]}
+    return {"messages": messages, "tools": [SUBMIT_PATCH]}
 
 
 def call_message(patch: str) -> dict:
@@ -168,7 +168,7 @@ def set_name(family: str, form: str | None, copyleft: bool) -> str:
 
 def origin(source: Source, row_id: str, spdx: str) -> dict:
     """Where a case came from. A parse case's message comes from the same row, its ``patch``."""
-    found = {"dataset": DATASET, "source": source.source, "sha256": source.sha256, "file": source.file}
+    found = {"dataset": DATASET, "source": source.uri, "sha256": source.sha256, "file": source.file}
     return {**found, "row": row_id, "license": spdx}
 
 
@@ -188,13 +188,13 @@ def build_sets(
     first: dict[str, tuple[Source, dict]] = {}
     owner: dict[tuple[str, str], str] = {}
 
-    def add(kind: str, name: str, line: dict, row_id: str) -> None:
+    def add(kind: str, into: str, line: dict, row_id: str) -> None:
         # A case name is unique across every set of a kind (record/corpus.py).
         if (kind, line["name"]) in owner:
             twin = owner[(kind, line["name"])]
             raise ValueError(f"rows {twin!r} and {row_id!r} both become the case name {line['name']}")
         owner[(kind, line["name"])] = row_id
-        sets.setdefault((kind, name), []).append(line)
+        sets.setdefault((kind, into), []).append(line)
 
     for source, rows in sources:
         for row in rows:
@@ -222,15 +222,20 @@ def build_sets(
             request = request_for(row)
             notes = f"{source.label} {row_id}"
             found = origin(source, row_id, spdx)
-            name = slug(row_id)
-            render = {"name": f"swebench-{source.family}-{name}", "request": request, "notes": notes, "origin": found}
+            case_slug = slug(row_id)
+            render = {
+                "name": f"swebench-{source.family}-{case_slug}",
+                "request": request,
+                "notes": notes,
+                "origin": found,
+            }
             add("render", set_name(source.family, None, copyleft), render, row_id)
             for form, message, probe in (
                 ("call", call_message(row["patch"]), "the gold patch as one submit_patch call"),
                 ("content", content_message(row["patch"]), "the gold patch in a diff block"),
             ):
                 line = {
-                    "name": f"swebench-{source.family}-{form}-{name}",
+                    "name": f"swebench-{source.family}-{form}-{case_slug}",
                     "request": request,
                     "message": message,
                     "notes": f"{notes}: {probe}",
@@ -253,9 +258,11 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
 def run(args: argparse.Namespace) -> int:
     sources = []
     for source in SOURCES:
-        card = hf.fetch(source.repo, source.revision, hf.CARD, source.card_sha256).read_text("utf-8")
-        hf.check_card_license(source.repo, card, None)  # the cards state no license; each row's is its repository's
-        sources.append((source, read_rows(hf.fetch(source.repo, source.revision, source.file, source.sha256))))
+        card = hf.fetch(source.dataset_id, source.revision, hf.CARD, source.card_sha256).read_text("utf-8")
+        hf.check_card_license(
+            source.dataset_id, card, None
+        )  # the cards state no license; each row's is its repository's
+        sources.append((source, read_rows(hf.fetch(source.dataset_id, source.revision, source.file, source.sha256))))
     skipped: list[tuple[str, str]] = []
     repeated: list[str] = []
     sets = build_sets(sources, skipped=skipped, repeated=repeated)
@@ -264,7 +271,7 @@ def run(args: argparse.Namespace) -> int:
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
-            pinned = ", ".join(source.source for source in SOURCES)
+            pinned = ", ".join(source.uri for source in SOURCES)
             print(f"{args.corpus}: the SWE-bench sets equal a fresh import of {pinned}")
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
