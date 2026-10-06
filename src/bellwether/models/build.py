@@ -74,10 +74,28 @@ def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
     for entry in entries:
         if entry.generative:
             for index, model in enumerate(entry.checkpoints):
-                if is_hub_id(model) and not is_gpt_oss(model):
+                if is_hub_id(model) and not _is_set_aside(entry, model):
                     example = entry.engine != "vllm" or index == 0
                     named.setdefault(model, _Named()).add([entry.engine], entry.multimodal, example)
     return named
+
+
+def set_aside(entries: Iterable[Entry]) -> list[str]:
+    """The gpt-oss checkpoints the registries name, which Simo set aside: left out of the list, and said aloud."""
+    return sorted(
+        {
+            model
+            for entry in entries
+            if entry.generative
+            for model in entry.checkpoints
+            if is_hub_id(model) and _is_set_aside(entry, model)
+        }
+    )
+
+
+def _is_set_aside(entry: Entry, model: str) -> bool:
+    """gpt-oss by the checkpoint's name, or by the architecture vLLM lists it under."""
+    return is_gpt_oss(model, [entry.name] if entry.engine == "vllm" else ())
 
 
 def without_checkpoint(entries: Iterable[Entry]) -> dict[str, _Named]:

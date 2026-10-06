@@ -13,7 +13,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .build import Row, hub_rows, missing_from_tier1, registry_only_rows, to_jsonl, unnamed
+from .build import Row, hub_rows, missing_from_tier1, registry_only_rows, set_aside, to_jsonl, unnamed
 from .hub import HfHub
 from .pins import PinError
 from .registry import read_pinned
@@ -36,6 +36,9 @@ def run(args: argparse.Namespace) -> int:
     args.out.write_text(to_jsonl(rows))
     for note in unnamed(entries):
         _note(note)
+    aside = set_aside(entries)
+    if aside:
+        _note(f"gpt-oss, set aside: {', '.join(aside)}")
     missing = missing_from_tier1(rows)
     if missing:
         _note(f"tier 1 names missing from the list: {', '.join(missing)}")

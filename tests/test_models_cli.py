@@ -61,6 +61,7 @@ def test_registry_only_writes_the_list_and_says_what_is_in_it(cache: Path, tmp_p
     assert "text: 17, multimodal: 11" in printed.out
     assert "vllm FunAudioChatForConditionalGeneration: 'funaudiochat' is not a Hugging Face id" in printed.err
     assert "tier 1 names missing from the list: MiniMaxAI/MiniMax-M3, tencent/Hy4-preview" in printed.err
+    assert "gpt-oss, set aside: lmsys/gpt-oss-20b-bf16, openai/gpt-oss-120b, openai/gpt-oss-20b" in printed.err
 
 
 class OneModelHub:

@@ -6,7 +6,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from bellwether.models.build import Row, hub_rows, missing_from_tier1, registry_only_rows, to_jsonl, unnamed
+from bellwether.models.build import Row, hub_rows, missing_from_tier1, registry_only_rows, set_aside, to_jsonl, unnamed
 from bellwether.models.hub import Details, HubUnavailable, Listed
 from bellwether.models.registry import Entry, read_sglang, read_vllm
 
@@ -63,6 +63,23 @@ def test_names_that_are_no_checkpoint_are_reported() -> None:
         "vllm FunAudioChatForConditionalGeneration: 'funaudiochat' is not a Hugging Face id",
         "sglang JetVLM: no checkpoint named",
     ]
+
+
+def test_the_gpt_oss_checkpoints_set_aside_are_named_whether_the_name_or_the_architecture_says_so() -> None:
+    entries = [
+        Entry("vllm", "GptOssForCausalLM", TEXT, True, False, ("lmsys/gpt-oss-20b-bf16", "example/oss-renamed-120b")),
+        Entry("vllm", "InternVLChatModel", MULTIMODAL, True, True, ("OpenGVLab/InternVL3_5-1B",)),
+        Entry("vllm", "InternVLChatModel", MULTIMODAL, True, True, ("OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview",)),
+        Entry("sglang", "GPT-OSS", PAGE, True, False, ("openai/gpt-oss-20b", "openai/gpt-oss-120b")),
+    ]
+    assert set_aside(entries) == [
+        "OpenGVLab/InternVL3_5-GPT-OSS-20B-A4B-Preview",
+        "example/oss-renamed-120b",  # only its architecture says so
+        "lmsys/gpt-oss-20b-bf16",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    ]
+    assert [row.model for row in registry_only_rows(entries, BUILT)] == ["OpenGVLab/InternVL3_5-1B"]
 
 
 def test_simos_models_the_list_lacks_are_named() -> None:

@@ -146,7 +146,9 @@ uv run bellwether models --registry-only   # the registries alone, offline once 
 ```
 
 `models` builds the list of checkpoints to record: every generative model vLLM or SGLang supports,
-except gpt-oss (the rule is in `docs/benchmark-sets.md`, "Which models"). It reads two sources:
+except gpt-oss (the rule is in `docs/benchmark-sets.md`, "Which models"); the gpt-oss checkpoints the
+registries name, by name or by vLLM's `GptOssForCausalLM`, are named on stderr as set aside. It reads
+two sources:
 
 - **The engines' registries at pinned commits.** vLLM's `tests/models/registry.py` at v0.31.0, read
   with `ast`: every checkpoint its text-generation and multimodal tables name, except under a
