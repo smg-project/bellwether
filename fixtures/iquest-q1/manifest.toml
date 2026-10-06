@@ -2,7 +2,7 @@ model    = "IQuestLab/IQuest-Q1"
 revision = "5c21b0630586ef77d38cff1094b8cf37a417fcd8"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "b3c99aab1b3f17a2513d134ac8da39303da965f73924e35057f0cd6f10eaa06d"
 "config.json"             = "1bdf1cf526d4cf646a56595c62c1ea15f0cb67749cb783183a0834f85d50aaf0"
 "generation_config.json"  = "f61bc0a89387f86abe8d49974310c6da3fe7edd0653265067a65778de5eea6ba"

@@ -40,7 +40,7 @@ from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifest, slug_
 from bellwether.record import sets as set_tables
 
 INPUTS_HEADER = (
-    "[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)"
+    "[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only"
 )
 LIST = "models.tsv"  # the list of checkpoints, beside the manifests it builds
 NOT_READ = "-"

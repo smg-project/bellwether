@@ -2,7 +2,7 @@ model    = "MiniMaxAI/MiniMax-M2.7"
 revision = "d494266a4affc0d2995ba1fa35c8481cbd84294b"
 tier     = 3
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"    = "893d908f7b5cc65fdde270dcae5ea1a99647c6a7ce572ae874a57b7160069566"
 "config.json"            = "4e1f741deec17c4e0031266fa5d73202a65d5b0eb7f7c1eebbc10984260086c3"
 "generation_config.json" = "0d1c68abff464f7bfd1ba5056459f82451322ffc6be1e4bdb601eb6761babfec"

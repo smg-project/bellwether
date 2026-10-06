@@ -2,8 +2,8 @@ model    = "stepfun-ai/step3"
 revision = "e2d67fc936dc60f8f606f2429728f1dea503e10d"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
-"chat_template.json"     = "26e17e460c676cee0e5020859a27adaad8025191a033a2228069dcdad7e6e3f4"
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "451b4dee130db7c691314f985db8831d64118de84cd7d27276ab01ef75b237c1"
 "config.json"            = "22d92f4c6d5068185f755a2817a331a6a8a7e1c53bcf5769ea23abb4b2c20c90"
 "generation_config.json" = "b6cfa51034e3745feaed690aafac4a73dd12ad4062e86618db079a6a63e99ac5"
 "tokenizer.json"         = "fad4933ce5614d0318848b1bf8e217efdc27d0bd120bce3907217c4fa4d2a46d"

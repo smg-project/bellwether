@@ -5,8 +5,8 @@ import shutil
 import pytest
 
 from bellwether.cli import main
-from bellwether.groups import LIST, existing_manifests, is_recorded, rank, read_list
-from bellwether.inputs import oracle_inputs
+from bellwether.groups import INPUTS_HEADER, LIST, existing_manifests, is_recorded, rank, read_list
+from bellwether.inputs import NARROWED, oracle_inputs
 from bellwether.manifest import load_manifest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -272,3 +272,10 @@ def test_each_committed_group_recorded_nowhere_has_the_list_s_most_downloaded_me
     for slug, checkpoints in members.items():
         if not is_recorded(slugs[slug]):
             assert min(checkpoints, key=rank).model == slugs[slug].model, slug
+
+
+def test_the_inputs_header_names_where_the_narrowed_files_are_listed():
+    # sha256sum of a narrowed file does not give its listed hash; the header says why without naming the files, so it
+    # stays true as the list of narrowed files changes.
+    assert "chat_template.json" in NARROWED
+    assert "bellwether.inputs.NARROWED" in INPUTS_HEADER

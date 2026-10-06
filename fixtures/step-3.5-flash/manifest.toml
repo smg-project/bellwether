@@ -2,7 +2,7 @@ model    = "stepfun-ai/Step-3.5-Flash"
 revision = "ab446a3de5e171ea341227e24bb1f090e1b771f7"
 tier     = 3
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "b18b99dff7261214c43e0402cba9f573e3240be6f9bb7ccaa54bb8df97e49dca"
 "config.json"             = "71cdff7dd84b077a8c1299c1c140fb28890cb0b2bdc3a06e7426f40b91671ba2"
 "special_tokens_map.json" = "d47424bda11df4cedc3f9458915c465a28e601d3b7df0e78f6dff4d7727006c4"

@@ -2,7 +2,7 @@ model    = "swiss-ai/Apertus-8B-Instruct-2509"
 revision = "b946d40447b2b597999b9c86d44bee0b452c919f"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "56f72c27fa2e565312a830b7315a455c79fb452fdbe7a5b7595d8a094f282b07"
 "config.json"             = "79422e3fe45066213bbf71d50cd293d29fa63cf1fab1d7605a1850cb24a4e9b1"
 "generation_config.json"  = "dd1fd499fa58138a07bcfef87f957adacb63f5ecf1a8db060254657ff1fe2a0c"

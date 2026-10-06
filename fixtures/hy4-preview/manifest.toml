@@ -2,7 +2,7 @@ model    = "tencent/Hy4-preview"
 revision = "705d81ee51566a186d645b74c974d642ef2828fe"
 tier     = 1
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"    = "8a9925228e1c72edc6806b985ba06a4df2cc4ff803b4710a6d6e25d0ac03fae2"
 "config.json"            = "06e2bd741246c418685996060e4e5b6a792cb6c1eb289299afb98684b4bcfb71"
 "generation_config.json" = "fbbaf9132f2bbec3a5cdb6512a2255fdaab3bcd4f55d64d8b5b5ec1020555463"

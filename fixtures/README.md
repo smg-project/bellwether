@@ -54,7 +54,7 @@ reasoning_parser = "qwen3"
 vllm   = { tool_parser = "hermes", reasoning_parser = "qwen3" }
 sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "config.json"            = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
 "generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
 "merges.txt"             = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
@@ -65,17 +65,18 @@ sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
 
 `revision` is a 40-character commit hash, never a branch or tag, which could move under a consumer that caches the
 fixtures. `[inputs]` lists every file the oracle reads, each with its sha256: the tokenizer files, the chat template
-files, each named template (`additional_chat_templates/<name>.jinja`, of which transformers takes `tool_use` when a
-request has tools), and `config.json` and `generation_config.json`, which are hashed over the canonical JSON
-(`json.dumps(..., sort_keys=True)`, a missing field as null) of only `model_type` and `tokenizer_class`, and of only
-`bos_token_id`, `eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group. A checkpoint that
-ships no `generation_config.json` has the end of a turn read its token ids from `config.json`, as
-`GenerationConfig.from_model_config` reads them (`text_config` included, with the defaults of the class transformers
-has for its `model_type`), so there `config.json` is hashed over those three ids as well. A member's manifest
-adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its group's. The parser
-tables of a new group are left out until someone maps them. A manifest that `bellwether manifests` creates has no
-`[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"), and
-restating it for each checkpoint is the sponsor's call.
+files, and each named template (`additional_chat_templates/<name>.jinja`, of which transformers takes `tool_use` when a
+request has tools). Three JSON files are read only in part, so each is hashed over the canonical JSON (`json.dumps(...,
+sort_keys=True)`, a missing field as null) of the fields read, `bellwether.inputs.NARROWED`: `chat_template.json` over
+its `chat_template`, the template vLLM reads through the processor; `generation_config.json` over `bos_token_id`,
+`eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group; and `config.json` over `model_type`
+and `tokenizer_class`. A checkpoint that ships no `generation_config.json` has the end of a turn read its token ids from
+`config.json`, as `GenerationConfig.from_model_config` reads them (`text_config` included, with the defaults of the
+class transformers has for its `model_type`), so there `config.json` is hashed over those three ids as well. A member's
+manifest adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its group's. The
+parser tables of a new group are left out until someone maps them. A manifest that `bellwether manifests` creates has no
+`[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"), and restating
+it for each checkpoint is the sponsor's call.
 
 `bellwether manifests` writes them all from the list beside them, `fixtures/models.tsv` (`--models` reads another
 file). The list has one row per checkpoint, `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier`: `downloads` is the

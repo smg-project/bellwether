@@ -2,7 +2,7 @@ model    = "ibm-granite/granite-4.1-3b"
 revision = "c0650403e44e78ec0262dab1c90914c65b196c4e"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "fed2756d2d24e127b951dcf139d0b03ab7db8ef23a456128ebc9c2db4901d476"
 "config.json"             = "bde47276cb763b111464afd950e5753477bc668fda562fa6ef515ae006c5d757"
 "generation_config.json"  = "9504c956684ec7777626255daf83b1c6ca6e4dc2f18fe312e79990bf1e27f5a2"

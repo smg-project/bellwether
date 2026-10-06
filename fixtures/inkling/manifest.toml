@@ -2,7 +2,7 @@ model    = "thinkingmachines/Inkling"
 revision = "828496eeae4c243ff1a22f7f28ff83694f2f7bc9"
 tier     = 3
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "0aa1aa0c729d90176dcaa00c440c8faffca2957ffb2cc4b79456ee6d02bcf43b"
 "config.json"             = "9d3e9d43a553cb867bde9c17043f54b3eca684a26b986dd225399a147c973b0f"
 "special_tokens_map.json" = "abc97715b4b3b30eb65ea6895afd7b529c32bd10c28901f9ddae7edc39723b0f"

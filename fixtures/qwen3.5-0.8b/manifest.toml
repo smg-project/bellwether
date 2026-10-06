@@ -3,7 +3,7 @@ revision = "2fc06364715b967f1860aea9cf38778875588b17"
 tier     = 1
 group    = "qwen3.5-2b"
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"   = "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
 "config.json"           = "35e1cee5383d93737dff5f52533413433fcc119f9a7722e485deca14a5045650"
 "merges.txt"            = "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"

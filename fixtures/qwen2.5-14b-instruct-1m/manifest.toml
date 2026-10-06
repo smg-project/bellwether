@@ -3,7 +3,7 @@ revision = "620fad32de7bdd2293b3d99b39eba2fe63e97438"
 tier     = 1
 group    = "qwen2.5-7b-instruct-1m"
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "config.json"            = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
 "generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
 "merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"

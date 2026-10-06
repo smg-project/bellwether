@@ -2,7 +2,7 @@ model    = "openbmb/MiniCPM5-2B"
 revision = "f97400052a43d642bbc6e9975e2397e3ae6a6b52"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "bc1f78ef8a86b6bdf64a056cf89dd0ac506db4f198ab363d85168e2500ab44dd"
 "config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
 "generation_config.json"  = "2ea5b803e9d403a6ba2d06fd1e45869792b44381b6b3ea6a83e9268686a4892d"

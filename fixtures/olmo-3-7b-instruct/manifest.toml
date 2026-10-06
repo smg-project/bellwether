@@ -2,7 +2,7 @@ model    = "allenai/Olmo-3-7B-Instruct"
 revision = "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "f5186d42d99c8a0445d37fd8a6c7ccf07fe3e24a29ce622d8bd245da9507b12b"
 "config.json"             = "331570079e3e034283eb69b785325746e5e08618ca571d5a04b6216c915f20e4"
 "generation_config.json"  = "47e4fc550b98b250996b108f795f304761994758563c8704ac9a405742678b7f"

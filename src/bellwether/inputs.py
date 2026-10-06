@@ -7,6 +7,8 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
 - the chat template, inside ``tokenizer_config.json`` or in ``chat_template.jinja`` or ``chat_template.json``, and the
   named templates in ``additional_chat_templates/``, each ``<name>.jinja`` there, of which transformers takes
   ``tool_use`` when a request has tools;
+- from ``chat_template.json``, only its ``chat_template`` value, since no oracle reads the file's bytes: vLLM reads it
+  through the processor, parsed, and transformers' tokenizer does not open it;
 - the token ids the end of a turn depends on (``STOP_IDS``), so that sampling defaults do not split a group: from
   ``generation_config.json``, or, for a checkpoint that ships none, from ``config.json`` as
   ``GenerationConfig.from_model_config`` reads it, ``text_config`` included;
@@ -44,10 +46,11 @@ TEMPLATE_FILES = ("chat_template.jinja", "chat_template.json")
 NAMED_TEMPLATES = "additional_chat_templates"  # transformers' CHAT_TEMPLATE_DIR
 STOP_IDS = ("bos_token_id", "eos_token_id", "pad_token_id")
 NARROWED = {
+    "chat_template.json": ("chat_template",),
     "generation_config.json": STOP_IDS,
     "config.json": ("model_type", "tokenizer_class"),
 }
-FILES = (*TOKENIZER_FILES, *TEMPLATE_FILES, *NARROWED)
+FILES = tuple(dict.fromkeys((*TOKENIZER_FILES, *TEMPLATE_FILES, *NARROWED)))
 PATTERNS = (*FILES, f"{NAMED_TEMPLATES}/*.jinja")
 
 

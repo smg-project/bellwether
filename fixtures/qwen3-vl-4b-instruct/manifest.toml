@@ -1,9 +1,10 @@
 model    = "Qwen/Qwen3-VL-4B-Instruct"
 revision = "ebb281ec70b05090aa6165b016eac8ec08e71b17"
 tier     = 1
+group    = "qwen3-vl-8b-instruct"
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
-"chat_template.json"     = "6f8a6a55027e3da5160105556cda5dd69f6423f1c32645f6730d32de7773d0c4"
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "6abd325f69b2fcc0ff316ef920beab2d53c829792c72b838c9c613aee2d7295b"
 "config.json"            = "835534592b6adc7e444776766ada41d708f32ee4d139d11ce982094024880049"
 "generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
 "merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"

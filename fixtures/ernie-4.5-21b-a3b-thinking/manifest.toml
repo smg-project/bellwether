@@ -2,7 +2,7 @@ model    = "baidu/ERNIE-4.5-21B-A3B-Thinking"
 revision = "4341bb42644d5422859509fa25d41544c57181f8"
 tier     = 3
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"     = "e141f14fb656c78182da82e2d900e404c021112a7f2df1953db26cab705c06f0"
 "config.json"             = "686a41cbb4978a9d69f3a800178c41d2444a44c994e10216a8847c12bdcc2764"
 "generation_config.json"  = "9592aaeeadef5f769bb4b443b0f08e421e0112e67f9cba51cb8480c414b2589e"

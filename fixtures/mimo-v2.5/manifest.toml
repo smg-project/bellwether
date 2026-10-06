@@ -2,7 +2,7 @@ model    = "XiaomiMiMo/MiMo-V2.5"
 revision = "63651580ca774f8504f676040460aed3e1244ac1"
 tier     = 2
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "config.json"            = "42f59253749d7e6c82d61ef9911947b1f9079ca116ad16b677ef77378f7cedc3"
 "generation_config.json" = "11ba7559c3f72d8452fca7b04625261723a041f6eaedcbd32db530e10819610c"
 "merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"

@@ -2,7 +2,7 @@ model    = "Qwen/QwQ-32B"
 revision = "976055f8c83f394f35dbd3ab09a285a984907bd0"
 tier     = 1
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "added_tokens.json"       = "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
 "config.json"             = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
 "generation_config.json"  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"

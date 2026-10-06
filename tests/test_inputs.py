@@ -41,7 +41,6 @@ def test_every_tokenizer_file_and_chat_template_file_is_an_input(checkpoint):
         "merges.txt",
         "tokenizer.model",
         "chat_template.jinja",
-        "chat_template.json",
     ]
     for name in names:
         (checkpoint / name).write_text(f"{{}} {name}")
@@ -56,6 +55,18 @@ def test_a_narrowed_file_is_hashed_over_the_canonical_json_of_its_fields_absent_
     config = json.dumps({"model_type": "qwen3", "tokenizer_class": None}, sort_keys=True)
     assert inputs["generation_config.json"] == sha256(generation.encode())
     assert inputs["config.json"] == sha256(config.encode())
+
+
+def test_chat_template_json_is_hashed_over_its_template_so_its_whitespace_does_not_split_a_group(checkpoint):
+    # No oracle reads the file's bytes: vLLM reads it through the processor, parsed, and takes its chat_template.
+    path = checkpoint / "chat_template.json"
+    path.write_text(json.dumps({"chat_template": "{{ messages }}"}))
+    inputs = oracle_inputs(str(checkpoint), "local")
+    assert inputs["chat_template.json"] == sha256(json.dumps({"chat_template": "{{ messages }}"}).encode())
+    path.write_text(json.dumps({"chat_template": "{{ messages }}", "processor": "Acme"}, indent=2) + "\n  \n")
+    assert oracle_inputs(str(checkpoint), "local") == inputs
+    path.write_text(json.dumps({"chat_template": "{{ messages[0] }}"}))
+    assert oracle_inputs(str(checkpoint), "local")["chat_template.json"] != inputs["chat_template.json"]
 
 
 def test_sampling_defaults_leave_the_inputs_as_they_are_and_token_ids_change_them(checkpoint):

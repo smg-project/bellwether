@@ -2,7 +2,7 @@ model    = "Qwen/Qwen3-Next-80B-A3B-Thinking"
 revision = "e502dd4100cc68c0de57643fd4317ec93a128670"
 tier     = 1
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "config.json"            = "4395ced3bcab15f6266a18b9aa5bf03151295cfd2cb7b3439fb21e9361dbb370"
 "generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
 "merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"

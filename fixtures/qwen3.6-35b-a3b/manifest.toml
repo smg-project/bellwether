@@ -2,7 +2,7 @@ model    = "Qwen/Qwen3.6-35B-A3B"
 revision = "995ad96eacd98c81ed38be0c5b274b04031597b0"
 tier     = 1
 
-[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
 "chat_template.jinja"    = "e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
 "config.json"            = "e9a68935e845ef323955fd6364a1476d8dbd4f4dfe55e836d4f8e9935c7cbd99"
 "generation_config.json" = "da21c9e3edabfac1433ec60fdc006bee19c4c3731b40c0b0f9fb0b5e338562be"
