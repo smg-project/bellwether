@@ -1,5 +1,5 @@
-"""MGSM's grade school math problems in eleven languages as corpus sets: per language, a render set and a parse set of
-the answer, and a parse set of the worked exemplars.
+"""MGSM's grade school math problems in eleven languages as corpus sets: per language, a parse set of the answer and,
+except for English, a render set; and a parse set of the worked exemplars.
 
 The data is Google Research's url-nlp repository at a pinned commit, directory ``mgsm/``: GSM8K's first 250 test
 problems, translated, as one ``mgsm_<lang>.tsv`` per language (no header, one ``question<TAB>answer`` line per
@@ -31,7 +31,12 @@ LICENSE_SHA256 = "c97deeeca4ae375a0334bc7f7af5f707aabfcec959c53c783b9f8771d28fd5
 LICENSE_TITLE = "Creative Commons Attribution 4.0 International Public License (CC-BY)"
 EXEMPLARS_FILE = f"{DATA}/exemplars.py"
 EXEMPLARS_SHA256 = "239dda1557bb2ba76b71e5ef744ddd0b454da0b453e5f8b909498ceff690a919"
-ANSWER = "answer"  # the parse set per language, of the answer alone
+# The parse set per language, named by its message's one part, as corpus/README.md names a parse set by its shape.
+CONTENT = "content"
+# The languages that get no render set. MGSM's English file holds GSM8K's first 250 test questions verbatim, so each
+# English render case would send what a gsm8k-test case sends, byte for byte. Its content set stays: no GSM8K parse
+# case holds the answer alone as its message.
+RENDERED_BY_GSM8K = ("en",)
 EXEMPLAR_SET = "mgsm-exemplars"
 # Each language's file, by the sha256 of its bytes, in the order the sets are built.
 SHA256 = {
@@ -129,16 +134,19 @@ def origin(file: str, sha256: str, row: int | str) -> dict:
 def language_sets(
     files: dict[str, bytes], skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)`` from each language's file: a render set and an answer parse set.
+    """Corpus lines per ``(kind, set name)`` from each language's file: a render set, except for a language in
+    ``RENDERED_BY_GSM8K``, and a content parse set.
 
-    Each set has a line per row, in file order. The answer parse case's message is the answer, as written, as
-    ``content``: the short output of a model that does not think. A row that cannot become a case is left out of both
-    sets of its language, so that the two hold the same rows, and is appended to ``skipped`` with its reason.
+    Each set has a line per row, in file order. The content case's message is the answer, as written, as ``content``:
+    the short output of a model that does not think. A row that cannot become a case is left out of every set of its
+    language, so that they hold the same rows, and is appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     for lang, data in files.items():
-        render = sets[("render", set_name(lang))] = []
-        answers = sets[("parse", set_name(lang, ANSWER))] = []
+        render: list[dict] = []  # built for every language, kept for those GSM8K does not render
+        if lang not in RENDERED_BY_GSM8K:
+            sets[("render", set_name(lang))] = render
+        contents = sets[("parse", set_name(lang, CONTENT))] = []
         for row, fields in read_rows(data):
             try:
                 question, answer = question_and_answer(fields)
@@ -149,8 +157,8 @@ def language_sets(
             request = {"messages": [{"role": "user", "content": question}]}
             tail = {"notes": f"MGSM {lang} row {row}", "origin": origin(data_file(lang), SHA256[lang], row)}
             render.append({"name": f"{set_name(lang)}-{row}", "request": request, **tail})
-            name = f"{set_name(lang, ANSWER)}-{row}"
-            answers.append({"name": name, "request": request, "message": {"content": answer}, **tail})
+            name = f"{set_name(lang, CONTENT)}-{row}"
+            contents.append({"name": name, "request": request, "message": {"content": answer}, **tail})
     return sets
 
 
@@ -238,7 +246,7 @@ def exemplar_set(data: bytes, skipped: list[tuple[str, str]] | None = None) -> l
 def build_sets(
     files: dict[str, bytes], exemplars: bytes, skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)``: each language's render and answer sets, then the exemplars' parse set."""
+    """Corpus lines per ``(kind, set name)``: each language's render and content sets, then the exemplars' parse set."""
     return {**language_sets(files, skipped), ("parse", EXEMPLAR_SET): exemplar_set(exemplars, skipped)}
 
 
@@ -263,15 +271,15 @@ def run(args: argparse.Namespace) -> int:
     exemplars = fetch(EXEMPLARS_FILE, EXEMPLARS_SHA256, args.cache)
     skipped: list[tuple[str, str]] = []
     sets = build_sets(files, exemplars, skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(kept, args.corpus)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the MGSM sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    corpus_sets.report("MGSM", sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped(skipped)
-    write_sets(sets, args.corpus)
+    write_sets(kept, args.corpus)
     return 0

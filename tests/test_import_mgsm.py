@@ -109,20 +109,27 @@ def test_a_render_case_is_the_question_as_one_user_turn_with_its_origin():
     assert list(line["origin"]) == ["dataset", "source", "sha256", "file", "row", "license"]
 
 
-def test_the_answer_parse_case_holds_the_answer_as_written_as_its_content():
+def test_the_content_parse_case_holds_the_answer_as_written_as_its_content():
     sets = mgsm.language_sets({"ja": tsv([f"{JA}\t18", f"{JA}\t2,125"])})
     tail = {"notes": "MGSM ja row 1", "origin": {**JA_ORIGIN, "row": 1}}
-    assert sets[("parse", "mgsm-ja-answer")] == [
+    assert sets[("parse", "mgsm-ja-content")] == [
         {
-            "name": "mgsm-ja-answer-0",
+            "name": "mgsm-ja-content-0",
             "request": JA_REQUEST,
             "message": {"content": "18"},
             "notes": "MGSM ja row 0",
             "origin": JA_ORIGIN,
         },
-        {"name": "mgsm-ja-answer-1", "request": JA_REQUEST, "message": {"content": "2,125"}, **tail},
+        {"name": "mgsm-ja-content-1", "request": JA_REQUEST, "message": {"content": "2,125"}, **tail},
     ]
-    assert list(sets[("parse", "mgsm-ja-answer")][0]) == ["name", "request", "message", "notes", "origin"]
+    assert list(sets[("parse", "mgsm-ja-content")][0]) == ["name", "request", "message", "notes", "origin"]
+
+
+def test_english_gets_a_content_set_and_no_render_set_since_its_questions_are_gsm8k_test_questions():
+    sets = mgsm.language_sets({"en": tsv(["How many eggs does she sell?\t18"]), "ja": tsv([f"{JA}\t18"])})
+    assert list(sets) == [("parse", "mgsm-en-content"), ("render", "mgsm-ja"), ("parse", "mgsm-ja-content")]
+    [line] = sets[("parse", "mgsm-en-content")]
+    assert (line["name"], line["message"]) == ("mgsm-en-content-0", {"content": "18"})
 
 
 def test_rows_that_cannot_become_a_case_are_left_out_of_both_sets_of_their_language_with_their_reason():
@@ -131,13 +138,13 @@ def test_rows_that_cannot_become_a_case_are_left_out_of_both_sets_of_their_langu
     sets = mgsm.language_sets({"ja": ja, "th": tsv(["\t5", "มีกี่ลูก\t5"])}, skipped=skipped)
     assert list(sets) == [
         ("render", "mgsm-ja"),
-        ("parse", "mgsm-ja-answer"),
+        ("parse", "mgsm-ja-content"),
         ("render", "mgsm-th"),
-        ("parse", "mgsm-th-answer"),
+        ("parse", "mgsm-th-content"),
     ]
-    for key in [("render", "mgsm-ja"), ("parse", "mgsm-ja-answer")]:
+    for key in [("render", "mgsm-ja"), ("parse", "mgsm-ja-content")]:
         assert [line["origin"]["row"] for line in sets[key]] == [0, 3]
-    assert [line["name"] for line in sets[("parse", "mgsm-th-answer")]] == ["mgsm-th-answer-1"]
+    assert [line["name"] for line in sets[("parse", "mgsm-th-content")]] == ["mgsm-th-content-1"]
     [th] = sets[("render", "mgsm-th")]
     assert (th["origin"]["file"], th["origin"]["sha256"]) == (
         "mgsm/mgsm_th.tsv",
@@ -292,7 +299,7 @@ def test_written_sets_are_raw_unicode_that_reads_back_whole_and_a_rewrite_is_byt
     written = mgsm.write_sets(sets(), corpus)
     assert sorted(path.relative_to(corpus).as_posix() for path in written) == [
         "parse/mgsm-exemplars.jsonl",
-        "parse/mgsm-te-answer.jsonl",
+        "parse/mgsm-te-content.jsonl",
         "render/mgsm-te.jsonl",
     ]
     assert not (corpus / "render" / "mgsm-old.jsonl").exists()
@@ -301,7 +308,7 @@ def test_written_sets_are_raw_unicode_that_reads_back_whole_and_a_rewrite_is_byt
     assert TE_QUESTION.encode("utf-8") in first[corpus / "render" / "mgsm-te.jsonl"]
     [exemplar] = read_cases(corpus / "parse" / "mgsm-exemplars.jsonl")
     assert exemplar.request["messages"][0]["content"] == "ロジャーは5個の\nテニスボールがあります。"
-    for path in [corpus / "render" / "mgsm-te.jsonl", corpus / "parse" / "mgsm-te-answer.jsonl"]:
+    for path in [corpus / "render" / "mgsm-te.jsonl", corpus / "parse" / "mgsm-te-content.jsonl"]:
         assert [case.request["messages"][0]["content"] for case in read_cases(path)] == [TE_QUESTION]
     mgsm.write_sets(sets(), corpus)
     assert {path: path.read_bytes() for path in written} == first
@@ -312,12 +319,12 @@ def test_check_passes_on_a_fresh_import_and_names_each_set_file_that_differs(tmp
     corpus = tmp_path / "corpus"
     mgsm.write_sets(sets, corpus)
     assert mgsm.check_sets(sets, corpus) == []
-    (corpus / "parse" / "mgsm-ja-answer.jsonl").write_text("{}\n")
+    (corpus / "parse" / "mgsm-ja-content.jsonl").write_text("{}\n")
     (corpus / "render" / "mgsm-ja.jsonl").unlink()
     (corpus / "render" / "mgsm-stale.jsonl").write_text("{}\n")
     (corpus / "render" / "gsm8k-other.jsonl").write_text("{}\n")
     assert mgsm.check_sets(sets, corpus) == [
-        f"{corpus / 'parse' / 'mgsm-ja-answer.jsonl'}: differs from a fresh import",
+        f"{corpus / 'parse' / 'mgsm-ja-content.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'mgsm-ja.jsonl'}: missing",
         f"{corpus / 'render' / 'mgsm-stale.jsonl'}: no MGSM file writes it",
     ]
@@ -358,13 +365,49 @@ def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, m
     assert main([*argv, "--check"]) == 1
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
-    out = capsys.readouterr().out
-    assert sorted(path.name for path in (corpus / "render").iterdir()) == [f"mgsm-{lang}.jsonl" for lang in LANGUAGES]
+    out = capsys.readouterr().out.splitlines()
+    assert sorted(path.name for path in (corpus / "render").iterdir()) == [
+        f"mgsm-{lang}.jsonl" for lang in LANGUAGES if lang != "en"
+    ]
+    assert sorted(path.name for path in (corpus / "parse").iterdir()) == sorted(
+        ["mgsm-exemplars.jsonl", *(f"mgsm-{lang}-content.jsonl" for lang in LANGUAGES)]
+    )
     assert f"{corpus / 'render' / 'mgsm-ja.jsonl'}: 1 cases" in out
-    assert f"{corpus / 'parse' / 'mgsm-exemplars.jsonl'}: 1 cases" in out
+    assert f"{corpus / 'parse' / 'mgsm-ja-content.jsonl'}: 1 cases, 1 distinct messages" in out
+    assert f"{corpus / 'parse' / 'mgsm-exemplars.jsonl'}: 1 cases, 1 distinct messages" in out
+    assert f"{corpus}: 22 cases in the 22 MGSM sets, 0 left out as repeats, 2 distinct messages" in out
     assert "no case for 1 row(s) (ja row 1): the answer '18 dollars' is not an integer" in out
-    assert "(exemplar en 2): the final sentence 'The answer is 11.' does not state the exemplar's number 29" in out
+    assert (
+        "no case for 1 row(s) (exemplar en 2): "
+        "the final sentence 'The answer is 11.' does not state the exemplar's number 29"
+    ) in out
     assert f"{corpus}: the MGSM sets equal a fresh import of {mgsm.SOURCE}" in out
+
+
+def test_the_command_leaves_out_cases_that_repeat_earlier_ones_and_names_what_they_repeat(
+    tmp_path, monkeypatch, capsys
+):
+    # Rows 1 and 2 ask what row 0 asks, so their render cases repeat row 0's; of their content cases only row 1's does,
+    # since row 2's message differs.
+    files = pinned_files()
+    files["mgsm/mgsm_ja.tsv"] = tsv([f"{JA}\t18", f"{JA}\t18", f"{JA}\t5"])
+    serve(tmp_path, monkeypatch, files)
+    corpus = tmp_path / "corpus"
+    argv = ["import", "mgsm", "--corpus", str(corpus), "--cache", str(tmp_path)]
+    assert main(argv) == 0
+    assert main([*argv, "--check"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    repeated = {"mgsm-ja-1": "mgsm-ja-0", "mgsm-ja-2": "mgsm-ja-0", "mgsm-ja-content-1": "mgsm-ja-content-0"}
+    for name, first in repeated.items():
+        assert f"no case {name}: it repeats {first}" in out
+    assert f"{corpus / 'render' / 'mgsm-ja.jsonl'}: 1 cases, 2 left out as repeats" in out
+    assert f"{corpus / 'parse' / 'mgsm-ja-content.jsonl'}: 2 cases, 1 left out as repeats, 2 distinct messages" in out
+    assert f"{corpus}: 23 cases in the 22 MGSM sets, 3 left out as repeats, 3 distinct messages" in out
+    assert [case.name for case in read_cases(corpus / "render" / "mgsm-ja.jsonl")] == ["mgsm-ja-0"]
+    assert [case.name for case in read_cases(corpus / "parse" / "mgsm-ja-content.jsonl")] == [
+        "mgsm-ja-content-0",
+        "mgsm-ja-content-2",
+    ]
 
 
 def test_the_command_refuses_a_license_that_is_not_cc_by_4_and_writes_nothing(tmp_path, monkeypatch):
