@@ -20,27 +20,59 @@ What the two routes used here answer, and what they do not:
   contributes, which is what ``output_pieces`` records.
 - Both derender forms skip special tokens unless the request says otherwise
   (vllm/renderers/online_derenderer.py:626-630 and 711-715), so every call here says which.
+
+A call ends one of three ways. vLLM answers: a 200 with what the call reads. vLLM refuses: a 400 carrying its
+ErrorResponse, raised as Refused, an answer about the request. Or nothing is measured: MeasurementFailed, for no
+answer, a redirect, any other status or body, or a 200 without what the call reads. A refusal can be evidence
+about a case; a failed measurement never is, so a stopped container cannot pass for vLLM refusing every case.
 """
 
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from typing import Any
+
+import httpx
 
 CHAT_RENDER = "/v1/chat/completions/render"
 COMPLETIONS_DERENDER = "/v1/completions/derender"
 
 
-class RenderServerError(Exception):
-    """The render server answered with a status other than 200; ``message`` is what it said."""
+class Refused(Exception):
+    """vLLM answered and refused the request: a 400 whose body is vLLM's ErrorResponse.
 
-    def __init__(self, status: int, message: str) -> None:
-        super().__init__(f"vLLM render server answered {status}: {message}")
+    That body is ``{"error": {"message", "type", "param", "code"}}`` (vllm/entrypoints/serve/engine/protocol.py:
+    79-87), and vLLM answers it with a 400 for a request it will not take: one that fails validation
+    (vllm/entrypoints/serve/exception_handling/handlers/validation.py:149-195) or that a route rejects
+    (vllm/entrypoints/serve/exception_handling/error_response.py:41-44, 53-57, 69-72 and 77-81). It is about the
+    request, so it is the answer a recorder may keep as vLLM rejecting the case. ``error`` is the error object as
+    answered and ``message`` its message.
+    """
+
+    def __init__(self, error: dict) -> None:
+        super().__init__(f"vLLM refused the request: {error['message']}")
+        self.error = error
+        self.message = error["message"]
+
+
+class MeasurementFailed(Exception):
+    """Nothing was measured: vLLM gave no answer to the request, so nothing can be said about the case.
+
+    The call failed (no connection, a timeout, a broken response), was redirected, or was answered with anything
+    but a 200 or a refusal: a proxy's page, the API-key check's ``{"error": "Unauthorized"}``
+    (vllm/entrypoints/serve/middleware/authenticate.py:59-61), or one of vLLM's errors about the setup or the
+    server rather than the request: an unknown model (404, vllm/entrypoints/serve/engine/serving.py:66-71) or
+    route (404, vllm/entrypoints/serve/exception_handling/handlers/http.py:16-31), a route the model does not
+    serve (501, vllm/entrypoints/scale_out/derender/api_router.py:106-108), or its own failure (500,
+    vllm/entrypoints/serve/exception_handling/error_response.py:82-85). A 200 whose body is not JSON, or lacks a
+    field the call reads, is one too. It is not a Refused and is never caught as one. ``status`` is the status
+    answered, None when there was none.
+    """
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
         self.status = status
-        self.message = message
 
 
 @dataclass
@@ -59,11 +91,32 @@ class RenderedPrompt:
 
 
 class RenderServer:
-    """A running ``vllm launch render`` at ``base_url``; each call is one POST that waits ``timeout`` seconds."""
+    """A running ``vllm launch render`` at ``base_url``, over one HTTP connection kept open from call to call.
+
+    Close it when done, or use it as a context manager. It follows no redirect, since vLLM's routes answer where
+    they are, and it ignores the environment's proxy settings, so it talks to the server it was given with nothing
+    in between.
+
+    ``timeout`` bounds each step of a call, not the whole call: httpx's client has no timeout for a whole call.
+    ``httpx.Timeout(timeout)`` gives each of its four steps ``timeout`` seconds: connecting, each write of the
+    request, each read of the answer, and waiting for a free connection. A server that stops answering fails the
+    call once a step waits that long; one that sends a few bytes within every ``timeout`` can keep a call going
+    longer.
+    """
 
     def __init__(self, base_url: str, timeout: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
+        self._client = httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False)
+
+    def __enter__(self) -> RenderServer:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close the connection the calls kept open."""
+        self._client.close()
 
     def render_chat(self, request: dict) -> RenderedPrompt:
         """The prompt ids vLLM builds for a chat completion request.
@@ -72,7 +125,10 @@ class RenderServer:
         ``model``: without one the served model answers (vllm/entrypoints/serve/engine/serving.py:73-78).
         """
         answer = self._post(CHAT_RENDER, request)
-        return RenderedPrompt(answer["token_ids"], answer["sampling_params"], answer)
+        token_ids = _field(answer, "token_ids", list)
+        if not all(isinstance(token, int) for token in token_ids):
+            raise MeasurementFailed(f"the answer's token_ids are not all integers: {token_ids!r:.200}", 200)
+        return RenderedPrompt(token_ids, _field(answer, "sampling_params", dict), answer)
 
     def derender(self, ids: list[int], *, skip_special_tokens: bool = False) -> str:
         """vLLM's text for ``ids`` decoded whole: its tokenizer's ``decode``
@@ -92,7 +148,7 @@ class RenderServer:
                 "completion_request": _completion_request(skip_special_tokens),
             },
         )
-        return _only_choice(answer)["text"]
+        return _only_text(answer)
 
     def derender_pieces(self, ids: list[int], *, skip_special_tokens: bool = False) -> list[str]:
         """The text each token contributes under vLLM's incremental decode: one streaming derender call per token.
@@ -127,29 +183,32 @@ class RenderServer:
                     "completion_request": completion_request,
                 },
             )
-            pieces.append(_only_choice(answer["chunk"])["text"])
-            state = answer["stream_state"]
+            pieces.append(_only_text(_field(answer, "chunk", dict)))
+            state = _field(answer, "stream_state", dict)
         return pieces
 
     def _post(self, path: str, body: dict) -> Any:
-        """POST ``body`` as JSON, the only content type the server takes.
+        """POST ``body`` as JSON, the only content type the server takes, and return what a 200 answers.
 
-        Any other is refused with a 400 (vllm/entrypoints/serve/utils/api_utils.py:350-356).
+        Any other content type is refused with a 400 (vllm/entrypoints/serve/utils/api_utils.py:350-356). A refusal
+        raises Refused; any other answer raises MeasurementFailed.
         """
-        request = urllib.request.Request(
-            self.base_url + path,
-            data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        url = self.base_url + path
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                status, text = response.status, response.read().decode()
-        except urllib.error.HTTPError as err:
-            raise RenderServerError(err.code, _error_message(err.read().decode(errors="replace"))) from err
-        if status != 200:
-            raise RenderServerError(status, _error_message(text))
-        return json.loads(text)
+            response = self._client.post(url, content=json.dumps(body), headers={"Content-Type": "application/json"})
+        except httpx.HTTPError as err:
+            raise MeasurementFailed(f"no answer from {url}: {type(err).__name__}: {err}") from err
+        if response.status_code == 200:
+            try:
+                return response.json()
+            except ValueError as err:
+                raise MeasurementFailed(
+                    f"{url} answered 200 with a body that is not JSON: {response.text[:200]!r}", 200
+                ) from err
+        error = _refusal(response)
+        if error is not None:
+            raise Refused(error)
+        raise MeasurementFailed(f"{url} answered {response.status_code}: {response.text[:200]!r}", response.status_code)
 
 
 def _completion_request(skip_special_tokens: bool) -> dict:
@@ -164,29 +223,42 @@ def _completion_request(skip_special_tokens: bool) -> dict:
     return {"prompt": [0], "skip_special_tokens": skip_special_tokens}
 
 
-def _only_choice(answer: dict) -> dict:
-    """The one choice a single-sequence derender answers with.
+def _field(answer: Any, name: str, kind: type) -> Any:
+    """``answer[name]``, which must be a ``kind``; a 200 without it measured nothing.
+
+    Nothing stands in for a missing field: an empty default would be recorded as what vLLM answered.
+    """
+    value = answer.get(name) if isinstance(answer, dict) else None
+    if not isinstance(value, kind):
+        raise MeasurementFailed(f"the answer has no {kind.__name__} {name!r}: {answer!r:.200}", 200)
+    return value
+
+
+def _only_text(answer: Any) -> str:
+    """The text of the one choice a single-sequence derender answers with.
 
     One choice per generate-response choice (vllm/renderers/online_derenderer.py:637-664 and 719-730), and
     every call here sends one.
     """
-    choices = answer["choices"]
+    choices = _field(answer, "choices", list)
     if len(choices) != 1:
-        raise ValueError(f"expected one choice in the derender answer, got {len(choices)}")
-    return choices[0]
+        raise MeasurementFailed(f"the answer has {len(choices)} choices, not one: {answer!r:.200}", 200)
+    return _field(choices[0], "text", str)
 
 
-def _error_message(text: str) -> str:
-    """The message in a vLLM error body, or the body itself when it is not vLLM's shape.
+def _refusal(response: httpx.Response) -> dict | None:
+    """vLLM's error object when ``response`` is a refusal, a 400 whose body is vLLM's ErrorResponse; else None.
 
-    vLLM answers ``{"error": {"message", "type", "param", "code"}}`` (vllm/entrypoints/serve/engine/protocol.py:
-    79-87), except the API-key check, which answers ``{"error": "Unauthorized"}``
-    (vllm/entrypoints/serve/middleware/authenticate.py:59-61).
+    vLLM answers with the status its error object carries in ``code``
+    (vllm/entrypoints/serve/exception_handling/handlers/exception.py:23-24, http.py:24-31 and
+    validation.py:187-195), and the message is always a string (vllm/entrypoints/serve/engine/protocol.py:79-83).
     """
+    if response.status_code != 400:
+        return None
     try:
-        error = json.loads(text)["error"]
+        error = response.json()["error"]
     except (ValueError, TypeError, KeyError):
-        return text
-    if isinstance(error, dict) and isinstance(error.get("message"), str):
-        return error["message"]
-    return error if isinstance(error, str) else text
+        return None
+    if isinstance(error, dict) and isinstance(error.get("message"), str) and error.get("code") == response.status_code:
+        return error
+    return None
