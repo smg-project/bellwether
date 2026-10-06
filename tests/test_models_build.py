@@ -36,8 +36,9 @@ def test_registry_only_lists_every_generative_checkpoint_once_without_asking_the
     assert {row.status for row in rows} == {"unchecked", "no-checkpoint-named"}
     assert {(row.revision, row.created, row.downloads) for row in rows} == {(None, None, None)}
     assert models[:2] == ["deepseek-ai/DeepSeek-V4.1-Flash", "zai-org/GLM-5.3-Flash"]
-    assert [row.tier for row in rows] == [1, 1] + [3] * 26
-    assert models[2:] == sorted(models[2:])  # without downloads, the id orders a tier
+    # Without the Hub only Simo's named models have a tier; a row with no checkpoint is the rest.
+    assert [row.tier for row in rows] == [1, 1] + [None] * 23 + [3] * 3
+    assert models[2:25] == sorted(models[2:25])  # without downloads, the id orders the rows
 
 
 def test_a_checkpoint_any_registry_calls_multimodal_is_multimodal() -> None:
@@ -322,7 +323,7 @@ def test_a_registry_checkpoint_the_hub_could_not_be_asked_about_keeps_its_row_wi
     entries = [Entry("vllm", "Qwen3ForCausalLM", TEXT, True, False, ("Qwen/Qwen3-8B",))]
     hub = FakeHub({}, {}, unavailable={"Qwen/Qwen3-8B": "hub-error-503"})
     [row] = hub_rows(entries, hub, BUILT)
-    assert row == Row("Qwen/Qwen3-8B", None, 3, "hub-error-503", None, None, "text", ("vllm",))
+    assert row == Row("Qwen/Qwen3-8B", None, None, "hub-error-503", None, None, "text", ("vllm",))  # no tier to give
 
 
 def test_a_listed_checkpoint_or_organization_the_hub_fails_on_is_logged_and_the_run_goes_on() -> None:

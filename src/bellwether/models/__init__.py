@@ -57,7 +57,8 @@ def _summary(rows: list[Row], out: Path) -> str:
     return "\n".join(
         [
             f"bellwether models: {len(rows)} rows in {out}",
-            f"  tier 1: {tiers[1]}, tier 2: {tiers[2]}, tier 3: {tiers[3]}",
+            f"  tier 1: {tiers[1]}, tier 2: {tiers[2]}, tier 3: {tiers[3]}"
+            + (f", left to the Hub: {tiers[None]}" if tiers[None] else ""),
             f"  text: {modalities['text']}, multimodal: {modalities['multimodal']}",
             "  status: " + ", ".join(f"{status} {count}" for status, count in sorted(statuses.items())),
         ]

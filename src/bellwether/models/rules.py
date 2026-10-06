@@ -142,10 +142,22 @@ def tier_of(model_id: str, created: date | None, built: date, current_chat: bool
     return 3
 
 
-def order_key(model_id: str, tier: int, downloads: int | None) -> tuple[int, int, int, str]:
+def tier_without_hub(model_id: str) -> int | None:
+    """Without the Hub's answer only Simo's named models have a tier; the rest wait on what the Hub says.
+
+    Whether a checkpoint is a current chat checkpoint, and when it was created, are the Hub's to tell.
+    """
+    return 1 if model_id in TIER1 else None
+
+
+# A tier left to the Hub sorts after the tiers the Hub could have given before it (1 and 2), before 3.
+_TIER_ORDER = {1: 1, 2: 2, None: 3, 3: 4}
+
+
+def order_key(model_id: str, tier: int | None, downloads: int | None) -> tuple[int, int, int, str]:
     """Tier, then Simo's order inside tier 1, then 30-day downloads, then the id so ties are stable."""
     rank = _tier1_rank(model_id, current_chat=True) if tier == 1 else None
-    return (tier, rank or 0, -(downloads or 0), model_id)
+    return (_TIER_ORDER[tier], rank or 0, -(downloads or 0), model_id)
 
 
 def status_of(details: Details | None, checked: bool) -> str:

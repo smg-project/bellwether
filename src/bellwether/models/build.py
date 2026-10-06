@@ -25,6 +25,7 @@ from .rules import (
     order_key,
     status_of,
     tier_of,
+    tier_without_hub,
 )
 
 
@@ -32,7 +33,7 @@ from .rules import (
 class Row:
     model: str
     revision: str | None  # the Hub's sha when the list was built
-    tier: int
+    tier: int | None  # None where the Hub decides it and was not asked, or gave no answer
     status: str
     created: date | None
     downloads: int | None  # over the 30 days before the build
@@ -223,10 +224,11 @@ def _row(
 ) -> Row:
     """One checkpoint's row; ``status``, when given, is the Hub's error in place of what its details say."""
     created = details.created if details else None
+    answered = checked and status is None
     return Row(
         model=model,
         revision=details.sha if details else None,
-        tier=tier_of(model, created, built, is_current_chat(details)),
+        tier=tier_of(model, created, built, is_current_chat(details)) if answered else tier_without_hub(model),
         status=status or status_of(details, checked),
         created=created,
         downloads=details.downloads if details else None,
