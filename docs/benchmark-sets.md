@@ -309,7 +309,8 @@ All-model figures, from the 45-model probe (BFCL single-turn alone):
 - **Git's packing:** the plain files of all 45 pack into 61 MB, because the same requests recur in
   every model's files. But a checkout still writes every byte, so the working tree would be several
   gigabytes now and tens of gigabytes later, before GSM8K and tau2 add theirs.
-- **The BFCL corpus:** 16 MB plain, 0.8 MB packed.
+- **The BFCL corpus:** 42.6 MB plain and 1.1 MB packed now, with the multi_turn first turns; the
+  single-turn sets alone are 17.9 MB plain, 0.8 MB packed.
 
 Decision:
 
