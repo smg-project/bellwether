@@ -348,7 +348,9 @@ def test_the_written_cases_read_back_and_count_under_shapes(tmp_path, monkeypatc
     recorded = "".join(json.dumps({"id": f"m1/parse/shapes-content-calls-{i}"}) + "\n" for i in (0, 2))
     tables = {("parse", "shapes-content-calls"): set_tables.entry("zstd", recorded, cases=2, rejected=0)}
     set_tables.write(fixtures / "m1" / set_tables.FILE, tables)
-    assert counts(fixtures, corpus) == [{"model": "org/M1", "kind": "parse", "source": "shapes", "cases": 2}]
+    assert counts(fixtures, corpus) == [
+        {"model": "org/M1", "group": "m1", "tier": None, "kind": "parse", "source": "shapes", "cases": 2}
+    ]
 
 
 MIT = b"MIT License\n\nCopyright (c) 2021 OpenAI\n"

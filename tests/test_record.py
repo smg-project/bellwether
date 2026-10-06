@@ -16,6 +16,7 @@ from tokenizers import Tokenizer, decoders, normalizers, processors
 from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
+from bellwether.inputs import oracle_inputs
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
@@ -257,7 +258,7 @@ def record(
 ) -> tuple[int, pathlib.Path]:
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     if not (fixtures / "tiny-chat").exists():
-        write_manifest(fixtures, "tiny-chat", str(tiny_model))
+        write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=oracle_inputs(str(tiny_model), "local"))
     for name, lines in corpus_sets:
         write_jsonl(corpus / kind / f"{name}.jsonl", lines)
     argv = ["record", "--model", str(tiny_model), "--kind", kind, "--oracle", "reference"]
@@ -1665,6 +1666,56 @@ def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_mode
     assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'
 
 
+def test_record_records_a_checkpoint_whose_oracle_inputs_are_the_ones_its_manifest_lists(tmp_path, tiny_model):
+    path = write_manifest(
+        tmp_path / "fixtures", "tiny-chat", str(tiny_model), inputs=oracle_inputs(str(tiny_model), "local")
+    )
+    assert "tokenizer_config.json" in load_manifest(path).inputs
+    status, out_dir = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    assert status == 0
+    assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/render/a"]
+
+
+def test_record_refuses_a_checkpoint_whose_oracle_input_changed_and_names_the_file(tmp_path, tiny_model, capsys):
+    model = tmp_path / "tiny-chat"
+    shutil.copytree(tiny_model, model)
+    listed = oracle_inputs(str(model), "local")
+    path = write_manifest(tmp_path / "fixtures", "tiny-chat", str(model), inputs=listed)
+    config = json.loads((model / "tokenizer_config.json").read_text())
+    config["chat_template"] = "{{ messages[0]['content'] }}"
+    (model / "tokenizer_config.json").write_text(json.dumps(config))
+    found = oracle_inputs(str(model), "local")["tokenizer_config.json"]
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, model)) == 1
+
+    err = capsys.readouterr().err
+    listing = f"tokenizer_config.json (listed {listed['tokenizer_config.json'][:12]}, found {found[:12]})"
+    assert f"its oracle inputs at local differ from {path}: {listing};" in err
+    assert not (tmp_path / "fixtures" / "tiny-chat" / "render").exists()
+
+
+def test_record_refuses_a_group_member_and_names_its_group(tmp_path, tiny_model, capsys):
+    fixtures = tmp_path / "fixtures"
+    inputs = oracle_inputs(str(tiny_model), "local")
+    write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=inputs)
+    write_manifest(fixtures, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, group="tiny-chat")
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, "acme/Tiny-Chat-Mini")) == 1
+
+    err = capsys.readouterr().err
+    assert "acme/Tiny-Chat-Mini is a member of checkpoint group tiny-chat" in err
+    assert f"record the group instead: bellwether record --model {tiny_model}" in err
+    assert not (fixtures / "tiny-chat-mini" / "render").exists() and not (fixtures / "tiny-chat" / "render").exists()
+
+
+def test_record_refuses_a_manifest_that_lists_no_oracle_inputs(tmp_path, tiny_model, capsys):
+    path = write_manifest(tmp_path / "fixtures", "tiny-chat", str(tiny_model))
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"{path} lists no oracle inputs; `bellwether manifests` writes them" in capsys.readouterr().err
+
+
 def render_cases(*names: str) -> dict[str, dict]:
     cases = {}
     for name in names:
@@ -1891,6 +1942,18 @@ def test_every_sets_toml_table_has_its_set(path):
     for kind, name in set_tables.read(path):
         files = [path.parent / kind / f"{name}.jsonl", path.parent / kind / f"{name}.jsonl.zst"]
         assert sum(f.is_file() for f in files) == 1, f"{path}: [{kind}.{name}] needs exactly one set file"
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/manifest.toml")), ids=lambda p: str(p.relative_to(ROOT)))
+def test_committed_manifests_list_inputs_and_tier_and_a_member_names_a_primary_with_equal_inputs(path):
+    manifest = load_manifest(path)
+    assert manifest.inputs, f"{path}: no [inputs]; `bellwether manifests` writes them"
+    assert manifest.tier is not None, f"{path}: no tier; `bellwether manifests` writes it"
+    if manifest.group is not None:
+        primary = load_manifest(ROOT / "fixtures" / manifest.group / "manifest.toml")
+        assert primary.group is None, f"{path}: its group's manifest is itself a member"
+        assert primary.inputs == manifest.inputs, f"{path}: its oracle inputs differ from its group's"
+        assert [p.name for p in path.parent.iterdir()] == ["manifest.toml"], f"{path}: a member holds no fixtures"
 
 
 def git(cwd: pathlib.Path, *args: str) -> None:

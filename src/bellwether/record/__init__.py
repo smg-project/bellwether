@@ -3,15 +3,22 @@
 The reference oracles for ``render`` (the checkpoint's template) and ``parse`` (the round trip through
 that template) are implemented. Engine oracles and the other kinds exit with status 2 until their
 milestone lands, so a script never mistakes a missing oracle for a recorded one.
+
+A checkpoint group is recorded once, by its primary: a member's manifest makes ``record`` name the group to record
+instead and exit 1. Before recording, the checkpoint's oracle inputs at the pinned revision are compared with the ones
+its manifest lists, since the group's members were matched on that list; on a difference ``record`` names the files and
+exits 1, recording nothing.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from bellwether import __version__
-from bellwether.manifest import find_manifest
+from bellwether.inputs import oracle_inputs
+from bellwether.manifest import Manifest, find_manifest, load_manifest
 from bellwether.storage import COMPRESSED_SUFFIX, plain_text, stem
 
 from . import sets as set_tables
@@ -36,6 +43,10 @@ def run(args: argparse.Namespace) -> int:
         )
         return NOT_IMPLEMENTED
     manifest = find_manifest(args.fixtures, args.model)
+    refusal = _refusal(manifest, args.fixtures)
+    if refusal is not None:
+        print(f"bellwether record: {refusal}", file=sys.stderr)
+        return 1
     sets = load_corpus(args.corpus, args.kind, manifest.slug)
     if not sets:
         print(f"bellwether record: no corpus under {args.corpus / args.kind}", file=sys.stderr)
@@ -133,6 +144,40 @@ def run(args: argparse.Namespace) -> int:
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
+
+
+def _refusal(manifest: Manifest, fixtures: Path) -> str | None:
+    """Why the checkpoint is not recorded, or None when it may be."""
+    if manifest.group is not None:
+        primary = fixtures / manifest.group / "manifest.toml"
+        instead = f"bellwether record --model {load_manifest(primary).model}" if primary.is_file() else str(primary)
+        return (
+            f"{manifest.model} is a member of checkpoint group {manifest.group}, which is recorded once for all its "
+            f"members; record the group instead: {instead}"
+        )
+    if not manifest.inputs:
+        return f"{manifest.path} lists no oracle inputs; `bellwether manifests` writes them"
+    try:
+        found = oracle_inputs(manifest.model, manifest.revision)
+    except (OSError, ValueError) as err:
+        return f"cannot read the oracle inputs of {manifest.model} at {manifest.revision}: {err}"
+    listed = manifest.inputs
+    differ = [
+        f"{name} (listed {_short(listed.get(name))}, found {_short(found.get(name))})"
+        for name in sorted(listed.keys() | found.keys())
+        if listed.get(name) != found.get(name)
+    ]
+    if differ:
+        return (
+            f"refusing to record {manifest.model}: its oracle inputs at {manifest.revision} differ from "
+            f"{manifest.path}: {', '.join(differ)}; the group was matched on the listed files, so run "
+            "`bellwether manifests` again"
+        )
+    return None
+
+
+def _short(digest: str | None) -> str:
+    return digest[:12] if digest else "none"
 
 
 def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, provenance: dict) -> tuple[dict, bool]:

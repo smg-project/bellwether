@@ -1,5 +1,6 @@
 model    = "deepseek-ai/DeepSeek-R1"
 revision = "56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad"   # HF commit the fixtures are recorded at
+tier     = 3
 
 # The R1 template renders tool calls and results from the history but declares no tools and has
 # no thinking switch: it always opens <think> after the assistant header.
@@ -15,3 +16,9 @@ reasoning_parser = "deepseek_r1"
 [engines]
 vllm   = { reasoning_parser = "deepseek_r1" }
 sglang = { reasoning_parser = "deepseek-r1" }
+
+[inputs]  # sha256 of each oracle input; the two config files over a few fields only (bellwether.inputs)
+"config.json"            = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"generation_config.json" = "91fb14e3500c52b9ab71cc9270c3a8421b5ade9580ed0b16716eca62cb6b2b93"
+"tokenizer.json"         = "ecb6f9fc369894346f0511f4074ca75cee5cd5f3b06d02f1ba35fcd39f8e121d"
+"tokenizer_config.json"  = "99e80c96269ca4430f1e67f67b5766cb096cbac96fed7a7c611c6ee088b3a039"
