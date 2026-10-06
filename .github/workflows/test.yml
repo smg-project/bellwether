@@ -38,6 +38,11 @@ jobs:
       - run: uv run bellwether import shapes --check
       - uses: actions/cache@v6
         with:
+          path: ~/.cache/huggingface/hub/datasets--NousResearch--hermes-function-calling-v1
+          key: hf-hermes-function-calling-v1-dae3e1d28cfbcf4b915c04ea1e072030529b4bda
+      - run: uv run bellwether import hermes --check
+      - uses: actions/cache@v6
+        with:
           path: ~/.cache/bellwether/registries
           key: bellwether-registries-${{ hashFiles('src/bellwether/models/pins.py') }}
       - name: The committed list of models equals a fresh build at the pins

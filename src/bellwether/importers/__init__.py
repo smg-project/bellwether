@@ -22,4 +22,8 @@ def run(args: argparse.Namespace) -> int:
         from .shapes import run as run_shapes
 
         return run_shapes(args)
+    if args.dataset == "hermes":
+        from .hermes import run as run_hermes
+
+        return run_hermes(args)
     raise ValueError(f"no importer for {args.dataset!r}")
