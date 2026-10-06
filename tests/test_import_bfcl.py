@@ -372,3 +372,51 @@ def test_a_license_line_in_the_description_does_not_count(tmp_path):
     text = "Metadata-Version: 2.1\nName: bfcl-eval\n\nLicense: Apache 2.0\n"
     with zipfile.ZipFile(metadata_wheel(tmp_path, text)) as wheel, pytest.raises(ValueError, match="license None"):
         bfcl.check_license(wheel)
+
+
+JAVA_FN = [
+    {
+        "name": "Box.make",
+        "description": "Makes.",
+        "parameters": {
+            "type": "dict",
+            "properties": {
+                "size": {"type": "integer", "description": "S."},
+                "label": {"type": "String", "description": "L."},
+                "meta": {"type": "HashMap", "description": "M."},
+            },
+        },
+    }
+]
+
+
+def java_sets(tmp_path, answers: list[dict]):
+    rows = [{"id": a["id"], "question": [[{"role": "user", "content": "Box"}]], "function": JAVA_FN} for a in answers]
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_simple_java.json": rows,
+            "bfcl_eval/data/possible_answer/BFCL_v4_simple_java.json": answers,
+        },
+    )
+    with zipfile.ZipFile(path) as wheel:
+        return bfcl.build_sets(wheel, categories=("simple_java",))
+
+
+def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
+    sets = java_sets(
+        tmp_path,
+        [
+            {"id": "simple_java_1", "ground_truth": [{"Box.make": {"size": [5], "label": ["big"]}}]},
+            {"id": "simple_java_2", "ground_truth": [{"Box.make": {"label": ["big"], "size": [""]}}]},
+            {"id": "simple_java_3", "ground_truth": [{"Box.make": {"meta": [{"format": "epoch_millis"}]}}]},
+        ],
+    )
+    assert [line["name"] for line in sets[("render", "bfcl-simple-java")]] == [
+        "bfcl-simple-java-1",
+        "bfcl-simple-java-2",
+        "bfcl-simple-java-3",
+    ]
+    [parse] = sets[("parse", "bfcl-simple-java")]
+    assert parse["name"] == "bfcl-simple-java-2"
+    assert parse["message"]["tool_calls"][0]["function"]["arguments"] == '{"label": "big"}'

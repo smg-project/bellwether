@@ -190,6 +190,21 @@ def _realize_dict(option: dict) -> dict:
     return value
 
 
+def string_valued(answer: dict) -> bool:
+    """Whether every value the call would carry is a string.
+
+    BFCL's Java and JavaScript categories ask for every argument in string representation, and its checker refuses
+    any other type, but their ground truth stores the converted value (``5``, ``true``, a dict). Until the importer
+    writes those values in the string form BFCL's converters read back (#26), such a row has no parse case.
+    """
+    for entry in answer["ground_truth"]:
+        for options in next(iter(entry.values())).values():
+            chosen = next((option for option in options if option != ""), OMIT)
+            if chosen is not OMIT and not isinstance(chosen, str):
+                return False
+    return True
+
+
 def message_for(answer: dict) -> dict:
     """The assistant message a parser must return for one BFCL ground truth: one call per entry, in order."""
     calls = []
@@ -255,7 +270,10 @@ def origin(category: str, row_id: str, answered: bool = False) -> dict:
 
 
 def build_sets(wheel: zipfile.ZipFile, categories: tuple[str, ...] | None = None) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer."""
+    """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
+
+    A Java or JavaScript row gets its parse case only when every value it carries is a string (``string_valued``).
+    """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}
     for category in categories or CATEGORIES:
@@ -269,8 +287,9 @@ def build_sets(wheel: zipfile.ZipFile, categories: tuple[str, ...] | None = None
             request = request_for(row, category)
             notes = f"BFCL {category} {row['id']}"
             render.append({"name": name, "request": request, "notes": notes, "origin": origin(category, row["id"])})
-            if row["id"] in answers:
-                message = message_for(answers[row["id"]])
+            answer = answers.get(row["id"])
+            if answer is not None and (language(category) == "python" or string_valued(answer)):
+                message = message_for(answer)
                 line = {"name": name, "request": request, "message": message, "notes": notes}
                 parse.append({**line, "origin": origin(category, row["id"], answered=True)})
         sets[("render", set_name(category))] = render
@@ -346,5 +365,10 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
         print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
+    for category in CATEGORIES:
+        if language(category) != "python" and ("render", set_name(category)) in sets:
+            render = len(sets[("render", set_name(category))])
+            parse = len(sets.get(("parse", set_name(category)), []))
+            print(f"{set_name(category)}: {render - parse} rows carry a value that is not a string; render only (#26)")
     write_sets(sets, args.corpus)
     return 0
