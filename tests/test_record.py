@@ -651,3 +651,19 @@ def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model,
     record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
     assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1
     assert "no corpus set named missing" in capsys.readouterr().err
+
+
+def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_model):
+    request = {
+        "messages": [
+            user("Weather in Paris?"),
+            {"role": "assistant", "content": "", "tool_calls": [weather_call()]},
+            {"role": "tool", "content": "Sunny"},
+            user("And now?"),
+        ]
+    }
+    out = RoundtripOracle(str(items_model), "local").render_output(
+        request, {"content": "", "tool_calls": [weather_call()]}
+    )
+    assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
+    assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'

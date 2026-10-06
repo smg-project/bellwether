@@ -16,8 +16,9 @@ authority, which nothing here invokes.
 The output follows the generation prompt, so a request that asks for no generation prompt or for
 the final message to be continued cannot be recorded this way and is rejected.
 
-The template gets each tool call's arguments as an object, decoded from the corpus's JSON string, which is what
-vLLM (``vllm/entrypoints/chat_utils.py``) and SGLang (``parse_tool_call_arguments``) give it. A template that cannot
+The template gets every tool call's arguments as an object, in the request's history as in the final turn, decoded
+from the corpus's JSON string, which is what vLLM (``vllm/entrypoints/chat_utils.py``, for every assistant message)
+and SGLang (``parse_tool_call_arguments``) give it. A template that cannot
 take an object (DeepSeek's concatenate the string) fails the case: that is a finding about the template and the
 engines, reported, never worked around. The reference message keeps the JSON string.
 
@@ -64,7 +65,9 @@ class RoundtripOracle:
                 "a parse case's request must end at the generation prompt; `add_generation_prompt: false` and "
                 "`continue_final_message` cannot be recorded by the round trip"
             )
-        messages = request["messages"]
+        messages = [
+            with_object_arguments(m, history=True) if m.get("role") == "assistant" else m for m in request["messages"]
+        ]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
         turn = {"role": "assistant", **with_object_arguments(message)}
@@ -95,13 +98,19 @@ class RoundtripOracle:
         return self.renderer.provenance()
 
 
-def with_object_arguments(message: dict) -> dict:
-    """A copy of the message whose calls carry their arguments as objects, as the engines give them to templates."""
+def with_object_arguments(message: dict, history: bool = False) -> dict:
+    """A copy of the message whose calls carry their arguments as objects, as the engines give them to templates.
+
+    In the history, a call already given as an object passes as it is; the final message must carry the JSON string
+    a parser returns.
+    """
     if not message.get("tool_calls"):
         return message
     message = copy.deepcopy(message)
     for call in message["tool_calls"]:
         arguments = call["function"].get("arguments")
+        if history and isinstance(arguments, dict):
+            continue
         try:
             value = json.loads(arguments)
         except (TypeError, json.JSONDecodeError):
