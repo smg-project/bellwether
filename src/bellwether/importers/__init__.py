@@ -26,4 +26,8 @@ def run(args: argparse.Namespace) -> int:
         from .hermes import run as run_hermes
 
         return run_hermes(args)
+    if args.dataset == "swebench":
+        from .swebench import run as run_swebench
+
+        return run_swebench(args)
     raise ValueError(f"no importer for {args.dataset!r}")
