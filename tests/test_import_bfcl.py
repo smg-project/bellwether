@@ -197,12 +197,18 @@ def test_a_dict_option_whose_values_are_not_lists_is_refused():
         bfcl.realize({"size": "large"})
 
 
+CAFE_FUNCTIONS = [
+    fn("Cafe.order", {"drink": {"type": "string"}, "count": {"type": "integer"}, "note": {"type": "string"}}),
+    fn("ping", {}),
+]
+
+
 def test_the_message_has_one_call_per_ground_truth_entry_with_json_arguments():
     answer = {
         "id": "x",
         "ground_truth": [{"Cafe.order": {"drink": ["Café ☕"], "count": ["", 3], "note": [""]}}, {"ping": {}}],
     }
-    assert bfcl.message_for(answer) == {
+    assert bfcl.message_for(answer, CAFE_FUNCTIONS) == {
         "content": "",
         "tool_calls": [
             {"type": "function", "function": {"name": "Cafe_order", "arguments": '{"drink": "Café ☕", "count": 3}'}},
@@ -390,7 +396,7 @@ JAVA_FN = [
 ]
 
 
-def java_sets(tmp_path, answers: list[dict]):
+def java_sets(tmp_path, answers: list[dict], skipped: list | None = None):
     rows = [{"id": a["id"], "question": [[{"role": "user", "content": "Box"}]], "function": JAVA_FN} for a in answers]
     path = fake_wheel(
         tmp_path,
@@ -400,7 +406,7 @@ def java_sets(tmp_path, answers: list[dict]):
         },
     )
     with zipfile.ZipFile(path) as wheel:
-        return bfcl.build_sets(wheel, categories=("simple_java",))
+        return bfcl.build_sets(wheel, categories=("simple_java",), skipped=skipped)
 
 
 def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
@@ -419,4 +425,51 @@ def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
     ]
     [parse] = sets[("parse", "bfcl-simple-java")]
     assert parse["name"] == "bfcl-simple-java-2"
+    skipped: list[tuple[str, str]] = []
+    java_sets(tmp_path, [{"id": "simple_java_1", "ground_truth": [{"Box.make": {"size": [5]}}]}], skipped)
+    assert skipped == [("simple_java_1", bfcl.NOT_STRINGS)]
     assert parse["message"]["tool_calls"][0]["function"]["arguments"] == '{"label": "big"}'
+
+
+def test_a_parameter_the_function_does_not_declare_is_left_out_when_it_may_be_omitted():
+    answer = {"id": "x", "ground_truth": [{"ping": {"stray": ["", 0.1]}}]}
+    message = bfcl.message_for(answer, CAFE_FUNCTIONS)
+    assert message["tool_calls"][0]["function"]["arguments"] == "{}"
+
+
+def test_a_ground_truth_no_call_can_satisfy_is_unanswerable():
+    required = [
+        fn(
+            "record",
+            {"start": {"type": "string"}},
+        )
+    ]
+    required[0]["parameters"]["required"] = ["start"]
+    for params, reason in [
+        ({"start": []}, "record requires start"),
+        ({"start": [""]}, "record requires start"),
+        ({"question": ["hi"]}, "record has no parameter 'question'"),
+    ]:
+        with pytest.raises(bfcl.Unanswerable, match=reason):
+            bfcl.message_for({"id": "x", "ground_truth": [{"record": params}]}, required)
+    with pytest.raises(bfcl.Unanswerable, match="calls missing, which the row does not define"):
+        bfcl.message_for({"id": "x", "ground_truth": [{"missing": {}}]}, required)
+
+
+def test_rows_without_a_parse_case_are_reported_with_their_reason(tmp_path):
+    record = fn("record", {"start": {"type": "string"}})
+    record["parameters"]["required"] = ["start"]
+    row = {"id": "live_simple_1", "question": [[{"role": "user", "content": "Go"}]], "function": [record]}
+    answer = {"id": "live_simple_1", "ground_truth": [{"record": {"start": []}}]}
+    path = fake_wheel(
+        tmp_path,
+        {
+            "bfcl_eval/data/BFCL_v4_live_simple.json": [row],
+            "bfcl_eval/data/possible_answer/BFCL_v4_live_simple.json": [answer],
+        },
+    )
+    skipped: list[tuple[str, str]] = []
+    with zipfile.ZipFile(path) as wheel:
+        sets = bfcl.build_sets(wheel, categories=("live_simple",), skipped=skipped)
+    assert ("parse", "bfcl-live-simple") not in sets and len(sets[("render", "bfcl-live-simple")]) == 1
+    assert skipped == [("live_simple_1", "record requires start, which the ground truth gives no value")]

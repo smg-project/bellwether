@@ -156,6 +156,11 @@ def _cast(properties: dict) -> dict:
 
 
 OMIT = object()
+NOT_STRINGS = "carries a value that is not a string, which the category's checker refuses (#26)"
+
+
+class Unanswerable(ValueError):
+    """A BFCL ground truth that no call can satisfy under BFCL's own checker."""
 
 
 def pick(options: list):
@@ -205,16 +210,32 @@ def string_valued(answer: dict) -> bool:
     return True
 
 
-def message_for(answer: dict) -> dict:
-    """The assistant message a parser must return for one BFCL ground truth: one call per entry, in order."""
+def message_for(answer: dict, functions: list[dict]) -> dict:
+    """The assistant message a parser must return for one BFCL ground truth: one call per entry, in order.
+
+    Each call is held to the rules BFCL's checker applies to it: a parameter its function does not declare is left
+    out when the ground truth lets it be omitted, and a ground truth that leaves a required parameter without a value,
+    or insists on one the function lacks, raises ``Unanswerable``: no call from it would pass.
+    """
+    declared = {function["name"]: function["parameters"] for function in functions}
     calls = []
     for entry in answer["ground_truth"]:
         ((name, params),) = entry.items()
+        if name not in declared:
+            raise Unanswerable(f"the ground truth calls {name}, which the row does not define")
+        properties = declared[name].get("properties", {})
         arguments = {}
         for param, options in params.items():
+            if param not in properties:
+                if "" in options:
+                    continue
+                raise Unanswerable(f"{name} has no parameter {param!r}, which the ground truth requires")
             value = pick(options)
             if value is not OMIT:
                 arguments[param] = value
+        missing = [param for param in declared[name].get("required", []) if param not in arguments]
+        if missing:
+            raise Unanswerable(f"{name} requires {', '.join(missing)}, which the ground truth gives no value")
         call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
         calls.append({"type": "function", "function": call})
     return {"content": "", "tool_calls": calls}
@@ -269,10 +290,16 @@ def origin(category: str, row_id: str, answered: bool = False) -> dict:
     return {**found, "row": row_id, "license": LICENSE}
 
 
-def build_sets(wheel: zipfile.ZipFile, categories: tuple[str, ...] | None = None) -> dict[tuple[str, str], list[dict]]:
+def build_sets(
+    wheel: zipfile.ZipFile,
+    categories: tuple[str, ...] | None = None,
+    skipped: list[tuple[str, str]] | None = None,
+) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
 
-    A Java or JavaScript row gets its parse case only when every value it carries is a string (``string_valued``).
+    A Java or JavaScript row gets its parse case only when every value it carries is a string (``string_valued``), and
+    a row whose ground truth no call satisfies gets none (``Unanswerable``); each such row is appended to ``skipped``
+    with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}
@@ -288,10 +315,21 @@ def build_sets(wheel: zipfile.ZipFile, categories: tuple[str, ...] | None = None
             notes = f"BFCL {category} {row['id']}"
             render.append({"name": name, "request": request, "notes": notes, "origin": origin(category, row["id"])})
             answer = answers.get(row["id"])
-            if answer is not None and (language(category) == "python" or string_valued(answer)):
-                message = message_for(answer)
+            if answer is None:
+                continue
+            if language(category) != "python" and not string_valued(answer):
+                why = NOT_STRINGS
+            else:
+                try:
+                    message = message_for(answer, row["function"])
+                    why = None
+                except Unanswerable as err:
+                    why = str(err)
+            if why is None:
                 line = {"name": name, "request": request, "message": message, "notes": notes}
                 parse.append({**line, "origin": origin(category, row["id"], answered=True)})
+            elif skipped is not None:
+                skipped.append((row["id"], why))
         sets[("render", set_name(category))] = render
         if parse:
             sets[("parse", set_name(category))] = parse
@@ -353,9 +391,10 @@ def check_license(wheel: zipfile.ZipFile) -> None:
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
+    skipped: list[tuple[str, str]] = []
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:
         check_license(wheel)
-        sets = build_sets(wheel)
+        sets = build_sets(wheel, skipped=skipped)
     if args.check:
         problems = check_sets(sets, args.corpus)
         for problem in problems:
@@ -365,10 +404,11 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     for (kind, name), lines in sorted(sets.items()):
         print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
-    for category in CATEGORIES:
-        if language(category) != "python" and ("render", set_name(category)) in sets:
-            render = len(sets[("render", set_name(category))])
-            parse = len(sets.get(("parse", set_name(category)), []))
-            print(f"{set_name(category)}: {render - parse} rows carry a value that is not a string; render only (#26)")
+    rows_by_reason: dict[str, list[str]] = {}
+    for row_id, why in skipped:
+        rows_by_reason.setdefault(why, []).append(row_id)
+    for why, row_ids in rows_by_reason.items():
+        shown = ", ".join(row_ids[:3]) + (", ..." if len(row_ids) > 3 else "")
+        print(f"no parse case for {len(row_ids)} row(s) ({shown}): {why}")
     write_sets(sets, args.corpus)
     return 0
