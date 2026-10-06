@@ -58,9 +58,10 @@ CONFIGS = {
         "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
     ),
 }
-# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. All rows would make 80.6 MB of plain JSON
-# Lines, past the 50 MB one source's sets may take (corpus_sets.LIMIT, which write enforces); every second row makes
-# 43.6 MB. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
+# The rows taken: every STRIDE-th row of each file, from its FIRST_ROW. This sample is for now: every row makes 80.6 MB
+# of plain JSON Lines, past the 50 MB one source's sets may take as plain JSON Lines (corpus_sets.LIMIT, which write
+# enforces), and every second row makes 43.6 MB. Once a source past that is stored as zstd in Git LFS, every row is
+# taken. func_calling's rows begin as func_calling_singleturn's rows of the same index (the first three turns are
 # equal in 1883 of 1893 rows), so it takes the odd rows where the others take the even ones, and none of its cases
 # repeats one of func_calling_singleturn's.
 STRIDE = 2

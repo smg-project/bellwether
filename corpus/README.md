@@ -62,7 +62,7 @@ together.
 | GSM8K | `gsm8k-train` and `gsm8k-test`: 7473 and 1319 render cases, one per row; `gsm8k-<split>-reasoning-content` and `gsm8k-<split>-content`: the same rows as parse cases, one set per message shape (no row of the pinned files is left out: every row is usable, and no case repeats an earlier one; all 17584 messages are distinct) | `github:openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c`; sha256 `17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465` (`grade_school_math/data/train.jsonl`), `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` (`grade_school_math/data/test.jsonl`), `86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b` (`LICENSE`) | MIT, checked against the LICENSE file's sha256 on every import and copied to `corpus/licenses/gsm8k-LICENSE` | Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 | Shapes (BFCL and GSM8K) | `shapes-<shape>` for six message shapes, `reasoning`, `content`, `reasoning-content`, `reasoning-calls`, `content-calls` and `reasoning-content-calls`: 1000 parse cases each, all distinct, with 6000 distinct messages among them, the same 1000 pairs of a BFCL parse case and a GSM8K test row in every set | BFCL's and GSM8K's pins above: the wheel, and `grade_school_math/data/test.jsonl` with `LICENSE` | Apache-2.0 for the BFCL part of each case and MIT for the GSM8K part, each checked by its importer's check on every import; the GSM8K notice is the copy in `corpus/licenses/gsm8k-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla; Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 | MGSM | `mgsm-<lang>` for 10 of its 11 languages (bn, de, es, fr, ja, ru, sw, te, th, zh): 250 render cases each, 2500 in all, one per row, and none for English (below); `mgsm-<lang>-content` for all 11: the same rows as parse cases, the final answer alone as content, 2750 cases holding 134 distinct messages; `mgsm-exemplars`: 88 parse cases, the 8 worked exemplars of each language (no row or exemplar of the pinned files is left out, and no case repeats an earlier one) | `github:google-research/url-nlp@3622039cf51f7eeffa58b957332a8e8c337981d7`, directory `mgsm/`; the sha256 of each file is listed below | CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/), checked against the LICENSE file's sha256 and first line on every import and copied to `corpus/licenses/mgsm-LICENSE`; the GSM8K problems it translates are MIT (below) | MGSM, Shi et al. 2022, Google Research: https://github.com/google-research/url-nlp |
-| Hermes | `hermes-func-calling-singleturn`, `hermes-func-calling` and `hermes-glaive-func-calling`, from the dataset's three function-calling configs, every second row by index: the odd rows of `func_calling`, whose rows begin as `func_calling_singleturn`'s, and the even rows of the others (all rows would make 80.6 MB, past the 50 MB a source's corpus may hold here; these make 43.6 MB): 7123 render cases, one per user turn an assistant turn answers; 10905 parse cases, one per assistant turn; every case distinct. 922 of the 4498 rows taken give no case, and 15 cases that repeat an earlier one are left out (the import names both) | `hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d28cfbcf4b915c04ea1e072030529b4bda`, each file's sha256 in the importer; the License copy from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84` (`content/licenses/LICENSE-2.0.txt`), sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` | Apache-2.0, checked in the dataset card's YAML front matter on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt) to `corpus/licenses/hermes-LICENSE`, which `--check` checks | Hermes Function-Calling V1, NousResearch; synthetic data led by @interstellarninja with @NousResearch, @teknium, @THEODOROS and others, and Glaive AI's Glaive Function Calling 5k, updated and cleaned: https://huggingface.co/datasets/NousResearch/hermes-function-calling-v1 |
+| Hermes | `hermes-func-calling-singleturn`, `hermes-func-calling` and `hermes-glaive-func-calling`, from the dataset's three function-calling configs, every second row by index: the odd rows of `func_calling`, whose rows begin as `func_calling_singleturn`'s, and the even rows of the others (all rows would make 80.6 MB, past the 50 MB a source's corpus may hold here; these make 43.6 MB): 7123 render cases, one per user turn an assistant turn answers; 10905 parse cases, one per assistant turn; every case distinct, though the 9426 parse cases of `hermes-glaive-func-calling` expect 4883 distinct messages. 922 of the 4498 rows taken give no case, and 15 cases that repeat an earlier one are left out (the import names both) | `hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d28cfbcf4b915c04ea1e072030529b4bda`, each file's sha256 in the importer; the License copy from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84` (`content/licenses/LICENSE-2.0.txt`), sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` | Apache-2.0, checked in the dataset card's YAML front matter on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt) to `corpus/licenses/hermes-LICENSE`, which `--check` checks | Hermes Function-Calling V1, NousResearch; synthetic data led by @interstellarninja with @NousResearch, @teknium, @THEODOROS and others, and Glaive AI's Glaive Function Calling 5k, updated and cleaned: https://huggingface.co/datasets/NousResearch/hermes-function-calling-v1 |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -215,17 +215,20 @@ MGSM's files at `3622039c`, by sha256:
 - `mgsm/mgsm_th.tsv`: `f3932dc5ad8e9d0ea82b017adc1e1461dd647af861e7166d6741986602a0cfd6`
 - `mgsm/mgsm_zh.tsv`: `b2fa63151022370a0de1f4211c8c284eae74b0f5a3b003b1d5982c0d4a73f661`
 
-A Hermes case is a conversation from the dataset, up to one of its turns, as OpenAI chat messages. The request's
-`tools` are the row's `tools` field. The system turn loses the Hermes tool prompt, the instructions and `<tools>` list
-Hermes renders from those same tools, since the checkpoint's template renders its own; nothing else is in it in any row
-with tools, so those requests have no system message, and the rows without tools (865 in `glaive_func_calling`) keep
-theirs. A user turn is a user message. An assistant turn's prose is its `content` (empty in a turn of calls), and each
-`<tool_call>` block is one call, its arguments as JSON with raw Unicode. A parse case expects the calls without ids;
-in the history each call has the id `call_<n>`, numbered across the conversation, which the dataset does not have, so
-a case whose request holds a call has `"written": ["tool call ids"]` in its `origin`. Each `<tool_response>` block is
-a tool message answering the call in the same position, its content the block's JSON. A render case ends at each user turn an assistant turn answers;
-a parse case is each assistant turn, its request every message before it. `origin` names the row by its index (`row`)
-and the dataset's id (`row_id`), and the turn the case ends at (`turn`).
+A Hermes case is a conversation from the dataset, up to one of its turns, as OpenAI chat messages. The request's `tools`
+are the row's `tools` field. The system turn loses the Hermes tool prompt, the instructions and `<tools>` list Hermes
+renders from those same tools, since the checkpoint's template renders its own; nothing else is in it in any row with
+tools, so those requests have no system message, and the rows without tools (865 in `glaive_func_calling`) keep theirs.
+A user turn is a user message. An assistant turn's prose is its `content` (empty in a turn of calls), and each
+`<tool_call>` block is one call. A parse case expects the calls without ids; in the history each call has the id
+`call_<n>`, numbered across the conversation, which the dataset does not have, so a case whose request holds a call has
+`"written": ["tool call ids"]` in its `origin`. Each `<tool_response>` block is a tool message answering the call in the
+same position. A call's arguments and a tool message's content are the block's JSON written again with raw Unicode, as
+`docs/benchmark-sets.md` has BFCL's arguments written; the dataset writes its JSON with every character past ASCII
+escaped, so the two differ where such a character occurs (40 of the 5409 arguments and 82 of the 4281 tool results
+taken) and are the same bytes elsewhere. A render case ends at each user turn an assistant turn answers; a parse case is
+each assistant turn, its request every message before it. `origin` names the row by its index (`row`) and the dataset's
+id (`row_id`), and the turn the case ends at (`turn`).
 
 A Hermes row with no faithful OpenAI form gives no case: calls that are not JSON, or a tool list in the system prompt
 that the `tools` field lacks (between them, every structured-extraction row of both `func_calling` files), a response
@@ -233,9 +236,12 @@ without a call, a call without a response, a call to a function the row does not
 function, or two tools under one name (44 `glaive_func_calling` rows taken, 42 of them with two different
 definitions: a call to that name could be held to either).
 `func_calling`'s rows begin as `func_calling_singleturn`'s rows of the same index, so `hermes-func-calling` takes the
-odd rows where the others take the even ones. A case whose request (and, for a parse case, message) repeats an
-earlier Hermes case is left out and named with the case it repeats: 15 at this pin, from `glaive_func_calling` rows
-that open with the same turns. Every Hermes case is distinct.
+odd rows where the others take the even ones. A case whose request (and, for a parse case, message) repeats an earlier
+Hermes case is left out and named with the case it repeats: 15 at this pin, from `glaive_func_calling` rows that open
+with the same turns. Every Hermes case is distinct, though not every expected message: `glaive_func_calling` pairs one
+chat with several tool lists, and cases that differ only by their tools stay, so the 9426 parse cases of
+`hermes-glaive-func-calling` expect 4883 distinct messages. In the other two parse sets each case expects a message of
+its own.
 
 Set names starting with `bfcl-`, `gsm8k-`, `hermes-`, `mgsm-` or `shapes-` belong to that importer: `bellwether
 import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import gsm8k` any
