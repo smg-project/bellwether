@@ -7,15 +7,21 @@ test turns those into statuses (``tests/test_network.py`` proves the refusal).
 A test marked ``loopback`` may reach a server it runs itself on this machine: it may connect to
 127.0.0.1 and ::1, written as numbers, and resolve those two. Every other address and every name,
 ``localhost`` included, stay refused for it too.
+
+A test that needs a checkpoint takes ``tiny_model``: a tokenizer and a chat template saved as a checkpoint ships
+them.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import json
+import pathlib
 import socket
 from collections.abc import Callable
 
 import pytest
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
 LOOPBACK = (ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1"))
 
@@ -65,3 +71,46 @@ def no_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) 
         socket, "create_connection", guard(socket.create_connection, lambda address, *a, **k: host_of(address))
     )
     monkeypatch.setattr(socket, "getaddrinfo", guard(socket.getaddrinfo, lambda host, *a, **k: host))
+
+
+# A ChatML-shaped template with a thinking switch, enough to see every request field arrive.
+TEMPLATE = (
+    "{%- if tools %}{{ '<|im_start|>system\\n' + (tools | tojson) + '<|im_end|>\\n' }}{%- endif %}"
+    "{%- for m in messages %}"
+    "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' }}"
+    "{%- if m['reasoning_content'] %}{{ '<think>\\n' + m['reasoning_content'] + '\\n</think>\\n\\n' }}{%- endif %}"
+    "{{ m['content'] or '' }}"
+    "{%- for c in (m['tool_calls'] or []) %}"
+    "{{ '\\n<tool_call>\\n' + (c['function'] | tojson) + '\\n</tool_call>' }}{%- endfor %}"
+    "{{ '<|im_end|>\\n' }}"
+    "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
+    "{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}"
+    "{%- if enable_thinking is defined and not enable_thinking %}{{ '<think>\\n\\n</think>\\n\\n' }}{%- endif %}"
+    "{%- endif %}"
+)
+
+
+@pytest.fixture(scope="session")
+def tiny_model(tmp_path_factory) -> pathlib.Path:
+    """A byte-level BPE tokenizer trained on a few sentences, saved the way a checkpoint ships one."""
+    directory = tmp_path_factory.mktemp("tiny-chat")
+    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tokenizer.decoder = decoders.ByteLevel()
+    trainer = trainers.BpeTrainer(
+        vocab_size=400,
+        special_tokens=["<unk>", "<|im_start|>", "<|im_end|>", "<think>", "</think>"],
+        initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
+    )
+    sentences = ["system user assistant What is the capital of France? Paris. The quick brown fox"] * 4
+    tokenizer.train_from_iterator(sentences, trainer)
+    tokenizer.save(str(directory / "tokenizer.json"))
+    config = {
+        "tokenizer_class": "PreTrainedTokenizerFast",
+        "chat_template": TEMPLATE,
+        "unk_token": "<unk>",
+        "eos_token": "<|im_end|>",
+    }
+    (directory / "tokenizer_config.json").write_text(json.dumps(config))
+    return directory

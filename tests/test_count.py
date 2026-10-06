@@ -7,6 +7,8 @@ from bellwether import storage
 from bellwether.cli import main
 from bellwether.count import counts, set_sources
 
+REVISION = "0123456789abcdef0123456789abcdef01234567"
+
 
 def write_lines(path, lines):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -16,7 +18,7 @@ def write_lines(path, lines):
 def test_count_groups_fixture_cases_by_model_kind_and_source(tmp_path, capsys):
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     (fixtures / "m1").mkdir(parents=True)
-    (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+    (fixtures / "m1" / "manifest.toml").write_text(f'model = "org/M1"\nrevision = "{REVISION}"\n')
     table = 'form = "{}"\ncases = {}\nrejected = 0\nplain_bytes = 1\nplain_sha256 = "x"\n'
     (fixtures / "m1" / "sets.toml").write_text(
         "[render.common]\n"
@@ -53,7 +55,7 @@ def test_count_groups_fixture_cases_by_model_kind_and_source(tmp_path, capsys):
 def test_count_finds_the_source_of_a_compressed_corpus_set(tmp_path):
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     (fixtures / "m1").mkdir(parents=True)
-    (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+    (fixtures / "m1" / "manifest.toml").write_text(f'model = "org/M1"\nrevision = "{REVISION}"\n')
     table = 'form = "zstd"\ncases = 2\nrejected = 0\nplain_bytes = 1\nplain_sha256 = "x"\n'
     (fixtures / "m1" / "sets.toml").write_text("[render.big-x]\n" + table)
     lines = [{"name": f"big-x-{n}", "request": {"messages": []}, "origin": {"dataset": "big"}} for n in range(2)]

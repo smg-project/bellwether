@@ -8,6 +8,7 @@ The fake listens on 127.0.0.1, so every test here is marked ``loopback`` (``test
 connect to that address and to no other.
 """
 
+import hashlib
 import json
 import re
 import socket
@@ -158,10 +159,15 @@ def gateway(tmp_path):
     fake.server.server_close()
 
 
+def revision_of(slug: str) -> str:
+    """A commit hash for the manifest of ``slug``, which pins a revision; each slug has its own."""
+    return hashlib.sha1(slug.encode()).hexdigest()
+
+
 def write_model(fixtures, slug: str, model: str, cases: dict[str, tuple[dict, list[int], str]]) -> dict[str, dict]:
     """A manifest and one render set; ``cases`` maps a case name to its request and reference ids and text."""
     (fixtures / slug).mkdir(parents=True)
-    (fixtures / slug / "manifest.toml").write_text(f'model = "{model}"\nrevision = "rev-{slug}"\n')
+    (fixtures / slug / "manifest.toml").write_text(f'model = "{model}"\nrevision = "{revision_of(slug)}"\n')
     lines = {}
     for name, (request, ids, text) in cases.items():
         case_id = f"{slug}/render/{name}"
@@ -657,8 +663,8 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
     assert provenance["capture"] == str(gateway.capture)
     assert provenance["known"] == str(known)
     assert provenance["manifests"] == [
-        {"model": "org/M1", "revision": "rev-m1", "path": str(fixtures / "m1" / "manifest.toml")},
-        {"model": "org/M2", "revision": "rev-m2", "path": str(fixtures / "m2" / "manifest.toml")},
+        {"model": "org/M1", "revision": revision_of("m1"), "path": str(fixtures / "m1" / "manifest.toml")},
+        {"model": "org/M2", "revision": revision_of("m2"), "path": str(fixtures / "m2" / "manifest.toml")},
     ]
     assert written["summary"] == {
         "cases": 5,
@@ -770,7 +776,7 @@ def test_a_model_without_render_cases_is_named_in_the_report(tmp_path, gateway, 
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
     gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
     (fixtures / "m3").mkdir()
-    (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3"\nrevision = "r"\n')
+    (fixtures / "m3" / "manifest.toml").write_text(f'model = "org/M3"\nrevision = "{revision_of("m3")}"\n')
 
     assert verify(gateway, fixtures, "--report", str(report)) == 0
 
@@ -806,7 +812,7 @@ def test_memory_does_not_grow_with_the_number_of_cases(tmp_path, gateway):
     for n in (20, 100, 400):  # the first run takes what a process allocates once
         fixtures, out = tmp_path / f"fixtures-{n}", tmp_path / f"out-{n}"
         (fixtures / "m1").mkdir(parents=True)
-        (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+        (fixtures / "m1" / "manifest.toml").write_text(f'model = "org/M1"\nrevision = "{revision_of("m1")}"\n')
         cases = {}
         for i in range(n):
             ids, text = prompt(i)
@@ -932,7 +938,7 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
     fixtures, report = tmp_path / "fixtures", tmp_path / "report.json"
     gateway.serve(write_model(fixtures, "m1", "org/M1", CASES))
     (fixtures / "m3").mkdir()
-    (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3"\nrevision = "r"\n')
+    (fixtures / "m3" / "manifest.toml").write_text(f'model = "org/M3"\nrevision = "{revision_of("m3")}"\n')
     url, capture, extra = gateway.url, gateway.capture, []
     if problem == "chunk plans":
         extra, message = ["--chunk-plan", "whole"], "--chunk-plan"
@@ -981,7 +987,7 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
     elif problem in ("no render cases anywhere", "only empty sets"):
         fixtures = tmp_path / "other"
         (fixtures / "m1" / "render").mkdir(parents=True)
-        (fixtures / "m1" / "manifest.toml").write_text('model = "org/M1"\nrevision = "r"\n')
+        (fixtures / "m1" / "manifest.toml").write_text(f'model = "org/M1"\nrevision = "{revision_of("m1")}"\n')
         if problem == "only empty sets":
             (fixtures / "m1" / "render" / "common.jsonl").write_text("")
         message = f"no render fixtures under {fixtures} for org/M1"

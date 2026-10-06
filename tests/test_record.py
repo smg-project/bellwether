@@ -10,7 +10,8 @@ import subprocess
 import huggingface_hub.constants
 import pytest
 import zstandard
-from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
+from conftest import TEMPLATE
+from tokenizers import Tokenizer, decoders, normalizers, processors
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
@@ -26,67 +27,37 @@ from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# A ChatML-shaped template with a thinking switch, enough to see every request field arrive.
-TEMPLATE = (
-    "{%- if tools %}{{ '<|im_start|>system\\n' + (tools | tojson) + '<|im_end|>\\n' }}{%- endif %}"
-    "{%- for m in messages %}"
-    "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' }}"
-    "{%- if m['reasoning_content'] %}{{ '<think>\\n' + m['reasoning_content'] + '\\n</think>\\n\\n' }}{%- endif %}"
-    "{{ m['content'] or '' }}"
-    "{%- for c in (m['tool_calls'] or []) %}"
-    "{{ '\\n<tool_call>\\n' + (c['function'] | tojson) + '\\n</tool_call>' }}{%- endfor %}"
-    "{{ '<|im_end|>\\n' }}"
-    "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
-    "{%- endfor %}"
-    "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}"
-    "{%- if enable_thinking is defined and not enable_thinking %}{{ '<think>\\n\\n</think>\\n\\n' }}{%- endif %}"
-    "{%- endif %}"
-)
-
-
-@pytest.fixture(scope="session")
-def tiny_model(tmp_path_factory) -> pathlib.Path:
-    """A byte-level BPE tokenizer trained on a few sentences, saved the way a checkpoint ships one."""
-    directory = tmp_path_factory.mktemp("tiny-chat")
-    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
-    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-    tokenizer.decoder = decoders.ByteLevel()
-    trainer = trainers.BpeTrainer(
-        vocab_size=400,
-        special_tokens=["<unk>", "<|im_start|>", "<|im_end|>", "<think>", "</think>"],
-        initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
-    )
-    sentences = ["system user assistant What is the capital of France? Paris. The quick brown fox"] * 4
-    tokenizer.train_from_iterator(sentences, trainer)
-    tokenizer.save(str(directory / "tokenizer.json"))
-    config = {
-        "tokenizer_class": "PreTrainedTokenizerFast",
-        "chat_template": TEMPLATE,
-        "unk_token": "<unk>",
-        "eos_token": "<|im_end|>",
-    }
-    (directory / "tokenizer_config.json").write_text(json.dumps(config))
-    return directory
-
 
 def write_jsonl(path: pathlib.Path, lines: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
 
 
-def write_manifest(fixtures: pathlib.Path, slug: str, model: str) -> pathlib.Path:
+# A Hub id is pinned to a commit. The tiny model is a directory, which has no commits: its revision is "local".
+HUB_REVISION = "b968826d9c46dd6066d109eabc6255188de91218"
+
+
+def write_manifest(
+    fixtures: pathlib.Path,
+    slug: str,
+    model: str,
+    *,
+    revision: str | None = None,
+    inputs: dict[str, str] | None = None,
+    tier: int | str | None = None,
+    group: str | None = None,
+) -> pathlib.Path:
+    """A manifest as a person would write it; ``tier`` may be given as raw TOML text, to write a wrong type."""
     path = fixtures / slug / "manifest.toml"
     path.parent.mkdir(parents=True)
-    lines = [
-        f'model = "{model}"',
-        'revision = "local"',
-        "",
-        "[authority]",
-        'render = ["hf-template"]',
-        "",
-        "[smg]",
-        'tool_parser = "qwen"',
-    ]
+    if revision is None:
+        revision = "local" if pathlib.Path(model).is_absolute() else HUB_REVISION
+    lines = [f'model = "{model}"', f'revision = "{revision}"']
+    lines += [f"tier = {tier}"] if tier is not None else []
+    lines += [f'group = "{group}"'] if group is not None else []
+    lines += ["", "[authority]", 'render = ["hf-template"]', "", "[smg]", 'tool_parser = "qwen"']
+    if inputs is not None:
+        lines += ["", "[inputs]", *(f'"{name}" = "{digest}"' for name, digest in inputs.items())]
     path.write_text("\n".join(lines) + "\n")
     return path
 
@@ -98,9 +69,53 @@ def user(text: str) -> dict:
 def test_manifest_reads_model_revision_authority_and_names(tmp_path):
     path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat")
     manifest = load_manifest(path)
-    assert (manifest.slug, manifest.model, manifest.revision) == ("tiny-chat", "acme/Tiny-Chat", "local")
+    assert (manifest.slug, manifest.model, manifest.revision) == ("tiny-chat", "acme/Tiny-Chat", HUB_REVISION)
     assert manifest.authority == {"render": ["hf-template"]}
     assert manifest.smg == {"tool_parser": "qwen"}
+
+
+@pytest.mark.parametrize("revision", ["main", "v1.0", "b968826d", HUB_REVISION.upper(), "local"])
+def test_manifest_refuses_a_revision_that_is_not_a_commit_hash(tmp_path, revision):
+    path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat", revision=revision)
+    with pytest.raises(ValueError, match=re.escape(f"{path}: revision {revision!r} is not a commit")):
+        load_manifest(path)
+
+
+def test_manifest_takes_a_commit_hash_and_local_only_for_a_checkpoint_directory(tmp_path, tiny_model):
+    hub = write_manifest(tmp_path / "hub", "tiny-chat", "acme/Tiny-Chat", revision=HUB_REVISION)
+    assert load_manifest(hub).revision == HUB_REVISION
+    local = write_manifest(tmp_path / "local", "tiny-chat", str(tiny_model), revision="local")
+    assert load_manifest(local).revision == "local"
+
+
+def test_manifest_reads_the_oracle_inputs_group_and_tier(tmp_path):
+    inputs = {"tokenizer.json": "a" * 64, "tokenizer_config.json": "b" * 64}
+    path = write_manifest(tmp_path, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, tier=2, group="tiny-chat")
+    manifest = load_manifest(path)
+    assert (manifest.inputs, manifest.group, manifest.tier) == (inputs, "tiny-chat", 2)
+
+
+def test_a_manifest_from_before_groups_loads_without_inputs_group_or_tier(tmp_path):
+    manifest = load_manifest(write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat"))
+    assert (manifest.inputs, manifest.group, manifest.tier) == ({}, None, None)
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"tier": 4}, "`tier` must be 1, 2 or 3"),
+        ({"tier": '"1"'}, "`tier` must be 1, 2 or 3"),
+        ({"tier": "true"}, "`tier` must be 1, 2 or 3"),
+        ({"group": "Tiny Chat"}, "`group` must be the slug of its group's primary"),
+        ({"group": "tiny-chat"}, "`group` names this manifest's own directory; a group's primary has no `group`"),
+        ({"inputs": {"tokenizer.json": "abc"}}, "[inputs] must give each file's sha256"),
+        ({"inputs": {"tokenizer.json": "A" * 64}}, "[inputs] must give each file's sha256"),
+    ],
+)
+def test_manifest_rejects_a_malformed_tier_group_or_inputs(tmp_path, fields, message):
+    path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat", **fields)
+    with pytest.raises(ValueError, match=re.escape(f"{path}: {message}")):
+        load_manifest(path)
 
 
 def test_manifest_rejects_an_unknown_kind_in_the_authority_order(tmp_path):
