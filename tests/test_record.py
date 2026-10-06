@@ -436,6 +436,26 @@ def test_corpus_rejects_a_message_that_is_not_an_object(tmp_path):
         read_cases(path)
 
 
+def test_corpus_keeps_the_origin_of_an_imported_case(tmp_path):
+    path = tmp_path / "set.jsonl"
+    origin = {"dataset": "bfcl", "row": "simple_python_0"}
+    write_jsonl(
+        path,
+        [
+            {"name": "a", "request": {"messages": []}, "origin": origin},
+            {"name": "b", "request": {"messages": []}},
+        ],
+    )
+    assert [case.origin for case in read_cases(path)] == [origin, None]
+
+
+def test_corpus_rejects_an_origin_that_is_not_an_object(tmp_path):
+    path = tmp_path / "set.jsonl"
+    write_jsonl(path, [{"name": "a", "request": {"messages": []}, "origin": "bfcl"}])
+    with pytest.raises(ValueError, match="`origin` must be an object"):
+        read_cases(path)
+
+
 def test_record_other_kinds_and_oracles_are_not_implemented(tmp_path, tiny_model, capsys):
     argv = ["record", "--model", str(tiny_model), "--kind", "render", "--oracle", "sglang", "--fixtures", str(tmp_path)]
     assert main(argv) == 2

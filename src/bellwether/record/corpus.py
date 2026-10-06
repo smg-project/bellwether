@@ -2,7 +2,8 @@
 
 ``corpus/<kind>/<set>.jsonl`` holds cases every model records; ``corpus/<kind>/<slug>/<set>.jsonl``
 adds cases for one model to the set of the same name. A line is ``{"name", "request", "notes"}``,
-plus ``"message"`` for a parse case: the assistant message the output must parse to. ``name`` is a
+plus ``"message"`` for a parse case (the assistant message the output must parse to) and ``"origin"``
+for an imported one (the dataset, file and row it came from). ``name`` is a
 lowercase slug that becomes the last part of the fixture id, so it is unique across every set of a
 kind.
 """
@@ -23,13 +24,14 @@ class Case:
     request: dict
     notes: str = ""
     message: dict | None = None
+    origin: dict | None = None
     source: Path | None = field(default=None, compare=False)
 
 
 def read_cases(path: Path) -> list[Case]:
     cases: list[Case] = []
     names: set[str] = set()
-    for number, raw in enumerate(path.read_text().splitlines(), start=1):
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip():
             continue
         try:
@@ -46,8 +48,11 @@ def read_cases(path: Path) -> list[Case]:
         message = data.get("message")
         if message is not None and not isinstance(message, dict):
             raise ValueError(f"{path}:{number}: `message` must be an object")
+        origin = data.get("origin")
+        if origin is not None and not isinstance(origin, dict):
+            raise ValueError(f"{path}:{number}: `origin` must be an object")
         names.add(name)
-        cases.append(Case(name, data["request"], str(data.get("notes", "")), message, path))
+        cases.append(Case(name, data["request"], str(data.get("notes", "")), message, origin, path))
     return cases
 
 
