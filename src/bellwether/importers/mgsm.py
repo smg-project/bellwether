@@ -1,18 +1,20 @@
-"""MGSM's grade school math problems in eleven languages as corpus sets: per language, a parse set of the answer and,
-except for English, a render set; and a parse set of the worked exemplars.
+"""MGSM's grade school math problems in eleven languages as corpus sets: per language, a parse set of the final answer
+and, except for English, a render set; and a parse set of the worked exemplars.
 
 The data is Google Research's url-nlp repository at a pinned commit, directory ``mgsm/``: GSM8K's first 250 test
-problems, translated, as one ``mgsm_<lang>.tsv`` per language (no header, one ``question<TAB>answer`` line per
-problem), and ``exemplars.py``, the eight worked exemplars per language as Python source. Each file is fetched by its
-path at the commit and checked against its sha256. This module, like the fetcher and the set writer it uses, imports
-nothing beyond the standard library.
+problems, translated, as one ``mgsm_<lang>.tsv`` per language (no header, one ``question<TAB>final answer`` line per
+problem), and ``exemplars.py``, the eight worked exemplars per language as Python source.
+
+The terms mean what they mean in the GSM8K importer: an exemplar's answer (``a`` in exemplars.py) is its worked
+solution, then a final sentence; a final answer is the integer a problem ends in, which a language's file gives per row
+and ``EXEMPLAR_NUMBER_ANSWERS`` per exemplar. Each file is fetched by its path at the commit and checked against its
+sha256. This module, like the fetcher and the set writer it uses, imports nothing beyond the standard library.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -35,7 +37,7 @@ EXEMPLARS_SHA256 = "239dda1557bb2ba76b71e5ef744ddd0b454da0b453e5f8b909498ceff690
 CONTENT = "content"
 # The languages that get no render set. MGSM's English file holds GSM8K's first 250 test questions verbatim, so each
 # English render case would send what a gsm8k-test case sends, byte for byte. Its content set stays: no GSM8K parse
-# case holds the answer alone as its message.
+# case holds a final answer alone as its message.
 RENDERED_BY_GSM8K = ("en",)
 EXEMPLAR_SET = "mgsm-exemplars"
 # Each language's file, by the sha256 of its bytes, in the order the sets are built.
@@ -53,13 +55,13 @@ SHA256 = {
     "zh": "b2fa63151022370a0de1f4211c8c284eae74b0f5a3b003b1d5982c0d4a73f661",
 }
 
-# An integer in ASCII digits, its thousands grouped by commas or not: four of the 250 answers are "2,125", "114,200",
-# "276,000" and "5,600" in every language, as GSM8K writes them.
+# An integer in ASCII digits, its thousands grouped by commas or not: four of the 250 final answers are "2,125",
+# "114,200", "276,000" and "5,600" in every language, as GSM8K writes them.
 INTEGER = re.compile(r"-?([0-9]{1,3}(,[0-9]{3})+|[0-9]+)")
 
-# How exemplars.py writes each language's exemplars: the label before the question, the label before the worked
-# answer, and the words that open the answer's final sentence, which states the exemplar's number.
-FORMS = {
+# How exemplars.py words each language's exemplars: the label before the question, the label before the answer, and
+# the opening words of the answer's final sentence, the sentence that states the exemplar's final answer.
+WORDING = {
     "bn": ("প্রশ্ন: ", "ধাপে ধাপে উত্তর: ", "উত্তর হল "),
     "de": ("Frage: ", "Schritt-für-Schritt-Antwort: ", "Die Antwort "),
     "en": ("Question: ", "Step-by-Step Answer: ", "The answer is "),
@@ -79,17 +81,14 @@ class Unusable(ValueError):
 
 
 def check_license(text: bytes) -> None:
-    """Refuse a LICENSE file other than the one this importer was reviewed for.
+    """Refuse a LICENSE file that is not the CC-BY-4.0 license.
 
-    The sha256 pins the reviewed text. Its first line, the license's title, is checked as well, so that moving the pins
-    to another commit whose license is no longer CC-BY-4.0 cannot pass on an updated hash alone.
+    ``fetch`` has already held the file to ``LICENSE_SHA256``, the reviewed text. Its first line, the license's title,
+    is checked as well, so that moving the pins to another commit whose license is no longer CC-BY-4.0 cannot pass on
+    an updated hash alone.
     """
-    where = f"{LICENSE_FILE} at {COMMIT}"
     if text.decode("utf-8").split("\n", 1)[0] != LICENSE_TITLE:
-        raise ValueError(f"{where}: not the CC-BY-4.0 license; review it before importing")
-    digest = hashlib.sha256(text).hexdigest()
-    if digest != LICENSE_SHA256:
-        raise ValueError(f"{where}: sha256 {digest} is not the reviewed {LICENSE_SHA256}; review it before importing")
+        raise ValueError(f"{LICENSE_FILE} at {COMMIT}: not the CC-BY-4.0 license; review it before importing")
 
 
 def read_rows(data: bytes) -> list[tuple[int, list[str]]]:
@@ -103,19 +102,19 @@ def read_rows(data: bytes) -> list[tuple[int, list[str]]]:
     return [(index, line.split("\t")) for index, line in enumerate(lines) if line]
 
 
-def question_and_answer(fields: list[str]) -> tuple[str, str]:
-    """A row's question and answer, as written; ``Unusable`` unless the row is ``question<TAB>answer``.
+def question_and_final_answer(fields: list[str]) -> tuple[str, str]:
+    """A row's question and final answer, as written; ``Unusable`` unless the row is ``question<TAB>final answer``.
 
-    The question must not be empty and the answer must be an integer, which is kept with any commas it is written with.
+    The question must not be empty, and the final answer must be an integer, kept with any commas it is written with.
     """
     if len(fields) != 2:
-        raise Unusable(f"the line holds {len(fields) - 1} tabs, not the one between the question and the answer")
-    question, answer = fields
+        raise Unusable(f"the line holds {len(fields) - 1} tabs, not the one between the question and the final answer")
+    question, final_answer = fields
     if not question.strip():
         raise Unusable("the question is empty")
-    if not INTEGER.fullmatch(answer):
-        raise Unusable(f"the answer {answer!r} is not an integer")
-    return question, answer
+    if not INTEGER.fullmatch(final_answer):
+        raise Unusable(f"the final answer {final_answer!r} is not an integer")
+    return question, final_answer
 
 
 def data_file(lang: str) -> str:
@@ -137,9 +136,9 @@ def language_sets(
     """Corpus lines per ``(kind, set name)`` from each language's file: a render set, except for a language in
     ``RENDERED_BY_GSM8K``, and a content parse set.
 
-    Each set has a line per row, in file order. The content case's message is the answer, as written, as ``content``:
-    the short output of a model that does not think. A row that cannot become a case is left out of every set of its
-    language, so that they hold the same rows, and is appended to ``skipped`` with its reason.
+    Each set has a line per row, in file order. The content case's message is the final answer, as written, as
+    ``content``: the short output of a model that does not think. A row that cannot become a case is left out of every
+    set of its language, so that they hold the same rows, and is appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     for lang, data in files.items():
@@ -149,7 +148,7 @@ def language_sets(
         contents = sets[("parse", set_name(lang, CONTENT))] = []
         for row, fields in read_rows(data):
             try:
-                question, answer = question_and_answer(fields)
+                question, final_answer = question_and_final_answer(fields)
             except Unusable as err:
                 if skipped is not None:
                     skipped.append((f"{lang} row {row}", str(err)))
@@ -158,7 +157,7 @@ def language_sets(
             tail = {"notes": f"MGSM {lang} row {row}", "origin": origin(data_file(lang), SHA256[lang], row)}
             render.append({"name": f"{set_name(lang)}-{row}", "request": request, **tail})
             name = f"{set_name(lang, CONTENT)}-{row}"
-            contents.append({"name": name, "request": request, "message": {"content": answer}, **tail})
+            contents.append({"name": name, "request": request, "message": {"content": final_answer}, **tail})
     return sets
 
 
@@ -178,16 +177,16 @@ def read_exemplars(data: bytes) -> tuple[dict[str, dict[str, dict[str, str]]], l
     return ast.literal_eval(values["MGSM_EXEMPLARS"]), ast.literal_eval(values["EXEMPLAR_NUMBER_ANSWERS"])
 
 
-def split_exemplar(lang: str, exemplar: dict[str, str], number: int) -> tuple[str, str, str]:
-    """An exemplar's question, worked solution and final sentence, by its language's form; ``Unusable`` off that form.
+def split_exemplar(lang: str, exemplar: dict[str, str], final_answer: int) -> tuple[str, str, str]:
+    """An exemplar's question, worked solution and final sentence, read by its language's wording; else ``Unusable``.
 
     The labels are dropped. The final sentence runs from the last place its opening words appear to the end of the
-    answer, as written, and must state ``number``. The solution is the text between the answer's label and the final
-    sentence, without the whitespace that separates them.
+    answer, as written, and must state ``final_answer``. The solution is the text between the answer's label and the
+    final sentence, without the whitespace that separates them.
     """
-    if lang not in FORMS:
-        raise Unusable(f"no form is known for the language {lang!r}")
-    question_label, answer_label, final_words = FORMS[lang]
+    if lang not in WORDING:
+        raise Unusable(f"no wording is known for the language {lang!r}")
+    question_label, answer_label, opening_words = WORDING[lang]
     if not (isinstance(exemplar, dict) and isinstance(exemplar.get("q"), str) and isinstance(exemplar.get("a"), str)):
         raise Unusable("the exemplar is not {'q': question, 'a': answer}")
     if not exemplar["q"].startswith(question_label):
@@ -198,35 +197,36 @@ def split_exemplar(lang: str, exemplar: dict[str, str], number: int) -> tuple[st
     if not exemplar["a"].startswith(answer_label):
         raise Unusable(f"the answer does not start with {answer_label!r}")
     body = exemplar["a"][len(answer_label) :]
-    at = body.rfind(final_words)
+    at = body.rfind(opening_words)
     if at < 0:
-        raise Unusable(f"the answer has no final sentence opening with {final_words!r}")
-    solution, final = body[:at].rstrip(), body[at:]
+        raise Unusable(f"the answer has no final sentence opening with {opening_words!r}")
+    solution, final_sentence = body[:at].rstrip(), body[at:]
     if not solution:
         raise Unusable("the answer has no worked solution before its final sentence")
-    stated = re.search(r"[0-9]+", final[len(final_words) :])
-    if stated is None or int(stated.group()) != number:
-        raise Unusable(f"the final sentence {final!r} does not state the exemplar's number {number}")
-    return question, solution, final
+    stated = re.search(r"[0-9]+", final_sentence[len(opening_words) :])
+    if stated is None or int(stated.group()) != final_answer:
+        why = f"does not state the exemplar's final answer {final_answer}"
+        raise Unusable(f"the final sentence {final_sentence!r} {why}")
+    return question, solution, final_sentence
 
 
 def exemplar_set(data: bytes, skipped: list[tuple[str, str]] | None = None) -> list[dict]:
     """The exemplars' parse cases, from exemplars.py: a line per exemplar, in the file's order.
 
     The request is the exemplar's question; the message is the output of a model that thinks, the worked solution as
-    ``reasoning_content`` and the final sentence as ``content``. An exemplar's number is the one
+    ``reasoning_content`` and the final sentence as ``content``. An exemplar's final answer is the one
     ``EXEMPLAR_NUMBER_ANSWERS`` gives its key: the first for ``"1"``. An exemplar that cannot become a case is left out
     and appended to ``skipped`` with its reason.
     """
-    exemplars, numbers = read_exemplars(data)
-    number_of = {str(index): number for index, number in enumerate(numbers, start=1)}
+    exemplars, final_answers = read_exemplars(data)
+    final_answer_of = {str(index): final_answer for index, final_answer in enumerate(final_answers, start=1)}
     lines = []
     for lang, items in exemplars.items():
         for key, exemplar in items.items():
             try:
-                if key not in number_of:
-                    raise Unusable(f"EXEMPLAR_NUMBER_ANSWERS has no number for the key {key!r}")
-                question, solution, final = split_exemplar(lang, exemplar, number_of[key])
+                if key not in final_answer_of:
+                    raise Unusable(f"EXEMPLAR_NUMBER_ANSWERS has no final answer for the key {key!r}")
+                question, solution, final_sentence = split_exemplar(lang, exemplar, final_answer_of[key])
             except Unusable as err:
                 if skipped is not None:
                     skipped.append((f"exemplar {lang} {key}", str(err)))
@@ -235,7 +235,7 @@ def exemplar_set(data: bytes, skipped: list[tuple[str, str]] | None = None) -> l
                 {
                     "name": f"{EXEMPLAR_SET}-{lang}-{key}",
                     "request": {"messages": [{"role": "user", "content": question}]},
-                    "message": {"reasoning_content": solution, "content": final},
+                    "message": {"reasoning_content": solution, "content": final_sentence},
                     "notes": f"MGSM {lang} exemplar {key}",
                     "origin": origin(EXEMPLARS_FILE, EXEMPLARS_SHA256, f"MGSM_EXEMPLARS[{lang!r}][{key!r}]"),
                 }

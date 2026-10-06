@@ -1,4 +1,3 @@
-import hashlib
 import re
 
 import pytest
@@ -7,33 +6,20 @@ from bellwether.cli import main
 from bellwether.importers import github, mgsm
 from bellwether.record.corpus import read_cases
 
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 CC_BY = (
     b"Creative Commons Attribution 4.0 International Public License (CC-BY)\n"
     b"\n   By exercising the Licensed Rights (defined below), You accept and agree\n"
 )
 
 
-def test_the_reviewed_license_passes(monkeypatch):
-    monkeypatch.setattr(mgsm, "LICENSE_SHA256", sha(CC_BY))
+def test_the_reviewed_license_passes():
     mgsm.check_license(CC_BY)
 
 
-def test_a_license_file_other_than_the_reviewed_one_is_refused(monkeypatch):
-    monkeypatch.setattr(mgsm, "LICENSE_SHA256", sha(CC_BY))
-    with pytest.raises(ValueError, match="is not the reviewed"):
-        mgsm.check_license(CC_BY + b"Additional terms apply.\n")
-
-
-def test_a_license_whose_first_line_is_not_cc_by_4_is_refused_even_when_its_hash_is_pinned(monkeypatch):
+def test_a_license_whose_first_line_is_not_cc_by_4_is_refused():
     share_alike = b"Creative Commons Attribution-ShareAlike 4.0 International Public License (CC-BY-SA)\n"
     title_later = b"MIT License\n\nCreative Commons Attribution 4.0 International Public License (CC-BY)\n"
     for other in [share_alike, title_later]:
-        monkeypatch.setattr(mgsm, "LICENSE_SHA256", sha(other))
         with pytest.raises(ValueError, match="not the CC-BY-4.0 license"):
             mgsm.check_license(other)
 
@@ -61,30 +47,30 @@ def test_lines_split_at_their_tabs_only_in_file_order_with_their_line_index():
 
 def test_a_line_that_is_not_a_question_a_tab_and_an_integer_is_unusable():
     for fields, why in [
-        (["How many?"], "the line holds 0 tabs, not the one between the question and the answer"),
-        (["How", "many?", "18"], "the line holds 2 tabs, not the one between the question and the answer"),
+        (["How many?"], "the line holds 0 tabs, not the one between the question and the final answer"),
+        (["How", "many?", "18"], "the line holds 2 tabs, not the one between the question and the final answer"),
         ([" ", "18"], "the question is empty"),
-        (["How many?", "18.5"], "the answer '18.5' is not an integer"),
-        (["How many?", "eighteen"], "the answer 'eighteen' is not an integer"),
-        (["How many?", " 18"], "the answer ' 18' is not an integer"),
-        (["How many?", "1_000"], "the answer '1_000' is not an integer"),
-        (["How many?", ""], "the answer '' is not an integer"),
+        (["How many?", "18.5"], "the final answer '18.5' is not an integer"),
+        (["How many?", "eighteen"], "the final answer 'eighteen' is not an integer"),
+        (["How many?", " 18"], "the final answer ' 18' is not an integer"),
+        (["How many?", "1_000"], "the final answer '1_000' is not an integer"),
+        (["How many?", ""], "the final answer '' is not an integer"),
     ]:
         with pytest.raises(mgsm.Unusable, match=re.escape(why)):
-            mgsm.question_and_answer(fields)
-    assert mgsm.question_and_answer(["Janet’s ducks lay 16 eggs. How many?", "18"]) == (
+            mgsm.question_and_final_answer(fields)
+    assert mgsm.question_and_final_answer(["Janet’s ducks lay 16 eggs. How many?", "18"]) == (
         "Janet’s ducks lay 16 eggs. How many?",
         "18",
     )
-    assert mgsm.question_and_answer(["How far below?", "-3"]) == ("How far below?", "-3")
+    assert mgsm.question_and_final_answer(["How far below?", "-3"]) == ("How far below?", "-3")
 
 
-def test_an_answer_whose_thousands_are_grouped_by_commas_is_an_integer_kept_as_written():
-    for answer in ["2,125", "114,200", "276,000", "1,000,000", "-5,600"]:
-        assert mgsm.question_and_answer(["How much?", answer]) == ("How much?", answer)
-    for answer in ["2,12", "21,25", "1234,567", ",125", "2,125,", "2,,125"]:
+def test_a_final_answer_whose_thousands_are_grouped_by_commas_is_an_integer_kept_as_written():
+    for final_answer in ["2,125", "114,200", "276,000", "1,000,000", "-5,600"]:
+        assert mgsm.question_and_final_answer(["How much?", final_answer]) == ("How much?", final_answer)
+    for final_answer in ["2,12", "21,25", "1234,567", ",125", "2,125,", "2,,125"]:
         with pytest.raises(mgsm.Unusable, match="is not an integer"):
-            mgsm.question_and_answer(["How much?", answer])
+            mgsm.question_and_final_answer(["How much?", final_answer])
 
 
 JA = "ジャネットのアヒルは1日に16個の卵を生みます。彼女は毎日市場でいくら手に入れていますか？"
@@ -109,7 +95,7 @@ def test_a_render_case_is_the_question_as_one_user_turn_with_its_origin():
     assert list(line["origin"]) == ["dataset", "source", "sha256", "file", "row", "license"]
 
 
-def test_the_content_parse_case_holds_the_answer_as_written_as_its_content():
+def test_the_content_parse_case_holds_the_final_answer_as_written_as_its_content():
     sets = mgsm.language_sets({"ja": tsv([f"{JA}\t18", f"{JA}\t2,125"])})
     tail = {"notes": "MGSM ja row 1", "origin": {**JA_ORIGIN, "row": 1}}
     assert sets[("parse", "mgsm-ja-content")] == [
@@ -151,8 +137,8 @@ def test_rows_that_cannot_become_a_case_are_left_out_of_both_sets_of_their_langu
         "f3932dc5ad8e9d0ea82b017adc1e1461dd647af861e7166d6741986602a0cfd6",
     )
     assert skipped == [
-        ("ja row 1", "the line holds 2 tabs, not the one between the question and the answer"),
-        ("ja row 2", "the answer '18 dollars' is not an integer"),
+        ("ja row 1", "the line holds 2 tabs, not the one between the question and the final answer"),
+        ("ja row 2", "the final answer '18 dollars' is not an integer"),
         ("th row 0", "the question is empty"),
     ]
 
@@ -175,9 +161,9 @@ JA_FINAL = "答えは11です。"
 JA_1 = {"q": "問題：" + JA_QUESTION, "a": "ステップごとの答え：" + JA_SOLUTION + JA_FINAL}
 
 
-def exemplars_py(exemplars: dict[str, dict[str, dict[str, str]]], numbers: list[int], before: str = "") -> bytes:
+def exemplars_py(exemplars: dict[str, dict[str, dict[str, str]]], final_answers: list[int], before: str = "") -> bytes:
     """An exemplars.py as the repository writes it: literals, with non-ASCII text as escapes and each string in two."""
-    lines = ['"""Prompts for mgsm."""', before, f"EXEMPLAR_NUMBER_ANSWERS = {numbers!r}", "MGSM_EXEMPLARS = {"]
+    lines = ['"""Prompts for mgsm."""', before, f"EXEMPLAR_NUMBER_ANSWERS = {final_answers!r}", "MGSM_EXEMPLARS = {"]
     for lang, items in exemplars.items():
         lines.append(f"    {lang!r}: {{")
         for key, exemplar in items.items():
@@ -217,7 +203,7 @@ TE_FINAL = f"సమాధానం 39.చాక్లెట్{ZWNJ}లుచా
 TE_3 = {"q": "ప్రశ్న: " + TE_QUESTION, "a": "దశలవారీగా సమాధానం: " + TE_SOLUTION + " " + TE_FINAL}
 
 
-def test_an_exemplar_splits_into_its_question_solution_and_final_sentence_by_its_language_form():
+def test_an_exemplar_splits_into_its_question_solution_and_final_sentence_by_its_language_wording():
     assert mgsm.split_exemplar("en", EN_1, 11) == (EN_QUESTION, EN_SOLUTION, EN_FINAL)
     assert mgsm.split_exemplar("ja", JA_1, 11) == (JA_QUESTION, JA_SOLUTION, JA_FINAL)
     assert mgsm.split_exemplar("de", DE_2, 29) == (DE_QUESTION, DE_SOLUTION, DE_FINAL)
@@ -231,22 +217,27 @@ def test_the_final_sentence_is_the_last_one_its_opening_words_start():
     assert mgsm.split_exemplar("en", exemplar, 11) == (EN_QUESTION, solution, EN_FINAL)
 
 
-def test_an_exemplar_that_does_not_fit_its_language_form_is_unusable():
+def test_an_exemplar_that_does_not_fit_its_language_wording_is_unusable():
     answer = "Step-by-Step Answer: "
-    for lang, exemplar, number, why in [
-        ("xx", EN_1, 11, "no form is known for the language 'xx'"),
+    for lang, exemplar, final_answer, why in [
+        ("xx", EN_1, 11, "no wording is known for the language 'xx'"),
         ("en", {"a": EN_1["a"]}, 11, "the exemplar is not {'q': question, 'a': answer}"),
         ("en", dict(EN_1, q=EN_QUESTION), 11, "the question does not start with 'Question: '"),
         ("en", dict(EN_1, q="Question: "), 11, "the question is empty"),
         ("en", dict(EN_1, a=EN_SOLUTION + " " + EN_FINAL), 11, "answer does not start with 'Step-by-Step Answer: '"),
         ("en", dict(EN_1, a=answer + EN_SOLUTION), 11, "answer has no final sentence opening with 'The answer is '"),
         ("en", dict(EN_1, a=answer + EN_FINAL), 11, "the answer has no worked solution before its final sentence"),
-        ("en", EN_1, 12, "the final sentence 'The answer is 11.' does not state the exemplar's number 12"),
-        ("en", dict(EN_1, a=f"{answer}5 + 6 = 11. The answer is 111."), 11, "does not state the exemplar's number 11"),
+        ("en", EN_1, 12, "the final sentence 'The answer is 11.' does not state the exemplar's final answer 12"),
+        (
+            "en",
+            dict(EN_1, a=f"{answer}5 + 6 = 11. The answer is 111."),
+            11,
+            "does not state the exemplar's final answer 11",
+        ),
         ("en", dict(EN_1, a=f"{answer}5 + 6 = 11. The answer is eleven."), 11, "does not state the exemplar's"),
     ]:
         with pytest.raises(mgsm.Unusable, match=re.escape(why)):
-            mgsm.split_exemplar(lang, exemplar, number)
+            mgsm.split_exemplar(lang, exemplar, final_answer)
 
 
 EXEMPLAR_ORIGIN = {
@@ -273,16 +264,16 @@ def test_an_exemplar_parse_case_holds_the_solution_as_reasoning_and_the_final_se
     assert list(line["origin"]) == ["dataset", "source", "sha256", "file", "row", "license"]
 
 
-def test_an_exemplar_takes_the_number_of_its_key_and_one_that_cannot_become_a_case_is_skipped_with_its_reason():
+def test_an_exemplar_takes_the_final_answer_of_its_key_and_one_that_cannot_become_a_case_is_skipped_with_its_reason():
     skipped: list[tuple[str, str]] = []
     exemplars = {"en": {"1": EN_1, "2": EN_1}, "de": {"2": DE_2, "9": DE_2}, "te": {"3": TE_3}, "xx": {"1": EN_1}}
     lines = mgsm.exemplar_set(exemplars_py(exemplars, [11, 29, 39]), skipped=skipped)
     assert [line["name"] for line in lines] == ["mgsm-exemplars-en-1", "mgsm-exemplars-de-2", "mgsm-exemplars-te-3"]
     assert lines[2]["origin"]["row"] == "MGSM_EXEMPLARS['te']['3']"
     assert skipped == [
-        ("exemplar en 2", "the final sentence 'The answer is 11.' does not state the exemplar's number 29"),
-        ("exemplar de 9", "EXEMPLAR_NUMBER_ANSWERS has no number for the key '9'"),
-        ("exemplar xx 1", "no form is known for the language 'xx'"),
+        ("exemplar en 2", "the final sentence 'The answer is 11.' does not state the exemplar's final answer 29"),
+        ("exemplar de 9", "EXEMPLAR_NUMBER_ANSWERS has no final answer for the key '9'"),
+        ("exemplar xx 1", "no wording is known for the language 'xx'"),
     ]
 
 
@@ -335,7 +326,7 @@ LANGUAGES = ["bn", "de", "en", "es", "fr", "ja", "ru", "sw", "te", "th", "zh"]
 
 def serve(tmp_path, monkeypatch, files: dict[str, bytes]) -> None:
     """Stand in for ``github.fetch``: each pinned path is served from ``files``, and nothing is downloaded."""
-    pins = {"mgsm/LICENSE": sha(CC_BY), "mgsm/exemplars.py": mgsm.EXEMPLARS_SHA256}
+    pins = {"mgsm/LICENSE": mgsm.LICENSE_SHA256, "mgsm/exemplars.py": mgsm.EXEMPLARS_SHA256}
     pins.update({f"mgsm/mgsm_{lang}.tsv": sha256 for lang, sha256 in mgsm.SHA256.items()})
 
     def fetch(owner, repo, commit, path, sha256, cache):
@@ -347,7 +338,6 @@ def serve(tmp_path, monkeypatch, files: dict[str, bytes]) -> None:
         return served
 
     monkeypatch.setattr(github, "fetch", fetch)
-    monkeypatch.setattr(mgsm, "LICENSE_SHA256", sha(CC_BY))
 
 
 def pinned_files(license_text: bytes = CC_BY) -> dict[str, bytes]:
@@ -376,10 +366,10 @@ def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, m
     assert f"{corpus / 'parse' / 'mgsm-ja-content.jsonl'}: 1 cases, 1 distinct messages" in out
     assert f"{corpus / 'parse' / 'mgsm-exemplars.jsonl'}: 1 cases, 1 distinct messages" in out
     assert f"{corpus}: 22 cases in the 22 MGSM sets, 0 left out as repeats, 2 distinct messages" in out
-    assert "no case for 1 row(s) (ja row 1): the answer '18 dollars' is not an integer" in out
+    assert "no case for 1 row(s) (ja row 1): the final answer '18 dollars' is not an integer" in out
     assert (
         "no case for 1 row(s) (exemplar en 2): "
-        "the final sentence 'The answer is 11.' does not state the exemplar's number 29"
+        "the final sentence 'The answer is 11.' does not state the exemplar's final answer 29"
     ) in out
     assert f"{corpus}: the MGSM sets equal a fresh import of {mgsm.SOURCE}" in out
 
