@@ -54,7 +54,7 @@ for now; embedding, reranking and classification models are out.
   The command pins the registry refs, but the Hub only shows its present state, so what is
   reproducible is the committed list with each row's revision; a rerun shows what changed as a diff
   of that list. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
-  Qwen organization: about 45 checkpoints today.
+  Qwen organization: 64 checkpoints on 2026-10-06.
 - **Every checkpoint is a row.** Each row gives the model, its pinned revision, checkpoint group,
   tier, and a status. The status says what was recorded, what was rejected and why, or why nothing
   can be recorded yet (vendor code needed, gated, no chat template). A checkpoint that records
@@ -64,13 +64,15 @@ for now; embedding, reranking and classification models are out.
   - **The oracle inputs** are every file the oracle reads for the model: the tokenizer files, the
     chat template, the generation config (for the end of turn), and, for a vendor-code oracle, the
     vendor's files. From `config.json` they take only the two fields that choose the tokenizer
-    class (`model_type`, `tokenizer_class`).
+    class (`model_type`, `tokenizer_class`), and from the generation config only its token ids
+    (`eos_token_id`, `bos_token_id`, `pad_token_id`), so sampling defaults do not split a group.
   - **Membership.** The manifest lists each input with its sha256, and membership is equality of
     those lists, checked when recording. As a check on the list itself, the weekly job also
     records one other member of each group and compares the results, so a file the list misses
     shows up.
-  - **The effect.** The current Qwen chat checkpoints fall into about 20 groups: the seven Qwen3
-    sizes share one, and six Qwen3.5 sizes share another.
+  - **The effect,** measured on 2026-10-06: the 64 current Qwen chat checkpoints fall into 38
+    groups. The six dense Qwen3 sizes share one; most other groups are pairs or threes, such as
+    Qwen3.5-4B and 9B, or the three large Qwen3.5 mixtures of experts.
 - **Order.**
   1. Simo's tier: DeepSeek-V4.1-Flash, MiniMax-M3, the latest GLM (GLM-5.3-Flash), every current
      Qwen chat checkpoint, and Hy4-preview.
