@@ -112,9 +112,12 @@ TEST_FILE = jsonl([JANET, TICKETS])
 def build(
     tmp_path, monkeypatch, size: int | None = None, members=MEMBERS, test_file: bytes = TEST_FILE, skipped=None
 ) -> dict[tuple[str, str], list[dict]]:
+    """The sets from the fake wheel and ``test_file``, the categories it holds, and ``size`` pairs when given."""
     monkeypatch.setattr(shapes, "CATEGORIES", ("simple_python", "parallel"))
+    if size is not None:
+        monkeypatch.setattr(shapes, "SIZE", size)
     with zipfile.ZipFile(fake_wheel(tmp_path, members=members)) as wheel:
-        return shapes.build_sets(wheel, test_file, size=size, skipped=skipped)
+        return shapes.build_sets(wheel, test_file, skipped=skipped)
 
 
 TOOLS = [

@@ -115,7 +115,7 @@ def set_name(shape: str) -> str:
 
 
 def build_sets(
-    wheel: zipfile.ZipFile, test_file: bytes, size: int | None = None, skipped: list[tuple[str, str]] | None = None
+    wheel: zipfile.ZipFile, test_file: bytes, skipped: list[tuple[str, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
     """One parse set per message shape, from the BFCL wheel and GSM8K's test file through their importers' builders.
 
@@ -148,7 +148,7 @@ def build_sets(
             texts.append((gsm8k_line, *split_solution(gsm8k_line["message"]["reasoning_content"])))
         except gsm8k.Unusable as err:
             gsm8k_skipped.append((f"{SPLIT} row {gsm8k_line['origin']['row']}", str(err)))
-    pairs = pair(calls, texts, SIZE if size is None else size)
+    pairs = pair(calls, texts, SIZE)
     sets: dict[tuple[str, str], list[dict]] = {("parse", set_name(shape)): [] for shape in SHAPES}
     for index, (bfcl_line, (gsm8k_line, reasoning, content)) in enumerate(pairs):
         origin = {"dataset": DATASET, "parts": [bfcl_line["origin"], gsm8k_line["origin"]]}
