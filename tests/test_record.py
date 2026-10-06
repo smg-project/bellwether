@@ -1240,3 +1240,37 @@ def test_unpack_refuses_to_replace_a_directory_it_did_not_write(tmp_path, tiny_m
     assert "did not write" in capsys.readouterr().err
     assert (out / "tiny-chat" / "notes.txt").read_text() == "notes"
     assert not (out / "tiny-chat" / "render").exists()
+
+
+NOT_BELLWETHER = 'name = "not bellwether"\n'
+
+
+def test_unpack_everything_leaves_a_directory_whose_manifest_toml_is_not_a_bellwether_manifest(
+    tmp_path, tiny_model, monkeypatch
+):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "shared"
+    (out / "some-project").mkdir(parents=True)
+    (out / "some-project" / "manifest.toml").write_text(NOT_BELLWETHER)
+
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out)]) == 0
+
+    assert (out / "some-project" / "manifest.toml").read_text() == NOT_BELLWETHER
+    assert (out / "tiny-chat" / "render" / "common.jsonl").is_file()
+
+
+def test_unpack_refuses_to_replace_a_directory_whose_manifest_toml_is_not_a_bellwether_manifest(
+    tmp_path, tiny_model, monkeypatch, capsys
+):
+    monkeypatch.setattr("bellwether.unpack.fetch", lambda paths: None)
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "shared"
+    (out / "tiny-chat").mkdir(parents=True)
+    (out / "tiny-chat" / "manifest.toml").write_text(NOT_BELLWETHER)
+
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out)]) == 1
+
+    assert "did not write" in capsys.readouterr().err
+    assert (out / "tiny-chat" / "manifest.toml").read_text() == NOT_BELLWETHER
+    assert not (out / "tiny-chat" / "render").exists()
