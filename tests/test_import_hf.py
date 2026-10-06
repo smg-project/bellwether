@@ -27,19 +27,20 @@ def serve_file(path, calls: list):
     return download
 
 
-def test_fetch_asks_for_the_file_at_the_commit_and_sends_no_token(tmp_path, monkeypatch):
+def test_fetch_asks_for_the_file_at_the_commit_in_its_cache_and_sends_no_token(tmp_path, monkeypatch):
     (tmp_path / "rows.jsonl").write_bytes(b"rows")
     calls: list = []
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", serve_file(tmp_path / "rows.jsonl", calls))
-    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows")) == tmp_path / "rows.jsonl"
-    assert calls == [(REPO, FILE, {"repo_type": "dataset", "revision": REVISION, "token": False})]
+    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == tmp_path / "rows.jsonl"
+    asked = {"repo_type": "dataset", "revision": REVISION, "cache_dir": tmp_path / "cache" / "huggingface"}
+    assert calls == [(REPO, FILE, {**asked, "token": False})]
 
 
 def test_fetch_refuses_a_file_that_is_not_the_pinned_one(tmp_path, monkeypatch):
     (tmp_path / "rows.jsonl").write_bytes(b"tampered")
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", serve_file(tmp_path / "rows.jsonl", []))
     with pytest.raises(ValueError, match=f"{REPO}@{REVISION} {FILE}: sha256 .* is not the pinned"):
-        hf.fetch(REPO, REVISION, FILE, sha(b"rows"))
+        hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache")
 
 
 class Hub:
@@ -67,13 +68,19 @@ class Hub:
 @pytest.fixture
 def hub(tmp_path, monkeypatch):
     """The real ``hf_hub_download`` over the stub ``Hub``: huggingface_hub makes every request through the one client
-    its factory builds, so the stub stands in for the network. A download the test does not direct to its own cache
-    lands in the test's directory, never in the machine's Hugging Face cache."""
+    its factory builds, so the stub stands in for the network. A test that does not give ``fetch`` a cache in its own
+    directory fails, rather than writing to the machine's."""
     stub = Hub()
     transport = httpx.MockTransport(stub.handle)
     monkeypatch.setattr(_http, "_GLOBAL_CLIENT_FACTORY", lambda: httpx.Client(transport=transport))
     monkeypatch.setattr(_http, "_GLOBAL_CLIENT", None)
-    monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path / "machine-hub-cache"))
+    download = huggingface_hub.hf_hub_download
+
+    def in_the_tests_cache(*args, cache_dir, **kwargs):
+        assert cache_dir.is_relative_to(tmp_path), f"fetch was given no cache under {tmp_path}"
+        return download(*args, cache_dir=cache_dir, **kwargs)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", in_the_tests_cache)
     for name in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_OIDC_RESOURCE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(constants, "HF_TOKEN_PATH", str(tmp_path / "no-token-here"))
@@ -88,9 +95,19 @@ def test_fetch_sends_no_token_where_the_machine_holds_one(tmp_path, monkeypatch,
         (tmp_path / "token").write_text("hf_dummy_file_token")
         monkeypatch.setattr(constants, "HF_TOKEN_PATH", str(tmp_path / "token"))
     hub.files[FILE] = b"rows"
-    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows")).read_bytes() == b"rows"
+    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache").read_bytes() == b"rows"
     assert hub.downloads(FILE) == 1
     assert [request.headers.get("authorization") for request in hub.requests] == [None] * len(hub.requests)
+
+
+def test_fetch_keeps_the_file_under_its_cache_and_reads_it_back_without_a_request_for_it(tmp_path, hub):
+    hub.files[FILE] = b"rows"
+    path = hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache")
+    snapshot = (tmp_path / "cache").resolve() / "huggingface" / "datasets--org--data" / "snapshots" / REVISION
+    assert path == snapshot / FILE and path.read_bytes() == b"rows"
+    hub.requests.clear()
+    assert hf.fetch(REPO, REVISION, FILE, sha(b"rows"), cache=tmp_path / "cache") == path
+    assert [request for request in hub.requests if request.url.path.endswith(FILE)] == []
 
 
 CARD = "---\nconfigs:\n  - config_name: default\n    license: mit\nlicense: apache-2.0\n---\n\n# A dataset\n"
