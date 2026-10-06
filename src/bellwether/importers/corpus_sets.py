@@ -2,7 +2,8 @@
 
 A set file holds one JSON line per case, in the order the importer built them, each ending in "\\n". ``json.dumps``
 keeps each line's keys in the order the importer built them and writes non-ASCII text raw (``ensure_ascii=False``),
-so a fresh import of the same pinned data is byte-identical to the last one and ``check`` can compare bytes.
+so a fresh import of the same pinned data is byte-identical to the last one, and ``check`` compares plain content byte
+for byte.
 
 An import's sets are stored in one form: plain JSON Lines while they take at most ``LIMIT`` bytes in all, and past it
 every one of them compressed with zstd and kept in Git LFS (``<name>.jsonl.zst``), the fixtures' form
@@ -32,7 +33,7 @@ def text(lines: list[dict]) -> str:
     return "".join(_json(line) + "\n" for line in lines)
 
 
-def set_files(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> dict[tuple[str, str], tuple[Path, bytes]]:
+def _set_files(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> dict[tuple[str, str], tuple[Path, bytes]]:
     """Each set's file under ``corpus_dir`` and its plain content, by kind and name, in the form the import's sets take.
 
     The form is the import's, not each set's: ``<kind>/<name>.jsonl`` while the sets take at most ``LIMIT`` bytes in all
@@ -43,7 +44,7 @@ def set_files(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> dict
     return {(kind, name): (corpus_dir / kind / f"{name}{suffix}", data) for (kind, name), data in contents.items()}
 
 
-def prefixed(corpus_dir: Path, prefix: str) -> list[Path]:
+def _prefixed(corpus_dir: Path, prefix: str) -> list[Path]:
     """The ``<prefix>*`` set files in the kinds' directories, in either form: the files an importer's prefix claims."""
     patterns = (f"{prefix}*.jsonl", f"{prefix}*{storage.COMPRESSED_SUFFIX}")
     return sorted(path for kind in KINDS for pattern in patterns for path in (corpus_dir / kind).glob(pattern))
@@ -97,7 +98,7 @@ def report(
     """
     for name, first in repeats:
         print(f"no case {name}: it repeats {first}")
-    paths = {key: path for key, (path, _) in set_files(kept, corpus_dir).items()}
+    paths = {key: path for key, (path, _) in _set_files(kept, corpus_dir).items()}
     all_messages: set[str] = set()
     for (kind, name), lines in sorted(kept.items()):
         counts = [f"{len(lines)} cases"]
@@ -134,13 +135,13 @@ def write(
 ) -> list[Path]:
     """Write every set and ``files``, then remove the ``<prefix>*`` set files the import no longer writes.
 
-    The sets are written in the import's form (``set_files``), so a set stored in the other form is removed too: an
+    The sets are written in the import's form (``_set_files``), so a set stored in the other form is removed too: an
     import keeps one form. Nothing is removed until everything is written, so a write cut short leaves the old files.
     ``files`` are the import's other files, such as a dataset's license, as bytes by path under ``corpus_dir``; they are
     written as they are and do not count toward ``LIMIT``. The prefix is the importer's.
     """
     written = []
-    for _, (path, content) in sorted(set_files(sets, corpus_dir).items()):
+    for _, (path, content) in sorted(_set_files(sets, corpus_dir).items()):
         storage.write(path, content)
         written.append(path)
     for relative, content in sorted((files or {}).items()):
@@ -148,7 +149,7 @@ def write(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         written.append(path)
-    for stale in prefixed(corpus_dir, prefix):
+    for stale in _prefixed(corpus_dir, prefix):
         if stale not in written:
             stale.unlink()
     return written
@@ -163,12 +164,12 @@ def check(
 ) -> list[str]:
     """One line per set file, or file of ``files``, that differs from a fresh import; empty when none does.
 
-    The sets are compared in the form a fresh import writes them (``set_files``), by plain content, so a compressed set
+    The sets are compared in the form a fresh import writes them (``_set_files``), by plain content, so a compressed set
     passes whatever bytes its compressor wrote; a set stored in the other form is named with the form ``LIMIT`` gives
     it. A set Git LFS has not fetched is named with the command that fetches it. ``files`` are as ``write`` takes them.
     ``unit`` names what one set comes from (a BFCL category, a GSM8K split) in the line for a stale ``<prefix>*`` file.
     """
-    fresh = set_files(sets, corpus_dir)
+    fresh = _set_files(sets, corpus_dir)
     size = sum(len(content) for _, content in fresh.values())
     expected = dict(fresh.values())
     expected.update({corpus_dir / relative: content for relative, content in (files or {}).items()})
@@ -188,13 +189,13 @@ def check(
         path.with_name(f"{name}{'.jsonl' if storage.is_compressed(path) else storage.COMPRESSED_SUFFIX}"): path
         for (_, name), (path, _) in fresh.items()
     }
-    for path in prefixed(corpus_dir, prefix):
+    for path in _prefixed(corpus_dir, prefix):
         if path in expected:
             continue
         if path in other_form:
             written = other_form[path]
             limit = f"{'past' if storage.is_compressed(written) else 'within'} the {LIMIT} that stay plain"
-            reason = f"the {prefix}* sets take {size} bytes as plain JSON Lines, {limit}"
+            reason = f"the import's sets take {size} bytes as plain JSON Lines, {limit}"
             problems.append(f"{path}: a fresh import writes this set as {written.name}: {reason}")
         else:
             problems.append(f"{path}: no {unit} writes it")

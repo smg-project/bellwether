@@ -7,6 +7,7 @@ corpus/
   render/
     common.jsonl         # cases every model records
     <slug>/<set>.jsonl   # cases for one model, added to the set of the same name
+    <set>.jsonl.zst      # a set of an import past the limit below, compressed in Git LFS
 ```
 
 A line is `{"name": "...", "request": {...}, "notes": "..."}`. `name` is a lowercase slug and
@@ -29,6 +30,14 @@ set differs from a fresh import. Each line adds `origin`: the dataset, its sourc
 what was downloaded, the file and row inside it (and, for a parse case, the file its message came from), and the
 dataset's license. The message-shape sets, `shapes-<shape>`, are written by `bellwether import shapes` from two
 datasets; their `origin` names `shapes` and holds each source's origin under `parts`.
+
+An import's sets stay plain JSON Lines while they take at most 50,000,000 bytes in all (`corpus_sets.LIMIT`), so a
+change to an importer reads as a diff of cases. Past that, the import writes every one of them whole as
+`<set>.jsonl.zst`, compressed with zstd and kept in Git LFS like the benchmark fixture sets, and removes their plain
+files: an import keeps one form. `record`, `count` and `--check` read either form; `--check` compares plain content,
+names a set stored in the form the limit does not give it, and names a set Git LFS has not fetched with the command
+that fetches it. A clone fetches these sets (`.lfsconfig` leaves out only the fixture sets), and CI pulls them before
+the import checks. The files an import writes beside its sets, such as a license, stay plain and do not count.
 
 A parse set named for the shape of its message adds the message's parts to its name in order, in the words `reasoning`,
 `content` and `calls`: `gsm8k-<split>-reasoning-content` holds reasoning, then content; `gsm8k-<split>-content` holds
@@ -140,8 +149,8 @@ no `reasoning_content`. The text does not answer the request: what a case probes
 it, and `bellwether count` counts the cases under `shapes`.
 
 Set names starting with `bfcl-`, `gsm8k-` or `shapes-` belong to that importer: `bellwether import bfcl` deletes any
-`bfcl-*.jsonl` it did not write, `bellwether import gsm8k` any `gsm8k-*.jsonl`, and `bellwether import shapes` any
-`shapes-*.jsonl`. Name hand-written sets otherwise.
+`bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import gsm8k` any `gsm8k-*` one, and
+`bellwether import shapes` any `shapes-*` one. Name hand-written sets otherwise.
 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` and downloads them on a miss. It then needs PyPI to
 still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from PyPI does not,

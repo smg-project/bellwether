@@ -279,7 +279,7 @@ def test_check_applies_the_limit_to_a_corpus_written_in_the_other_form(tmp_path,
     corpus_sets.write(sets, tmp_path, "x-")
     monkeypatch.setattr(corpus_sets, "LIMIT", size - past)
     fresh, stored = (".jsonl.zst", ".jsonl") if past else (".jsonl", ".jsonl.zst")
-    limit = f"the x-* sets take {size} bytes as plain JSON Lines, {'past' if past else 'within'} the {size - past}"
+    limit = f"the import's sets take {size} bytes as plain JSON Lines, {'past' if past else 'within'} the {size - past}"
     reason = f"a fresh import writes this set as x-a{fresh}: {limit} that stay plain"
     assert check(sets, tmp_path) == [
         f"{tmp_path / 'parse' / f'x-a{fresh}'}: missing",
