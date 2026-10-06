@@ -298,7 +298,7 @@ def first_turn_message(answer: dict, functions: list[dict], defs: dict[str, list
     calls = []
     for text in answer["ground_truth"][0]:
         name, arguments = _read_call(answer["id"], text, declared, defs)
-        call = {"name": name.replace(".", "_"), "arguments": json.dumps(arguments, ensure_ascii=False)}
+        call = {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}
         calls.append({"type": "function", "function": call})
     return {"content": "", "tool_calls": calls}
 
