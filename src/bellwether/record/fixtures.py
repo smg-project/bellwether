@@ -22,6 +22,8 @@ from pathlib import Path
 import zstandard
 from jsonschema import Draft202012Validator
 
+from bellwether import jsonl
+
 COMPRESSED_SUFFIX = ".jsonl.zst"
 # Level 19, one thread: the compressed bytes are a function of the content for a given zstandard version, which
 # uv.lock pins. sets.toml records the plain content's sha256, so nothing depends on them.
@@ -107,13 +109,10 @@ def plain_text(path: Path) -> str:
 
 def read_fixture_file(path: Path) -> dict[str, dict]:
     cases: dict[str, dict] = {}
-    # canonical_line keeps U+2028 and the like raw, and splitlines() breaks on them: only "\n" ends a line.
-    for number, raw in enumerate(plain_text(path).split("\n"), start=1):
-        if raw.strip():
-            case = json.loads(raw)
-            if case["id"] in cases:
-                raise ValueError(f"{path}:{number}: duplicate id {case['id']}")
-            cases[case["id"]] = case
+    for number, case in jsonl.loads(plain_text(path), path):
+        if case["id"] in cases:
+            raise ValueError(f"{path}:{number}: duplicate id {case['id']}")
+        cases[case["id"]] = case
     return cases
 
 

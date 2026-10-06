@@ -19,6 +19,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from bellwether import jsonl
+
 from . import corpus_sets
 
 PROJECT = "bfcl-eval"
@@ -253,8 +255,8 @@ def answer_file(category: str) -> str:
 
 
 def _jsonl(wheel: zipfile.ZipFile, member: str) -> list[dict]:
-    """The rows of a JSON Lines member, split on "\\n" only: splitlines() also breaks inside strings on U+2028."""
-    return [json.loads(line) for line in wheel.read(member).decode("utf-8").split("\n") if line.strip()]
+    """The rows of a JSON Lines member of the wheel, in order."""
+    return [row for _, row in jsonl.loads(wheel.read(member).decode("utf-8"), member)]
 
 
 def read_rows(wheel: zipfile.ZipFile, category: str) -> list[dict]:

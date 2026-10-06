@@ -92,7 +92,7 @@ def test_rows_come_in_file_order_with_their_line_index_and_unicode_line_breaks_i
         {"question": "Clive opens a box.\u2028It holds 6 balls.\u0085How many?", "answer": "6\n#### 6"},
         {"question": "Two?", "answer": "2\n#### 2"},
     ]
-    assert gsm8k.read_rows(jsonl(rows)) == [(0, rows[0]), (1, rows[1])]
+    assert gsm8k.read_rows(jsonl(rows), FILE) == [(0, rows[0]), (1, rows[1])]
 
 
 SOLUTION = "Janet sells 16 - 3 - 4 = <<16-3-4=9>>9 duck eggs a day.\nShe makes 9 * 2 = $<<9*2=18>>18 every day."

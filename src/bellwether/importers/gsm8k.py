@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import sys
 from pathlib import Path
+
+from bellwether import jsonl
 
 from . import corpus_sets, github
 
@@ -54,14 +55,9 @@ def check_license(text: bytes) -> None:
         raise ValueError(f"{where}: sha256 {digest} is not the reviewed {LICENSE_SHA256}; review it before importing")
 
 
-def read_rows(data: bytes) -> list[tuple[int, dict]]:
-    """Each row of a split's file with its 0-based line index, in file order.
-
-    Only "\\n" ends a line, as in the corpus readers: splitlines() also breaks on U+2028 and the like, which JSON may
-    write raw inside a string.
-    """
-    lines = data.decode("utf-8").split("\n")
-    return [(index, json.loads(line)) for index, line in enumerate(lines) if line.strip()]
+def read_rows(data: bytes, where: str) -> list[tuple[int, dict]]:
+    """Each row of a split's file with its 0-based line index, in file order; ``where`` names the file in an error."""
+    return [(number - 1, row) for number, row in jsonl.loads(data.decode("utf-8"), where)]
 
 
 def split_answer(answer: str) -> tuple[str, str]:
@@ -133,7 +129,7 @@ def build_sets(
         sets[("render", set_name(split))] = []
         for shape in SHAPES:
             sets[("parse", set_name(split, shape))] = []
-        for row, problem in read_rows(data):
+        for row, problem in read_rows(data, data_file(split)):
             try:
                 lines = lines_for(split, row, problem)
             except Unusable as err:
