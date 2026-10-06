@@ -7,7 +7,7 @@ import huggingface_hub
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import github, glaive_v2, hf
+from bellwether.importers import corpus_sets, github, glaive_v2, hf
 
 LEAD_IN = "SYSTEM: You are a helpful assistant with access to the following functions. Use them if required -"
 
@@ -95,6 +95,10 @@ def test_arguments_written_as_an_object_are_taken_as_they_are():
         (""" {"name": "get_song_lyrics", "arguments": '{"artist": "Ed Sheeran", "title": " """, "CALL_FORM"),
         # row 57572, shortened: one brace too many
         (""" {"name": "send_email", "arguments": '{"subject": "Agenda"}'}} """, "CALL_FORM"),
+        # a call that is JSON as a whole, but with a key beside name and arguments
+        (' {"name": "get_current_time", "arguments": {}, "id": "call_1"} ', "CALL_FORM"),
+        # JSON, but not an object
+        (" 42 ", "CALL_FORM"),
         # an object whose name is not a string
         (' {"name": ["get_current_time"], "arguments": {}} ', "CALL_FORM"),
     ],
@@ -373,6 +377,20 @@ def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_rende
     assert list(parse[1]["message"]["tool_calls"][0]) == ["type", "function"]
 
 
+# The lines the importer writes for row 25475's render case at turn 0 and parse cases at turns 3 and 5, byte for byte:
+# key order is part of what a template sees, so the request's messages come before its tools, a tool's type before
+# its function, and a call in the history holds id, type and function in that order.
+LINES_25475 = r"""{"name": "glaive-v2-25475-0", "request": {"messages": [{"role": "user", "content": "I have a text here and I am not sure what language it is. Can you help me identify it?"}], "tools": [{"type": "function", "function": {"name": "detect_language", "description": "Detect the language of a given text", "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The text to detect the language of"}}, "required": ["text"]}}}]}, "notes": "glaive-function-calling-v2 row 25475 turn 0", "origin": {"dataset": "glaive-v2", "source": "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac", "sha256": "e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad", "file": "glaive-function-calling-v2.json", "row": 25475, "turn": 0, "license": "Apache-2.0"}}
+{"name": "glaive-v2-25475-3", "request": {"messages": [{"role": "user", "content": "I have a text here and I am not sure what language it is. Can you help me identify it?"}, {"role": "assistant", "content": "Of course, I can help with that. Please provide me with the text."}, {"role": "user", "content": "Here it is - \"Je suis un étudiant\""}], "tools": [{"type": "function", "function": {"name": "detect_language", "description": "Detect the language of a given text", "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The text to detect the language of"}}, "required": ["text"]}}}]}, "message": {"content": "", "tool_calls": [{"type": "function", "function": {"name": "detect_language", "arguments": "{\"text\": \"Je suis un étudiant\"}"}}]}, "notes": "glaive-function-calling-v2 row 25475 turn 3", "origin": {"dataset": "glaive-v2", "source": "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac", "sha256": "e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad", "file": "glaive-function-calling-v2.json", "row": 25475, "turn": 3, "license": "Apache-2.0"}}
+{"name": "glaive-v2-25475-5", "request": {"messages": [{"role": "user", "content": "I have a text here and I am not sure what language it is. Can you help me identify it?"}, {"role": "assistant", "content": "Of course, I can help with that. Please provide me with the text."}, {"role": "user", "content": "Here it is - \"Je suis un étudiant\""}, {"role": "assistant", "content": "", "tool_calls": [{"id": "call_0", "type": "function", "function": {"name": "detect_language", "arguments": "{\"text\": \"Je suis un étudiant\"}"}}]}, {"role": "tool", "tool_call_id": "call_0", "content": "{\"language\": \"French\"}"}], "tools": [{"type": "function", "function": {"name": "detect_language", "description": "Detect the language of a given text", "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The text to detect the language of"}}, "required": ["text"]}}}]}, "message": {"content": "The text you provided is in French."}, "notes": "glaive-function-calling-v2 row 25475 turn 5", "origin": {"dataset": "glaive-v2", "source": "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac", "sha256": "e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad", "file": "glaive-function-calling-v2.json", "row": 25475, "turn": 5, "license": "Apache-2.0", "written": ["tool call ids"]}}
+"""  # noqa: E501
+
+
+def test_the_lines_hold_their_keys_in_the_order_the_importer_builds_them():
+    render, parse = glaive_v2.cases_for(25475, *glaive_v2.messages_for(ROW_25475))
+    assert corpus_sets.text([render[0], parse[1], parse[2]]) == LINES_25475
+
+
 def test_a_case_whose_request_holds_a_call_says_its_ids_are_written_and_expects_calls_without_ids():
     # Row 1's shape: the second round's cases carry the first round's call in their history, with the id call_0 that
     # bellwether wrote; the second call is expected without an id, and holds call_1 once it is history.
@@ -577,6 +595,8 @@ def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     assert served.hub == asked(cache) * 3
     out = capsys.readouterr().out
     assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 2 cases" in out
+    source = "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac"
+    assert out.splitlines()[-1] == f"{corpus}: the glaive-v2 sets equal a fresh import of {source}"
     assert [line["name"] for line in map(json.loads, (corpus / "parse" / "glaive-v2-00.jsonl").open())] == [
         "glaive-v2-0-1",
         "glaive-v2-2-1",

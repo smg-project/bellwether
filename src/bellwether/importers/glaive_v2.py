@@ -275,7 +275,9 @@ def build_sets(
 
     Every row of the file is mapped, so that a row that cannot be is appended to ``skipped`` with its reason whether
     or not the sample takes it. A set holds whole rows, in index order, and at most ``set_size`` cases of either kind;
-    the render set and the parse set of one number hold the same rows.
+    the render set and the parse set of one number hold the same rows. A row has no more render cases than parse
+    cases, since each render case's user turn is answered by an assistant turn, a parse case, so the parse cases
+    decide when a set is full.
     """
     groups: list[tuple[list[dict], list[dict]]] = [([], [])]
     for index, row in enumerate(rows):
@@ -289,7 +291,7 @@ def build_sets(
             continue
         row_render, row_parse = cases_for(index, messages, tools)
         render, parse = groups[-1]
-        if (render or parse) and max(len(render) + len(row_render), len(parse) + len(row_parse)) > set_size:
+        if parse and len(parse) + len(row_parse) > set_size:
             groups.append(([], []))
             render, parse = groups[-1]
         render += row_render
