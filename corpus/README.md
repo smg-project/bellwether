@@ -355,10 +355,9 @@ prose and tool calls in the assistant turns, code and shell commands in the argu
   cut. Requests run from 20.7 KB (the system prompt, the issue and the tools) to 128 KB, with 2 to 150 messages of
   history (median 32). Case names are `swehero-13-<row>-<turn>`, the turn being the assistant message's index in
   the trajectory, so its request holds that many messages.
-- **Refusals.** The import checks every row of the shard, sampled or not, and names each row it refuses with its
-  reason and detail; past 50 for one reason, it gives the count and the first 50. At this pin it refuses none: all
-  1769 rows are MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause, pair their results with their calls, and pass JSON
-  object strings as arguments.
+- **Refusals.** The import checks every row of the shard, sampled or not, and names every row it refuses with its
+  reason and detail. At this pin it refuses none: all 1769 rows are MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause,
+  pair their results with their calls, and pass JSON object strings as arguments.
 
 Unlike the imports above, `bellwether import swehero` writes no license file yet: which of the repositories' licenses
 and NOTICE files to ship with its sets is still open.

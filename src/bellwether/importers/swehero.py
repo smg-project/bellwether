@@ -45,7 +45,6 @@ REPOSITORY_LICENSES = ("MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause")  # t
 SET = f"swehero-{SHARD}"
 STRIDE = 20  # one row in STRIDE is sampled, counted from row 0
 MAX_REQUEST_BYTES = 128_000  # a request's bytes in its corpus line
-NAMED = 50  # refused rows named per reason; past that, the count and the first NAMED
 FUNCTION_KEYS = {"name", "description", "parameters", "strict"}  # OpenAI's function definition
 FUNCTION_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
@@ -266,18 +265,11 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> lis
 
 
 def refusal_report(refused: list[tuple[int, str, str]]) -> list[str]:
-    """One line per reason, naming each refused row with its detail; past ``NAMED`` rows, the count and the first."""
+    """One line per reason, with how many rows it refused and every one of them, each with its detail."""
     by_reason: dict[str, list[str]] = {}
     for number, reason, detail in refused:
         by_reason.setdefault(reason, []).append(f"{number}: {detail}")
-    lines = []
-    for reason, rows in by_reason.items():
-        named = ", ".join(rows[:NAMED])
-        if len(rows) <= NAMED:
-            lines.append(f"refused {len(rows)} row(s) ({named}): {reason}")
-        else:
-            lines.append(f"refused {len(rows)} row(s), the first {NAMED} ({named}): {reason}")
-    return lines
+    return [f"refused {len(rows)} row(s) ({', '.join(rows)}): {reason}" for reason, rows in by_reason.items()]
 
 
 def run(args: argparse.Namespace) -> int:

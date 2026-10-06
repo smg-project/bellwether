@@ -434,11 +434,11 @@ def test_a_card_under_another_license_stops_the_import_before_the_shard_is_fetch
     assert [filename for _, filename, _ in downloads] == [hf.CARD]
 
 
-def test_the_command_names_every_refused_row_and_past_50_the_count_and_the_first_50(tmp_path, monkeypatch, capsys):
+def test_the_command_names_every_refused_row(tmp_path, monkeypatch, capsys):
     rows = [row(number, "GPL-3.0") for number in range(51)] + [row(51, trajectory=TRAJECTORY[:6]), row(52)]
     serve(tmp_path, monkeypatch, rows)
     assert main(["import", "swehero", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")]) == 0
     out = capsys.readouterr().out
-    first = ", ".join(f"{number}: GPL-3.0" for number in range(50))
-    assert f"refused 51 row(s), the first 50 ({first}): {swehero.LICENSE_NOT_ALLOWED}" in out
+    every = ", ".join(f"{number}: GPL-3.0" for number in range(51))
+    assert f"refused 51 row(s) ({every}): {swehero.LICENSE_NOT_ALLOWED}" in out
     assert f"refused 1 row(s) (51: message 4 makes 2 call(s) and 1 result(s) follow): {swehero.UNPAIRED}" in out
