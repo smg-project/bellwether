@@ -278,6 +278,29 @@ def one_function(name: str) -> str:
             },
             "UNDECLARED",
         ),
+        # row 168, shortened: convert_currency is declared twice, with two definitions, so a call to it could be held
+        # to either; 351 rows of the file declare a name twice, 338 of them with two different definitions
+        (
+            {
+                "system": LEAD_IN
+                + '\n{\n    "name": "convert_currency",\n    "description": "Convert one currency to another",\n'
+                + '    "parameters": {}\n}\n\n'
+                + '{\n    "name": "convert_currency",\n    "description": "Convert currency",\n'
+                + '    "parameters": {"type": "object"}\n}\n',
+                "chat": 'USER: Convert 500 USD to EUR.\n\n\nASSISTANT: <functioncall> {"name": "convert_currency",'
+                """ "arguments": '{"amount": 500}'} <|endoftext|>\n\n\nFUNCTION RESPONSE: {"result": 425.5}\n\n\n"""
+                "ASSISTANT: 425.50 EUR. <|endoftext|>\n\n\n",
+            },
+            "NAME_TWICE",
+        ),
+        # the same with one definition written twice (13 rows of the file): the name rule leaves it out too
+        (
+            {
+                "system": one_function("get_random_joke") + one_function("get_random_joke").removeprefix(LEAD_IN),
+                "chat": "USER: A joke?\n\nASSISTANT: Not now. <|endoftext|>",
+            },
+            "NAME_TWICE",
+        ),
     ],
 )
 def test_a_row_that_cannot_be_mapped_is_refused_with_its_reason(row, reason):

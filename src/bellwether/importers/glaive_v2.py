@@ -63,6 +63,8 @@ CALL_FORM = 'a <functioncall> is not {"name": ..., "arguments": ...} with the ar
 ARGUMENTS_NOT_JSON = "a call's arguments are not JSON"
 ARGUMENTS_NOT_OBJECT = "a call's arguments are not a JSON object"
 UNDECLARED = "a call names a function the row does not declare"
+# A call to a name declared twice could be held to either definition, so such a row has no faithful OpenAI request.
+NAME_TWICE = "two tools under one name"
 TEXT_BEFORE_CALL = "an assistant turn has text before its <functioncall>"
 RESPONSE_WITHOUT_CALL = "a function response does not follow a call"
 ASSISTANT_END = "an assistant turn does not end with its one <|endoftext|>"
@@ -139,12 +141,15 @@ def messages_for(row: dict) -> tuple[list[dict], list[dict]]:
     """A row as OpenAI chat messages, the system message first when there is one, and its tools.
 
     Each turn's text is taken without the whitespace around it, and the calls get the ids ``call_0``, ``call_1``, ...
-    in the order they are made. ``Unmappable`` names the first rule the row breaks: an assistant turn ends with its one
-    ``<|endoftext|>`` and no other turn holds one; a call turn is the call alone, to a function the row declares, with a
-    JSON object for arguments; a function response follows a call.
+    in the order they are made. ``Unmappable`` names the first rule the row breaks: the row declares each function name
+    once; an assistant turn ends with its one ``<|endoftext|>`` and no other turn holds one; a call turn is the call
+    alone, to a function the row declares, with a JSON object for arguments; a function response follows a call.
     """
     system, tools = system_and_tools(row["system"])
-    declared = {tool["function"]["name"] for tool in tools}
+    names = [tool["function"]["name"] for tool in tools]
+    if len(set(names)) < len(names):
+        raise Unmappable(NAME_TWICE)
+    declared = set(names)
     messages = [] if system is None else [{"role": "system", "content": system}]
     calls = 0
     for header, text in _turns(row["chat"]):
