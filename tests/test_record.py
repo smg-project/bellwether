@@ -8,10 +8,12 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
+from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import (
     canonical_line,
+    is_lfs_pointer,
     plain_text,
     read_fixture_file,
     schema_path,
@@ -636,10 +638,23 @@ def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path)
             write_fixture_file(tmp_path / "y.jsonl", {"tiny-chat/parse/a": partial})
 
 
-@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/*/*.jsonl")), ids=lambda p: str(p.relative_to(ROOT)))
+COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
+
+
+@pytest.mark.parametrize("path", COMMITTED_SETS, ids=lambda p: str(p.relative_to(ROOT)))
 def test_committed_fixtures_are_canonical_sorted_and_valid(path):
+    if is_lfs_pointer(path):
+        pytest.skip("Git LFS has not fetched this set: git lfs pull --include it to check it")
     manifest = load_manifest(path.parent.parent / "manifest.toml")
-    lines = path.read_text().splitlines()
+    plain = plain_text(path)
+    name = path.name.removesuffix(".zst").removesuffix(".jsonl")
+    table = set_tables.read(path.parent.parent / set_tables.FILE).get((path.parent.name, name))
+    assert table is not None, f"{path}: sets.toml has no table for this set"
+    form = "zstd" if path.name.endswith(".zst") else "plain"
+    expected = set_tables.entry(form, plain, table["cases"], table["rejected"])
+    assert table == expected, f"{path}: its sets.toml table does not match the file"
+    lines = plain.splitlines()
+    assert len(lines) == table["cases"]
     cases = [json.loads(line) for line in lines]
     assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
     for raw, case in zip(lines, cases, strict=True):
@@ -828,3 +843,10 @@ def test_a_git_lfs_pointer_is_named_not_decompressed(tmp_path):
     pointer.write_text(LFS_POINTER)
     with pytest.raises(ValueError, match="Git LFS pointer"):
         plain_text(pointer)
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/sets.toml")), ids=lambda p: str(p.relative_to(ROOT)))
+def test_every_sets_toml_table_has_its_set(path):
+    for kind, name in set_tables.read(path):
+        files = [path.parent / kind / f"{name}.jsonl", path.parent / kind / f"{name}.jsonl.zst"]
+        assert sum(f.is_file() for f in files) == 1, f"{path}: [{kind}.{name}] needs exactly one set file"

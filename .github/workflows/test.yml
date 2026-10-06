@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -21,4 +23,9 @@ jobs:
       - run: uv run bellwether import bfcl --check
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - name: Fetch the benchmark sets this pull request changes
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- 'fixtures/**/*.jsonl.zst' | paste -sd, -)
+          if [ -n "$changed" ]; then git lfs pull --include "$changed" --exclude ""; fi
       - run: uv run pytest -q
