@@ -44,7 +44,7 @@ DIRS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
 _API = {"Accept": "application/vnd.github+json"}
 
 
-def _write_whole(dest: Path, content: bytes) -> None:
+def write_whole(dest: Path, content: bytes) -> None:
     """Write ``content`` to a temporary file next to ``dest`` and move it into place.
 
     A run cut off mid-write then leaves no file at ``dest``, so the next run downloads it again
@@ -104,10 +104,10 @@ def fetch_registry_files(engine: str, ref: str, cache_dir: Path, client: httpx.C
                 continue
             resp = client.get(f"https://raw.githubusercontent.com/{repo}/{sha}/{rel}")
             resp.raise_for_status()
-            _write_whole(dest, resp.content)
+            write_whole(dest, resp.content)
         for marker, names in pending:
-            _write_whole(marker, "".join(f"{name}\n" for name in names).encode())
-        _write_whole(target / "COMMIT.txt", f"{sha} {repo} fetched at ref {ref}\n".encode())
+            write_whole(marker, "".join(f"{name}\n" for name in names).encode())
+        write_whole(target / "COMMIT.txt", f"{sha} {repo} fetched at ref {ref}\n".encode())
     finally:
         if own_client:
             client.close()

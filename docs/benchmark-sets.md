@@ -44,16 +44,18 @@ for now; embedding, reranking and classification models are out.
   - the engines' registries at pinned refs: every example checkpoint that vLLM's
     `tests/models/registry.py` names for a generative architecture (134 text-generation and 130
     multimodal architectures at the 2026-10-04 ref), and every checkpoint in SGLang's
-    supported-models docs;
+    supported-models docs; the architectures SGLang serves come from its code, each model module's
+    `EntryClass`, since the docs name checkpoints and not architectures;
   - the Hugging Face Hub, for each organization that publishes a registered architecture: its
     models whose `config.json` names a registered architecture and that ship a chat template.
     Two kinds are left out. Quantized and converted copies (GGUF, AWQ, GPTQ, MLX, ONNX, FP8,
     NVFP4, MXFP4, MXFP8, Int4, Int8, bitsandbytes) carry their source's files. Checkpoints created
     before 2025 are left out unless a registry names them.
 
-  The command pins the registry refs, but the Hub only shows its present state, so what is
-  reproducible is the committed list with each row's revision; a rerun shows what changed as a diff
-  of that list. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
+  The command pins the registry refs, but the Hub only shows its present state. What is committed,
+  and rebuilt and compared in CI, is the list built from the registries alone (`models.jsonl`),
+  whose first line names the pins; a list read from the Hub is that day's evidence, kept under
+  `runs/` and published to smg-project/artifacts, each row pinning the Hub's sha of the day. "Every current Qwen chat checkpoint" in tier 1 is this rule applied to the
   Qwen organization: 64 checkpoints on 2026-10-06.
 - **Every checkpoint is a row.** Each row gives the model, its pinned revision, checkpoint group,
   tier, and a status. The status says what was recorded, what was rejected and why, or why nothing
@@ -333,7 +335,8 @@ hand-written) as a table or JSON, read from the `sets.toml` files. The README ca
 
 - **Per pull request:** ruff and pytest. The hand-written fixtures, and the benchmark sets the pull
   request changes, are validated in full; Git LFS fetches only those paths. The importers re-run,
-  and the corpus must come out byte-identical.
+  and the corpus must come out byte-identical; so must the list of models built from the
+  registries alone.
 - **Weekly:** every group is re-recorded and each set's plain-content sha256 is compared with
   `sets.toml`, which needs no download; one other member of each group is recorded and compared.
 - **Credentials:** recording downloads tokenizer files, so CI uses a Hugging Face token stored as

@@ -1,8 +1,8 @@
-"""Command line entry point: ``bellwether gaps | record | import | count | unpack | verify | report``.
+"""Command line entry point: ``bellwether gaps | models | record | import | count | unpack | verify | report``.
 
-``gaps`` (M1) and ``record --kind render --oracle reference`` (M2) are implemented. The other
-subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs exit
-with status 2 so that scripts never mistake a missing feature for a passing run.
+``gaps`` (M1), ``models`` and ``record --kind render --oracle reference`` (M2) are implemented. The
+other subcommands are stubs until their milestone lands (see the milestone table in README.md); stubs
+exit with status 2 so that scripts never mistake a missing feature for a passing run.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from bellwether import __version__
 from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
 from bellwether.importers import run as import_run
+from bellwether.models import run as models_run
 from bellwether.record import run as record_run
 from bellwether.unpack import run as unpack_run
 
@@ -48,6 +49,27 @@ def build_parser() -> argparse.ArgumentParser:
     gaps.add_argument("--format", choices=["markdown", "json"], default="markdown")
     gaps.add_argument("--out", type=Path, help="write here instead of stdout")
     gaps.set_defaults(func=gaps_run)
+
+    models = sub.add_parser("models", help="the list of checkpoints to record: engine registries and the Hub")
+    models.add_argument(
+        "--out",
+        type=Path,
+        help="where the list goes, as JSON Lines; models.jsonl with --registry-only, else runs/models-<date>.jsonl",
+    )
+    models.add_argument(
+        "--registry-only",
+        action="store_true",
+        help="list the registries' checkpoints without asking the Hugging Face Hub; offline once the files are cached",
+    )
+    models.add_argument(
+        "--check",
+        action="store_true",
+        help="with --registry-only: compare a fresh list with the committed one, writing nothing; exit 1 on a change",
+    )
+    models.add_argument("--vllm-src", type=Path, help="a vLLM checkout to read the pinned registry from")
+    models.add_argument("--sglang-src", type=Path, help="an SGLang checkout to read the pinned docs from")
+    models.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "bellwether" / "registries")
+    models.set_defaults(func=models_run)
 
     record = sub.add_parser("record", help="run the corpus through one oracle and write fixtures")
     record.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
