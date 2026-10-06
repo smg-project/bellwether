@@ -15,11 +15,18 @@ authority, which nothing here invokes.
 
 The output follows the generation prompt, so a request that asks for no generation prompt or for
 the final message to be continued cannot be recorded this way and is rejected.
+
+Next to the ids the oracle records the text each token contributes under the tokenizer's incremental
+decode (``DecodeStream``), the pieces a replay feeds with each id: a token that does not complete a
+character contributes nothing, and the token that completes it carries the whole character. Joined,
+the pieces must give back the output text; a case where they do not is reported and not recorded.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from tokenizers.decoders import DecodeStream
 
 from .reference import HfTemplateOracle
 
@@ -30,6 +37,7 @@ SOURCE = "roundtrip"
 class OutputText:
     text: str
     output_ids: list[int]
+    output_pieces: list[str]
     finish_reason: str
 
 
@@ -68,8 +76,12 @@ class RoundtripOracle:
         output_ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
         if self.tokenizer.decode(output_ids) != text:
             raise ValueError("the output text does not survive a tokenize-detokenize round trip")
+        stream = DecodeStream(skip_special_tokens=False)
+        output_pieces = [stream.step(self.tokenizer.backend_tokenizer, token) or "" for token in output_ids]
+        if "".join(output_pieces) != text:
+            raise ValueError("the output's tokens do not give back its text under the tokenizer's incremental decode")
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
-        return OutputText(text, output_ids, finish_reason)
+        return OutputText(text, output_ids, output_pieces, finish_reason)
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
