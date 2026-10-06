@@ -223,17 +223,17 @@ being passed over.
 | Verdict | Meaning |
 |---|---|
 | `match` | the `input_ids` SMG sent equal the reference's |
-| `differs` | they do not; the report gives the first differing index, the ids around it on both sides, and whether the prompt text SMG sent equals the reference text (equal text points at tokenization, other text at rendering) |
+| `regression` | they do not; the report gives the first differing index, the ids around it on both sides, and whether the prompt text SMG sent equals the reference text (equal text points at tokenization, other text at rendering) |
 | `rejected` | SMG answered with a status other than 200; its status and message are kept |
 | `missing` | SMG answered, but no capture line written during the run carries the case's id: the file is not the one the engine behind this SMG writes, or the `rid` did not reach it |
 
 `--known PATH` lists SMG's known differences as a TOML table of `"<fixture id>" = "<reason>"`. A listed
-case passes while it differs or is rejected and fails once it matches, and a listed id that names no
+case passes while it is a regression or rejected and fails once it matches, and a listed id that names no
 case of a verified model fails, so the list cannot go stale; bellwether ships no such list. The exit
 status is 0 when every case passes, 1 when one does not, and 2 when the run gives no verdict (no such
-model, a manifest verify cannot read, no answer from SMG, a capture file verify cannot read). Comparing a
-difference with the engine witnesses (`engine_defect`, `engines_split`, `regression`) comes once
-witnesses are recorded.
+model, a manifest verify cannot read, no answer from SMG, a capture file verify cannot read). A case is
+judged against its reference alone for now: telling an `engine_defect` or `engines_split` from a
+`regression` needs the engine witnesses, which come once they are recorded.
 
 ## Layout
 

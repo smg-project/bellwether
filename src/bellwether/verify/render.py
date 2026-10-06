@@ -147,7 +147,7 @@ def compare(case: dict, line: dict) -> dict:
         return {"verdict": "match"}
     index = first_difference(reference, smg)
     outcome = {
-        "verdict": "differs",
+        "verdict": "regression",
         "index": index,
         "lengths": {"reference": len(reference), "smg": len(smg)},
         "window": window(reference, smg, index, ID_WINDOW),

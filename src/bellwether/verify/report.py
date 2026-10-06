@@ -13,8 +13,8 @@ from bellwether.manifest import Manifest
 
 from .render import CannotVerify
 
-VERDICTS = ("match", "differs", "rejected", "missing")
-EXCUSABLE = ("differs", "rejected")
+VERDICTS = ("match", "regression", "rejected", "missing")
+EXCUSABLE = ("regression", "rejected")
 LEADING_KEYS = ("id", "model", "set", "verdict", "passed", "known")
 WITHOUT_CASE = "listed, but there is no such case; remove the entry"
 
@@ -34,7 +34,7 @@ def load_known(path: Path) -> dict[str, str]:
 def judge(results: list[dict], known: dict[str, str]) -> None:
     """Mark each case passed or not.
 
-    A case passes when it matches and is not listed, or when it differs or is rejected and is listed. A listed
+    A case passes when it matches and is not listed, or when it is a regression or rejected and is listed. A listed
     case that matches fails, so an entry goes as soon as SMG is fixed and the list cannot rot. A missing capture
     line fails even when listed: it is about the setup, which file is read and whether the ``rid`` reached the
     engine, not about how SMG renders.
@@ -121,7 +121,7 @@ def write_json(path: Path, report: dict) -> None:
 def write_junit(path: Path, report: dict) -> None:
     """One testcase per case, one suite per model.
 
-    ``differs`` and ``missing`` are failures; ``rejected`` is an error, SMG's own error answer; a listed known
+    ``regression`` and ``missing`` are failures; ``rejected`` is an error, SMG's own error answer; a listed known
     difference is skipped with its reason. Known entries that name no case fail in a suite of their own.
     """
     kind = report["kind"]
@@ -141,7 +141,7 @@ def write_junit(path: Path, report: dict) -> None:
         tag = "error" if case["verdict"] == "rejected" else "failure"
         failure_type = "known-but-matches" if case["verdict"] == "match" else case["verdict"]
         element = ET.SubElement(testcase, tag, type=failure_type, message=describe(case))
-        if case["verdict"] == "differs":
+        if case["verdict"] == "regression":
             details = ("index", "lengths", "window", "text_equal", "text")
             element.text = json.dumps({key: case[key] for key in details if key in case}, ensure_ascii=False)
     if report["known_without_case"]:
@@ -181,7 +181,7 @@ def lines(report: dict) -> list[str]:
 def describe(result: dict) -> str:
     """Why a case has its verdict, and what its known-difference entry, if any, does to it."""
     detail = ""
-    if result["verdict"] == "differs":
+    if result["verdict"] == "regression":
         lengths = result["lengths"]
         detail = f"ids differ from index {result['index']} (reference {lengths['reference']} ids, smg {lengths['smg']})"
         if result["text_equal"] is True:

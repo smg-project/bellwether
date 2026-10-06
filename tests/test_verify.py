@@ -201,7 +201,7 @@ def test_a_difference_gives_the_first_differing_index_and_the_ids_and_text_aroun
 
     results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
     hello, tools, budget = results["m1/render/hello"], results["m1/render/tools"], results["m1/render/budget"]
-    assert hello["verdict"] == "differs"
+    assert hello["verdict"] == "regression"
     assert hello["index"] == 12
     assert hello["lengths"] == {"reference": 20, "smg": 21}
     assert hello["window"] == {
@@ -211,12 +211,12 @@ def test_a_difference_gives_the_first_differing_index_and_the_ids_and_text_aroun
     }
     assert hello["text_equal"] is True
     assert "text" not in hello
-    assert tools["verdict"] == "differs"
+    assert tools["verdict"] == "regression"
     assert (tools["index"], tools["lengths"]) == (3, {"reference": 3, "smg": 4})
     assert tools["window"] == {"start": 0, "reference": [10, 12, 13], "smg": [10, 12, 13, 14]}
     assert tools["text_equal"] is False
     assert tools["text"] == {"index": 11, "start": 0, "reference": "<t>Weather?", "smg": "<t>Weather?<g>"}
-    assert (budget["verdict"], budget["index"], budget["text_equal"]) == ("differs", 1, None)
+    assert (budget["verdict"], budget["index"], budget["text_equal"]) == ("regression", 1, None)
     out = capsys.readouterr().out
     assert "m1/render/hello" in out and "index 12" in out
 
@@ -314,7 +314,7 @@ def test_listed_known_differences_pass_while_they_differ_or_are_rejected(tmp_pat
 
     results = {case["id"]: case for case in json.loads(report.read_text())["cases"]}
     assert [results["m1/render/hello"][key] for key in ("verdict", "known", "passed")] == [
-        "differs",
+        "regression",
         "SMG drops the period",
         True,
     ]
@@ -382,7 +382,7 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
     assert written["summary"] == {
         "cases": 5,
         "match": 1,
-        "differs": 1,
+        "regression": 1,
         "rejected": 2,
         "missing": 1,
         "passed": 2,
@@ -410,7 +410,7 @@ def test_the_json_report_and_the_junit_xml_carry_every_case_and_the_provenance(t
             outcome[testcase.get("name")] = None if child is None else (child.tag, child.get("type"))
     assert outcome == {
         "m1/render/budget": None,
-        "m1/render/hello": ("failure", "differs"),
+        "m1/render/hello": ("failure", "regression"),
         "m1/render/tools": ("error", "rejected"),
         "m2/render/bye": ("skipped", None),
         "m2/render/hello": ("failure", "missing"),
