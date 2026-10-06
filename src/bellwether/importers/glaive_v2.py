@@ -20,7 +20,9 @@ license. A row becomes OpenAI chat messages:
 
 Each assistant turn is a parse case, and each user turn an assistant answers a render case. The whole file maps to about
 1.2 GB of plain JSON Lines, so the corpus holds a sample, every ``STEP``-th row by index, until a compressed corpus form
-lands. A row these rules cannot map has no case, and the import names it with its reason. The dataset ships no LICENSE
+lands. A row these rules cannot map has no case, and the import names it with its reason; a case that repeats an
+earlier one is left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The
+dataset ships no LICENSE
 file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this
 module imports only what it shares with the other importers: the readers of pinned Hugging Face and GitHub files
 (``hf``, ``github``) and the set writer (``corpus_sets``).
@@ -58,7 +60,6 @@ DATASET = "glaive-v2"
 # corpus_sets.LIMIT, the 50 MB a source may keep plain.
 STEP = 31
 SET_SIZE = 5000  # cases per set file, of either kind, at most
-NAMED = 50  # the rows a reason names at most; past that it names the first 50 and gives the count
 
 SYSTEM = "SYSTEM: "
 LEAD_IN = "You are a helpful assistant with access to the following functions. Use them if required -"
@@ -328,32 +329,20 @@ def run(args: argparse.Namespace) -> int:
     rows = json.loads(hf.fetch(REPO, REVISION, DATA, DATA_SHA256, cache=args.cache).read_bytes())
     skipped: list[tuple[int, str]] = []
     sets = build_sets(rows, step=STEP, set_size=SET_SIZE, skipped=skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
-        problems = check_sets(sets, args.corpus, license_text)
+        problems = check_sets(kept, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the glaive-v2 sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    for (kind, name), lines in sorted(sets.items()):
-        print(f"{args.corpus / kind / f'{name}.jsonl'}: {len(lines)} cases")
-    counts = {kind: sum(len(lines) for (k, _), lines in sets.items() if k == kind) for kind in ("render", "parse")}
+    corpus_sets.report(DATASET, sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped([(str(index), why) for index, why in skipped])
+    sampled = [str(index) for index, _ in skipped if index % STEP == 0]
     print(
-        f"sample: every row whose index is a multiple of {STEP}, {len(range(0, len(rows), STEP))} of {len(rows)} rows:"
-        f" {counts['render']} render and {counts['parse']} parse cases"
+        f"sample: every row whose index is a multiple of {STEP}, {len(range(0, len(rows), STEP))} of {len(rows)} rows;"
+        f" {len(sampled)} of the rows left out are in it ({', '.join(sampled)})"
     )
-    report_skipped(skipped)
-    write_sets(sets, args.corpus, license_text)
+    write_sets(kept, args.corpus, license_text)
     return 0
-
-
-def report_skipped(skipped: list[tuple[int, str]]) -> None:
-    """Print each reason once, with the rows it left out across the whole file and how many of them are sampled."""
-    rows_by_reason: dict[str, list[int]] = {}
-    for index, why in skipped:
-        rows_by_reason.setdefault(why, []).append(index)
-    for why, rows in rows_by_reason.items():
-        named = ", ".join(str(row) for row in rows[:NAMED])
-        shown = f" ({named})" if len(rows) <= NAMED else f", the first {NAMED} ({named})"
-        sampled = sum(1 for row in rows if row % STEP == 0)
-        print(f"no case for {len(rows)} row(s){shown}, {sampled} in the sample: {why}")

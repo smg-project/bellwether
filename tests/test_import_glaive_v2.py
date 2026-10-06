@@ -581,16 +581,33 @@ def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     ]
 
 
-def test_the_command_names_the_rows_it_refuses_by_reason_across_the_whole_file(tmp_path, monkeypatch, capsys):
+def test_the_command_names_every_row_it_refuses_and_every_case_it_leaves_out_as_a_repeat(tmp_path, monkeypatch, capsys):
     unended = {"system": NO_FUNCTIONS, "chat": "USER: Hi\n\nASSISTANT: Hello."}
-    serve(monkeypatch, tmp_path, [chat_row("a"), *[BROKEN] * 52, unended, chat_row("b")])
+    # Rows 1 to 52 hold <|endoftext|> in a user turn and row 53 ends without one; row 54 holds row 0's chat, so its
+    # cases repeat row 0's.
+    serve(monkeypatch, tmp_path, [chat_row("a"), *[BROKEN] * 52, unended, chat_row("a"), chat_row("b")])
     monkeypatch.setattr(glaive_v2, "STEP", 2)
-    assert main(["import", "glaive-v2", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")]) == 0
+    corpus = tmp_path / "corpus"
+    argv = ["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
+    assert main(argv) == 0
     out = capsys.readouterr().out.splitlines()
-    first_50 = ", ".join(str(row) for row in range(1, 51))
-    assert f"no case for 52 row(s), the first 50 ({first_50}), 26 in the sample: {glaive_v2.STRAY_END}" in out
-    assert f"no case for 1 row(s) (53), 0 in the sample: {glaive_v2.ASSISTANT_END}" in out
-    assert "sample: every row whose index is a multiple of 2, 28 of 55 rows: 2 render and 2 parse cases" in out
+    # Every row is named, however many share a reason.
+    every = ", ".join(str(row) for row in range(1, 53))
+    assert f"no case for 52 row(s) ({every}): {glaive_v2.STRAY_END}" in out
+    assert f"no case for 1 row(s) (53): {glaive_v2.ASSISTANT_END}" in out
+    sampled = ", ".join(str(row) for row in range(2, 53, 2))
+    sample = "sample: every row whose index is a multiple of 2, 28 of 56 rows"
+    assert f"{sample}; 26 of the rows left out are in it ({sampled})" in out
+    # A case that repeats an earlier one is left out and named with it, and the counts are of the cases kept.
+    assert "no case glaive-v2-54-0: it repeats glaive-v2-0-0" in out
+    assert "no case glaive-v2-54-1: it repeats glaive-v2-0-1" in out
+    assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 1 cases, 1 left out as repeats" in out
+    assert f"{corpus / 'parse' / 'glaive-v2-00.jsonl'}: 1 cases, 1 left out as repeats, 1 distinct messages" in out
+    assert f"{corpus}: 2 cases in the 2 glaive-v2 sets, 2 left out as repeats, 1 distinct messages" in out
+    assert [line["name"] for line in map(json.loads, (corpus / "parse" / "glaive-v2-00.jsonl").open())] == [
+        "glaive-v2-0-1"
+    ]
+    assert main([*argv, "--check"]) == 0
 
 
 def test_the_command_refuses_a_card_under_another_license_and_writes_nothing(tmp_path, monkeypatch):
