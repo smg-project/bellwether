@@ -37,17 +37,24 @@ result is measured against.
 
 ## Who is right
 
-The engines are witnesses, not the judge. Each model's manifest names its authority order: the
-vendor's shipped encoder when there is one, else the chat template and tokenizer at a pinned
-revision, then vendor golden sets, then the engines, with vLLM as the tie-break between engines.
-For parsing, rendering the parsed message back through the template must reproduce the output,
-which gives an engine-independent oracle for every model with a template.
+Two sources of truth, equal in authority (Simo, 2026-10-06):
 
-Every case gets a verdict: `match`, `engine_defect` (SMG agrees with the reference, an engine does
-not), `engines_split`, `policy` (malformed output, documented fallback expected), or `regression`
-(SMG disagrees with the reference). Only `regression`, an `engine_defect` without a waiver, and a
-stale waiver fail the gate. Waivers live in `waivers/engine_defects.toml`, carry evidence and an
-upstream link, and expire when the engine catches up.
+- **Hugging Face:** the checkpoint's own material at a pinned revision. That is the vendor's shipped
+  encoder when there is one, else the chat template and tokenizer. For parsing it is the round trip:
+  rendering the parsed message back through the template must reproduce the output.
+- **vLLM:** at a pinned release, through its GPU-less render server.
+
+When they agree, the case is settled. When they disagree, the case is `disputed`, the disagreement
+is an issue, and nothing in bellwether is configured to make them agree. A line's `reference` is
+Hugging Face's result and vLLM's is a `witness`. SGLang and engine runs on a GPU are witnesses too,
+as evidence without authority. `docs/benchmark-sets.md` has the rules.
+
+Every case gets a verdict: `match`, `engine_defect` (SMG agrees with the sources of truth, a
+witnessing engine does not), `engines_split`, `policy` (malformed output, documented fallback
+expected), or `regression` (SMG disagrees with them). A `disputed` case counts for none of these.
+Only `regression`, an `engine_defect` without a waiver, and a stale waiver fail the gate. Waivers
+live in `waivers/engine_defects.toml`, carry evidence and an upstream link, and expire when the
+engine catches up.
 
 ## Vocabulary
 
@@ -55,8 +62,9 @@ upstream link, and expire when the engine catches up.
 |---|---|
 | case | one request or one engine output, with everything needed to reproduce it |
 | fixture | a case plus the recorded reference result and each witness's result |
-| reference | the result the vendor's own material produces; ground truth |
-| witness | an engine's result; evidence, not authority |
+| reference | Hugging Face's result: the checkpoint's own material at its pinned revision; one of the two sources of truth |
+| witness | an engine's result; vLLM's, at the pinned release, is the other source of truth, and the rest are evidence, not authority |
+| disputed | a case whose two sources of truth disagree; it carries the disagreement's fingerprint, and no parity is counted against it |
 | verdict | the classification of one case after comparing SMG with reference and witnesses |
 | waiver | a reviewed, expiring record explaining an `engine_defect`, with an upstream link |
 | manifest | per-model file: revision, authority order, SMG and engine parser names |
