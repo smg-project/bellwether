@@ -41,12 +41,44 @@ def test_registry_only_lists_every_generative_checkpoint_once_without_asking_the
     assert models[2:25] == sorted(models[2:25])  # without downloads, the id orders the rows
 
 
-def test_a_checkpoint_any_registry_calls_multimodal_is_multimodal() -> None:
-    rows = {row.model: row for row in registry_only_rows(excerpt_entries(), BUILT)}
-    assert rows["zai-org/GLM-5.3-Flash"].modality == "multimodal"  # vLLM names it in both tables
-    assert rows["Qwen/Qwen3-ASR-1.7B"].modality == "multimodal"
-    assert rows["inclusionAI/LLaDA2.0-flash"].modality == "text"
-    assert sum(row.modality == "multimodal" for row in rows.values()) == 11  # JetVLM and FunAudioChat among them
+def test_without_the_hub_a_checkpoints_modality_is_its_architectures_and_unknown_without_one() -> None:
+    rows = {row.model: row.modality for row in registry_only_rows(excerpt_entries(), BUILT)}
+    assert rows["zai-org/GLM-5.3-Flash"] == "multimodal"  # vLLM lists it under a multimodal architecture too
+    assert rows["deepseek-ai/DeepSeek-V4.1-Flash"] == "multimodal"  # vLLM's multimodal table holds its architecture
+    assert rows["Qwen/Qwen3-8B"] == "text"
+    assert rows["FunAudioChatForConditionalGeneration"] == "multimodal"  # an entry without a checkpoint, by its name
+    assert rows["Qwen/Qwen3-ASR-1.7B"] is None  # SGLang's docs name it, and no architecture, without its config
+    assert rows["JetVLM"] is None  # a model family, not an architecture
+    modalities = list(rows.values())
+    assert (modalities.count("text"), modalities.count("multimodal"), modalities.count(None)) == (8, 7, 13)
+
+
+def test_modality_follows_the_architecture_with_the_hub_whatever_page_names_the_checkpoint() -> None:
+    entries = [
+        Entry("vllm", "Qwen3_5MoeForConditionalGeneration", MULTIMODAL, True, True, ("Qwen/Qwen3.5-35B-A3B",)),
+        Entry("sglang", "Qwen (3.5, 3)", PAGE, True, False, ("Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3-0.6B")),
+        Entry("vllm", "MiMoV2ForCausalLM", TEXT, True, False, ("XiaomiMiMo/MiMo-V2.5-Pro",)),
+    ]
+    served = Served(frozenset({"Qwen3ForCausalLM", "MiMoV2ForCausalLM"}), frozenset({"MiMoV2ForCausalLM"}))
+    offline = {row.model: row.modality for row in registry_only_rows(entries, BUILT, served)}
+    assert offline == {
+        "Qwen/Qwen3.5-35B-A3B": "multimodal",
+        "Qwen/Qwen3.5-397B-A17B": None,  # SGLang lists it on its text page; its architecture waits on the Hub
+        "Qwen/Qwen3-0.6B": None,
+        "XiaomiMiMo/MiMo-V2.5-Pro": "multimodal",  # vLLM's text table, SGLang's multimodal processor
+    }
+    models = {
+        "Qwen/Qwen3.5-35B-A3B": details(
+            "Qwen/Qwen3.5-35B-A3B", date(2026, 2, 1), 5, ("Qwen3_5MoeForConditionalGeneration",)
+        ),
+        "Qwen/Qwen3.5-397B-A17B": details(
+            "Qwen/Qwen3.5-397B-A17B", date(2026, 2, 1), 5, ("Qwen3_5MoeForConditionalGeneration",)
+        ),
+        "Qwen/Qwen3-0.6B": details("Qwen/Qwen3-0.6B", date(2025, 4, 27), 5, ("Qwen3ForCausalLM",)),
+        "XiaomiMiMo/MiMo-V2.5-Pro": details("XiaomiMiMo/MiMo-V2.5-Pro", date(2026, 5, 1), 5, ("MiMoV2ForCausalLM",)),
+    }
+    online = {row.model: row.modality for row in hub_rows(entries, FakeHub({}, models), BUILT, served=served)}
+    assert online == {**offline, "Qwen/Qwen3.5-397B-A17B": "multimodal", "Qwen/Qwen3-0.6B": "text"}
 
 
 def test_one_checkpoint_named_by_both_engines_is_one_row_with_both_sources() -> None:
@@ -315,7 +347,7 @@ def test_a_registry_entry_that_names_no_checkpoint_is_a_row_under_its_name() -> 
         Row(
             "FunAudioChatForConditionalGeneration", None, 3, "no-checkpoint-named", None, None, "multimodal", ("vllm",)
         ),
-        Row("JetVLM", None, 3, "no-checkpoint-named", None, None, "multimodal", ("sglang",)),
+        Row("JetVLM", None, 3, "no-checkpoint-named", None, None, None, ("sglang",)),  # a family, not an architecture
         Row("Qwen4ExpForCausalLM", None, 3, "no-checkpoint-named", None, None, "text", ("vllm",)),
     ]
     offline = registry_only_rows(entries, BUILT)

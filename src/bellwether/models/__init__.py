@@ -29,7 +29,7 @@ def run(args: argparse.Namespace) -> int:
         return FAILED
     built = datetime.now(UTC).date()
     if args.registry_only:
-        rows = registry_only_rows(entries, built)
+        rows = registry_only_rows(entries, built, served)
     else:
         rows = hub_rows(entries, HfHub(), built, log=_note, served=served)
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -59,7 +59,8 @@ def _summary(rows: list[Row], out: Path) -> str:
             f"bellwether models: {len(rows)} rows in {out}",
             f"  tier 1: {tiers[1]}, tier 2: {tiers[2]}, tier 3: {tiers[3]}"
             + (f", left to the Hub: {tiers[None]}" if tiers[None] else ""),
-            f"  text: {modalities['text']}, multimodal: {modalities['multimodal']}",
+            f"  text: {modalities['text']}, multimodal: {modalities['multimodal']}"
+            + (f", left to the Hub: {modalities[None]}" if modalities[None] else ""),
             "  status: " + ", ".join(f"{status} {count}" for status, count in sorted(statuses.items())),
         ]
     )

@@ -59,7 +59,7 @@ def test_registry_only_writes_the_list_and_says_what_is_in_it(cache: Path, tmp_p
     assert f"28 rows in {out}" in printed.out
     assert "tier 1: 2, tier 2: 0, tier 3: 3, left to the Hub: 23" in printed.out
     assert {row["tier"] for row in rows} == {1, 3, None}
-    assert "text: 17, multimodal: 11" in printed.out
+    assert "text: 8, multimodal: 7, left to the Hub: 13" in printed.out
     assert "vllm FunAudioChatForConditionalGeneration: 'funaudiochat' is not a Hugging Face id" in printed.err
     assert "tier 1 names missing from the list: MiniMaxAI/MiniMax-M3, tencent/Hy4-preview" in printed.err
     assert "gpt-oss, set aside: lmsys/gpt-oss-20b-bf16, openai/gpt-oss-120b, openai/gpt-oss-20b" in printed.err

@@ -37,7 +37,7 @@ class Row:
     status: str
     created: date | None
     downloads: int | None  # over the 30 days before the build
-    modality: str  # "text" or "multimodal"
+    modality: str | None  # "multimodal" when an architecture of it is, "text"; None when none is known
     sources: tuple[str, ...]  # the engines whose registries name it, or "hub"
 
 
@@ -45,14 +45,14 @@ class Row:
 class _Named:
     """What the registries say of one checkpoint.
 
-    Which engines name it, whether one calls it multimodal, and whether one gives it as an
-    architecture's example (vLLM's default, an id in SGLang's docs) rather than as one of vLLM's
-    extra test models; and how vLLM loads it: with the vendor's code, at a revision of its own, with
-    the tokenizer of another repository.
+    Which engines name it, the architectures vLLM lists it under (SGLang's docs give none), and
+    whether one gives it as an architecture's example (vLLM's default, an id in SGLang's docs) rather
+    than as one of vLLM's extra test models; and how vLLM loads it: with the vendor's code, at a
+    revision of its own, with the tokenizer of another repository.
     """
 
     sources: set[str] = field(default_factory=set)
-    multimodal: bool = False
+    architectures: set[str] = field(default_factory=set)
     example: bool = False
     vendor_code: bool = False
     revision: str | None = None
@@ -61,21 +61,21 @@ class _Named:
     def add(
         self,
         sources: Iterable[str],
-        multimodal: bool,
+        architectures: Iterable[str],
         example: bool,
         vendor_code: bool = False,
         revision: str | None = None,
         tokenizer: str | None = None,
     ) -> None:
         self.sources.update(sources)
-        self.multimodal = self.multimodal or multimodal
+        self.architectures.update(architectures)
         self.example = self.example or example
         self.vendor_code = self.vendor_code or vendor_code
         self.revision = self.revision or revision
         self.tokenizer = self.tokenizer or tokenizer
 
     def merge(self, other: _Named) -> None:
-        self.add(other.sources, other.multimodal, other.example, other.vendor_code, other.revision, other.tokenizer)
+        self.add(other.sources, other.architectures, other.example, other.vendor_code, other.revision, other.tokenizer)
 
 
 @dataclass
@@ -98,7 +98,7 @@ def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
                     # vLLM's revision and tokenizer are those of the default; vendor code is the architecture's.
                     own = (entry.revision, entry.tokenizer) if index == 0 else (None, None)
                     named.setdefault(model, _Named()).add(
-                        [entry.engine], entry.multimodal, example, entry.vendor_code, *own
+                        [entry.engine], _architectures(entry), example, entry.vendor_code, *own
                     )
     return named
 
@@ -130,7 +130,7 @@ def without_checkpoint(entries: Iterable[Entry]) -> dict[str, _Named]:
     named: dict[str, _Named] = {}
     for entry in entries:
         if entry.generative and not any(is_hub_id(model) for model in entry.checkpoints):
-            named.setdefault(entry.name, _Named()).add([entry.engine], entry.multimodal, example=False)
+            named.setdefault(entry.name, _Named()).add([entry.engine], _architectures(entry), example=False)
     return named
 
 
@@ -150,12 +150,12 @@ def unnamed(entries: Iterable[Entry]) -> list[str]:
     return notes
 
 
-def registry_only_rows(entries: Iterable[Entry], built: date) -> list[Row]:
+def registry_only_rows(entries: Iterable[Entry], built: date, served: Served = NOTHING_SERVED) -> list[Row]:
     """The registries' checkpoints alone: no sha, date or downloads, so no row can be shown to be tier 2."""
     entries = list(entries)
-    named = registry_checkpoints(entries)
-    rows = [_row(model, None, n, built, checked=False) for model, n in named.items()]
-    return ordered([*rows, *_rows_without_checkpoint(entries)])
+    _, multimodal = _registered(entries, served)
+    rows = [_row(model, None, n, built, False, multimodal) for model, n in registry_checkpoints(entries).items()]
+    return ordered([*rows, *_rows_without_checkpoint(entries, multimodal)])
 
 
 def hub_rows(
@@ -174,7 +174,7 @@ def hub_rows(
         log(f"registries: no answer from the Hub for {', '.join(unanswered)}; their rows say why")
     text, multimodal = _registered(entries, served)
     rows = {
-        model: _row(model, f.details, f.named, built, checked=True, status=f.unavailable) for model, f in found.items()
+        model: _row(model, f.details, f.named, built, True, multimodal, f.unavailable) for model, f in found.items()
     }
     # The organizations that publish a registered architecture: those of the engines' examples. vLLM's
     # extras add tiny, random and quantized test models from namespaces that publish none.
@@ -195,11 +195,10 @@ def hub_rows(
                 continue
             if details is None or details.id in rows or not admits_details(details, text | multimodal):
                 continue
-            is_multimodal = any(arch in multimodal for arch in details.architectures)
-            rows[details.id] = _row(details.id, details, _Named({"hub"}, is_multimodal), built, checked=True)
+            rows[details.id] = _row(details.id, details, _Named({"hub"}), built, True, multimodal)
             added += 1
         log(f"{org}: {len(listing)} listed, {added} added")
-    return ordered([*rows.values(), *_rows_without_checkpoint(entries)])
+    return ordered([*rows.values(), *_rows_without_checkpoint(entries, multimodal)])
 
 
 def _resolve(named: dict[str, _Named], hub: Hub) -> dict[str, _Found]:
@@ -244,7 +243,13 @@ def _registered(entries: list[Entry], served: Served) -> tuple[set[str], set[str
 
 
 def _row(
-    model: str, details: Details | None, named: _Named, built: date, checked: bool, status: str | None = None
+    model: str,
+    details: Details | None,
+    named: _Named,
+    built: date,
+    checked: bool,
+    multimodal: set[str],
+    status: str | None = None,
 ) -> Row:
     """One checkpoint's row; ``status``, when given, is the Hub's error in place of what its details say."""
     created = details.created if details else None
@@ -256,19 +261,29 @@ def _row(
         status=status or status_of(details, checked, named.vendor_code),
         created=created,
         downloads=details.downloads if details else None,
-        modality="multimodal" if named.multimodal else "text",
+        modality=_modality(named.architectures | set(details.architectures if details else ()), multimodal),
         sources=tuple(sorted(named.sources)),
     )
 
 
-def _rows_without_checkpoint(entries: Iterable[Entry]) -> list[Row]:
+def _rows_without_checkpoint(entries: Iterable[Entry], multimodal: set[str]) -> list[Row]:
     """A row for each entry that names no checkpoint; the Hub has nothing to say about a name that is none."""
     return [
-        Row(
-            name, None, 3, NO_CHECKPOINT, None, None, "multimodal" if n.multimodal else "text", tuple(sorted(n.sources))
-        )
+        Row(name, None, 3, NO_CHECKPOINT, None, None, _modality(n.architectures, multimodal), tuple(sorted(n.sources)))
         for name, n in without_checkpoint(entries).items()
     ]
+
+
+def _architectures(entry: Entry) -> set[str]:
+    """The architectures an entry gives its checkpoints under: vLLM's key; SGLang's docs give a family."""
+    return {entry.name} if entry.engine == "vllm" else set()
+
+
+def _modality(architectures: set[str], multimodal: set[str]) -> str | None:
+    """Multimodal when one of its architectures is, in either engine's code; unknown without an architecture."""
+    if not architectures:
+        return None
+    return "multimodal" if architectures & multimodal else "text"
 
 
 def missing_from_tier1(rows: Iterable[Row]) -> list[str]:
