@@ -58,6 +58,7 @@ def run(args: argparse.Namespace) -> int:
     )
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
+    stop_ids: list[int] = []  # the stop id each parse output recorded in this run ends on
     kind_dir = args.fixtures / manifest.slug / args.kind
     # This run's sets.toml tables, by set; None drops the set's table. sets.toml is read when they are put in, at the
     # end of the run, so a run of the other kind for this model that wrote it in the meantime keeps its tables.
@@ -83,6 +84,8 @@ def run(args: argparse.Namespace) -> int:
                 rejected += 1
                 continue
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
+            if isinstance(oracle, RoundtripOracle):
+                stop_ids.append(line["reference"]["end_of_turn"]["stop_id"])
             old = previous.get(case_id)
             if old is not None and "witnesses" in old:
                 if old.get("request") == case.request:
@@ -94,7 +97,8 @@ def run(args: argparse.Namespace) -> int:
         removed = len(set(previous) - set(lines))
         if lines:
             write_fixture_file(out, lines)
-            tables[set_name] = set_tables.entry(form, plain_text(out), len(lines), rejected)
+            generate = oracle.generate_stop() if isinstance(oracle, RoundtripOracle) else {}
+            tables[set_name] = set_tables.entry(form, plain_text(out), len(lines), rejected, **generate)
         else:
             out.unlink(missing_ok=True)
             tables[set_name] = None
@@ -117,6 +121,9 @@ def run(args: argparse.Namespace) -> int:
                 tables[name] = None
                 print(f"{stale}: removed, the corpus has no set of that name")
     set_tables.update(args.fixtures / manifest.slug / set_tables.FILE, args.kind, tables)
+    differ = oracle.stop_sets_differ(manifest.model, stop_ids) if isinstance(oracle, RoundtripOracle) else None
+    if differ is not None:
+        print(differ, file=sys.stderr)
     for case_id, reason in not_recorded:
         print(f"not recorded {case_id}: {reason}", file=sys.stderr)
     return 1 if not_recorded else 0
@@ -151,6 +158,7 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "source": PARSE_SOURCE,
             "message": {"role": "assistant", **case.message},
             "finish_reason": output.finish_reason,
+            "end_of_turn": output.end_of_turn,
             "text": output.text,
             "provenance": provenance,
         },

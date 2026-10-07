@@ -7,9 +7,10 @@ import re
 import shutil
 import subprocess
 
+import huggingface_hub.constants
 import pytest
 import zstandard
-from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
@@ -20,7 +21,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
-from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
+from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids, next_messages
 from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -394,11 +395,17 @@ def test_roundtrip_records_the_turn_between_the_prompt_and_the_end_of_turn(tiny_
     assert (plain.text, plain.finish_reason) == ("Hello", "stop")
 
 
-def tiny_variant(tiny_model, tmp_path_factory, name: str, template: str) -> pathlib.Path:
-    """The tiny model's tokenizer with another chat template."""
+def tiny_variant(
+    tiny_model, tmp_path_factory, name: str, template: str, *, tokens: tuple[str, ...] = (), without_eos: bool = False
+) -> pathlib.Path:
+    """The tiny model's tokenizer with another chat template, optionally more special tokens or no eos token."""
     directory = tmp_path_factory.mktemp(name)
-    (directory / "tokenizer.json").write_bytes((tiny_model / "tokenizer.json").read_bytes())
+    tokenizer = Tokenizer.from_file(str(tiny_model / "tokenizer.json"))
+    tokenizer.add_special_tokens(list(tokens))
+    tokenizer.save(str(directory / "tokenizer.json"))
     config = json.loads((tiny_model / "tokenizer_config.json").read_text())
+    if without_eos:
+        del config["eos_token"]
     (directory / "tokenizer_config.json").write_text(json.dumps({**config, "chat_template": template}))
     return directory
 
@@ -509,7 +516,10 @@ def test_a_call_with_empty_arguments_in_the_history_renders_as_vllm_renders_it(i
 def test_a_template_that_renders_no_tool_calls_fails_the_case(tiny_model, tmp_path_factory):
     # Phi-4-mini's and Hunyuan-A13B's templates drop the calls; the output would be the end of the turn alone.
     model = tiny_variant(tiny_model, tmp_path_factory, "no-calls-chat", assistant_template(""))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )
@@ -518,7 +528,10 @@ def test_a_template_that_renders_no_tool_calls_fails_the_case(tiny_model, tmp_pa
 def test_a_template_that_renders_only_the_first_call_fails_the_case(tiny_model, tmp_path_factory):
     call = "{%- if loop.first %}{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}{%- endif %}"
     model = tiny_variant(tiny_model, tmp_path_factory, "first-call-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: adding an argument to call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call(), weather_call()]}
         )
@@ -538,7 +551,10 @@ def test_a_template_that_renders_only_the_last_call_fails_even_when_the_names_st
         {"type": "function", "function": {"name": "todo", "arguments": '{"type": "add"}'}},
         {"type": "function", "function": {"name": "todo", "arguments": '{"content": "todo random"}'}},
     ]
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (todo) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Two todos")]}, {"content": "", "tool_calls": calls}
         )
@@ -548,7 +564,10 @@ def test_a_template_that_renders_the_names_without_the_arguments_fails_the_case(
     # The rename changes the rendered turn, so only the marker argument finds that the arguments never reach it.
     call = "{{ '<tool_call>' + c['function']['name'] + '</tool_call>' }}"
     model = tiny_variant(tiny_model, tmp_path_factory, "names-only-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: adding an argument to call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )
@@ -558,7 +577,10 @@ def test_a_template_that_renders_the_arguments_without_the_names_fails_the_case(
     # The marker argument changes the rendered turn, so only the rename finds that the name never reaches it.
     call = "{{ '<tool_call>' + c['function']['arguments'] | tojson + '</tool_call>' }}"
     model = tiny_variant(tiny_model, tmp_path_factory, "arguments-only-chat", assistant_template(call))
-    with pytest.raises(ValueError, match="does not render every tool call"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
         RoundtripOracle(str(model), "local").render_output(
             {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]}
         )
@@ -744,7 +766,7 @@ def test_fixture_writer_rejects_a_parse_line_without_its_ids_or_pieces(tmp_path)
         "model": "tiny-chat",
         "output_ids": [5, 6],
         "output_pieces": ["a", "b"],
-        "reference": {"source": "roundtrip", "text": "ab"},
+        "reference": {"source": "roundtrip", "text": "ab", "end_of_turn": {"stop_id": 7, "found_by": "turn"}},
     }
     write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/parse/a": line})
     for missing in ("output_ids", "output_pieces"):
@@ -766,6 +788,65 @@ def test_a_fixture_file_reads_a_case_whose_text_holds_unicode_line_breaks_intact
     assert read_fixture_file(tmp_path / "x.jsonl") == {"tiny-chat/render/a": line}
 
 
+def roundtrip_line(**reference) -> dict:
+    """A round-trip parse line whose reference holds ``reference`` besides its source and text."""
+    return {
+        "id": "tiny-chat/parse/a",
+        "kind": "parse",
+        "model": "tiny-chat",
+        "output_ids": [5],
+        "output_pieces": ["a"],
+        "reference": {"source": "roundtrip", "text": "a", **reference},
+    }
+
+
+@pytest.mark.parametrize(
+    "end_of_turn",
+    [
+        None,
+        {"stop_id": 7},
+        {"found_by": "turn"},
+        {"stop_id": 7, "found_by": "banana"},
+        {"stop_id": 7, "found_by": "next_message"},
+        {"stop_id": "x", "found_by": "turn"},
+        {"stop_id": -1, "found_by": "turn"},
+        {"stop_id": 7.5, "found_by": "turn"},
+        {"stop_id": True, "found_by": "turn"},
+        {"stop_id": 7, "found_by": "turn", "stop_ids": [7]},
+        7,
+    ],
+    ids=[
+        "missing",
+        "no-found-by",
+        "no-stop-id",
+        "found-by-banana",
+        "found-by-misspelled",
+        "stop-id-string",
+        "stop-id-negative",
+        "stop-id-fraction",
+        "stop-id-boolean",
+        "misspelled-key",
+        "not-an-object",
+    ],
+)
+def test_the_case_schema_refuses_a_round_trip_parse_line_without_a_well_formed_end_of_turn(end_of_turn):
+    # A round-trip parse line says which stop id ends its output and which step found it, beside finish_reason.
+    line = roundtrip_line() if end_of_turn is None else roundtrip_line(end_of_turn=end_of_turn)
+    errors = list(validator().iter_errors(line))
+    assert errors, f"the schema took end_of_turn {end_of_turn!r}"
+
+
+def test_the_case_schema_takes_a_well_formed_end_of_turn_and_asks_it_of_round_trip_parse_lines_only():
+    for found_by in ("turn", "next-message"):
+        validator().validate(roundtrip_line(end_of_turn={"stop_id": 0, "found_by": found_by}))
+    engine = roundtrip_line()
+    engine["reference"]["source"] = "engine:vllm"
+    validator().validate(engine)
+    validator().validate(
+        {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "roundtrip"}}
+    )
+
+
 COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
 
 
@@ -784,7 +865,10 @@ def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
     table = set_tables.read(path.parent.parent / set_tables.FILE).get((path.parent.name, name))
     assert table is not None, f"{path}: sets.toml has no table for this set"
     form = "zstd" if path.name.endswith(".zst") else "plain"
-    expected = set_tables.entry(form, plain, table["cases"], table["rejected"])
+    generate = {field: table[field] for field in set_tables.GENERATE_FIELDS if field in table}
+    if path.parent.name == "parse":  # recorded from a hub checkpoint, which ships config.json at least
+        assert list(generate) == list(set_tables.GENERATE_FIELDS), f"{path}: sets.toml names no stop ids of generate's"
+    expected = set_tables.entry(form, plain, table["cases"], table["rejected"], **generate)
     assert table == expected, f"{path}: its sets.toml table does not match the file"
     # Only "\n" ends a line: U+2028 and the like stay raw inside a case's strings.
     lines = plain.split("\n")
@@ -850,6 +934,395 @@ def test_record_set_rejects_a_set_the_corpus_does_not_have(tmp_path, tiny_model,
     record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
     assert main(record_argv(tmp_path, tiny_model, "--set", "missing")) == 1
     assert "no corpus set named missing" in capsys.readouterr().err
+
+
+def token_id(model: pathlib.Path, token: str) -> int:
+    return Tokenizer.from_file(str(model / "tokenizer.json")).token_to_id(token)
+
+
+def test_record_parse_names_the_stop_id_that_ends_the_output(tmp_path, tiny_model):
+    # Today's case: the turn ends with the tokenizer's eos, and the output is the text before it, as before.
+    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/parse/plain"]
+    im_end = token_id(tiny_model, "<|im_end|>")
+    assert line["reference"]["text"] == "Hello"
+    assert im_end not in line["output_ids"]
+    assert line["reference"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+    assert "end_of_turn" not in line["reference"]["provenance"]
+
+
+def turn_end_template(end: str) -> str:
+    """A ChatML-like template whose assistant turn ends with ``end`` (Jinja string syntax), not ``<|im_end|>``."""
+    return (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' + (m['content'] or '') + '" + end + "' }}"
+        "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+def write_generation_config(model: pathlib.Path, *eos_tokens: str) -> None:
+    """``generation_config.json`` as a checkpoint ships it, its ``eos_token_id`` listing ``eos_tokens``."""
+    eos_token_id = [token_id(model, token) for token in eos_tokens]
+    (model / "generation_config.json").write_text(json.dumps({"eos_token_id": eos_token_id}))
+
+
+def test_the_output_ends_at_a_stop_id_the_generation_config_lists(tiny_model, tmp_path_factory):
+    # MiniCPM5, Laguna, dots3, Inkling: the template ends the turn with a marker of the generation config's
+    # eos_token_id, not with the tokenizer's eos. The output is the text before the marker.
+    model = tiny_variant(tiny_model, tmp_path_factory, "end-chat", turn_end_template("<|end|>\\n"), tokens=("<|end|>",))
+    write_generation_config(model, "<|end|>")
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert out.text == "Hello"
+    assert token_id(model, "<|end|>") not in out.output_ids
+    assert out.end_of_turn == {"stop_id": token_id(model, "<|end|>"), "found_by": "turn"}
+
+
+def test_a_turn_that_goes_on_after_its_stop_id_fails_the_case(tiny_model, tmp_path_factory):
+    # The template renders part of the message after the point where generation stops, so no generation
+    # returns this turn: the case is reported, not recorded.
+    end = turn_end_template("<|end|>\\nSources: none.<|im_end|>\\n")
+    model = tiny_variant(tiny_model, tmp_path_factory, "goes-on-chat", end, tokens=("<|end|>",))
+    write_generation_config(model, "<|end|>")
+    with pytest.raises(ValueError, match=r"the turn goes on after stop id \d+ \('<\|end\|>'\)"):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    # Whitespace and further stop ids are not the turn going on: Phi-4-mini writes `<|end|><|endoftext|>`.
+    end = turn_end_template("<|end|>\\n<|im_end|>\\n")
+    model = tiny_variant(tiny_model, tmp_path_factory, "end-eos-chat", end, tokens=("<|end|>",))
+    write_generation_config(model, "<|end|>")
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert (out.text, out.end_of_turn["stop_id"]) == ("Hello", token_id(model, "<|end|>"))
+
+
+@pytest.fixture(scope="session")
+def endoftext_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """Qwen3's stop set on the tiny model: `<|im_end|>`, which ends its turns, and `<|endoftext|>`."""
+    model = tiny_variant(tiny_model, tmp_path_factory, "endoftext-chat", TEMPLATE, tokens=("<|endoftext|>",))
+    write_generation_config(model, "<|im_end|>", "<|endoftext|>")
+    return model
+
+
+def call_with(arguments: str) -> dict:
+    return {"type": "function", "function": {"name": "get_weather", "arguments": arguments}}
+
+
+# `<|endoftext|>` with its angle brackets written as JSON escapes; the template gets the decoded text.
+ESCAPED_ENDOFTEXT = chr(92) + "u003c|endoftext|" + chr(92) + "u003e"
+
+
+@pytest.mark.parametrize(
+    ("message", "where"),
+    [
+        ({"content": "It is <|endoftext|>"}, "content"),
+        ({"content": "It is <|endoftext|> and more"}, "content"),
+        ({"reasoning_content": "Say <|endoftext|> first.", "content": "Done."}, "reasoning_content"),
+        (
+            {"content": "", "tool_calls": [call_with('{"city": "<|endoftext|>"}')]},
+            "tool_calls[0].function.arguments.city",
+        ),
+        (
+            {"content": "", "tool_calls": [call_with('{"city": "' + ESCAPED_ENDOFTEXT + '"}')]},
+            "tool_calls[0].function.arguments.city",
+        ),
+        (
+            {"content": "", "tool_calls": [call_with('{"<|endoftext|>": "Paris"}')]},
+            "tool_calls[0].function.arguments.<|endoftext|>",
+        ),
+    ],
+    ids=["content-end", "content-middle", "reasoning", "call-arguments", "call-arguments-escaped", "argument-name"],
+)
+def test_a_stop_id_in_the_message_s_own_text_fails_the_case(endoftext_model, message, where):
+    # Generation stops at the first stop id, so no output carries a message whose own text holds one. The turn is
+    # searched by id: with the stop token at the end of the content the case was recorded short, and anywhere else it
+    # was refused as if the template had rendered the rest of the message after generation stops. `</s>`, a stop token
+    # of several checkpoints, is also ordinary HTML.
+    request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
+    stop = token_id(endoftext_model, "<|endoftext|>")
+    expected = f"the message's own text holds stop id {stop} ('<|endoftext|>') in {where}:"
+    with pytest.raises(ValueError, match=re.escape(expected)):
+        RoundtripOracle(str(endoftext_model), "local").render_output(request, message)
+
+
+def test_a_special_token_that_is_not_a_stop_id_stays_in_the_output(endoftext_model):
+    # The corpus has messages whose text holds `</think>` or `<tool_call>`: only a stop id fails a case.
+    out = RoundtripOracle(str(endoftext_model), "local").render_output(
+        {"messages": [user("Hi")]}, {"content": "Write <think> here."}
+    )
+    assert out.text == "Write <think> here."
+
+
+# GLM's shape: no message is closed; each opens with its role tag, and a tool message needs its call's id here.
+ROLE_TAG_TEMPLATE = (
+    "{%- for m in messages %}"
+    "{%- if m['role'] == 'assistant' %}{{ '<|assistant|>' + (m['content'] or '') }}"
+    "{%- for c in (m['tool_calls'] or []) %}"
+    "{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] | tojson + '</tool_call>' }}"
+    "{%- endfor %}"
+    "{%- elif m['role'] == 'tool' %}{{ '<|observation|>' + m['tool_call_id'] + ' ' + m['content'] }}"
+    "{%- else %}{{ '<|user|>' + m['content'] }}{%- endif %}"
+    "{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ '<|assistant|>' }}{%- endif %}"
+)
+ROLE_TAGS = ("<|user|>", "<|assistant|>", "<|observation|>")
+
+
+def test_a_turn_without_a_stop_id_ends_where_the_next_message_opens_with_one(tiny_model, tmp_path_factory):
+    # GLM writes no end marker: generation stops on the tag that opens the next message, `<|user|>` after content
+    # and `<|observation|>` after tool calls, both in its generation config. The output is the whole turn.
+    model = tiny_variant(tiny_model, tmp_path_factory, "role-tag-chat", ROLE_TAG_TEMPLATE, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    oracle = RoundtripOracle(str(model), "local")
+    content = oracle.render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert content.text == "Hello"
+    assert content.end_of_turn == {"stop_id": token_id(model, "<|user|>"), "found_by": "next-message"}
+    calls = [{**weather_call(), "id": "call_1"}, {**weather_call(), "id": "call_2"}]
+    request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
+    called = oracle.render_output(request, {"content": "", "tool_calls": calls})
+    call_text = '<tool_call>get_weather {"city": "Paris"}</tool_call>'
+    assert called.text == call_text * 2
+    assert called.end_of_turn == {"stop_id": token_id(model, "<|observation|>"), "found_by": "next-message"}
+    # The tag that opens the next message must be a stop id: without `<|user|>` listed, nothing ends a content turn.
+    model = tiny_variant(tiny_model, tmp_path_factory, "role-tag-unlisted-chat", ROLE_TAG_TEMPLATE, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|observation|>")
+    with pytest.raises(ValueError, match=r"no stop id in the turn, and the next message opens with '<\|user\|>'"):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+
+
+def test_a_turn_the_template_renders_differently_once_the_next_message_follows_fails_the_case(
+    tiny_model, tmp_path_factory
+):
+    # GLM-4.6, GLM-4.7-Flash and ERNIE-4.5 write no stop id in the turn and drop an earlier turn's reasoning once a
+    # message follows it: the turn as the conversation's end is not a prefix of the conversation that goes on, so what
+    # follows the turn is unknown.
+    template = (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|assistant|>' }}"
+        "{%- if loop.last and m['reasoning_content'] %}"
+        "{{ '<think>' + m['reasoning_content'] + '</think>' }}"
+        "{%- endif %}"
+        "{{ m['content'] or '' }}"
+        "{%- else %}{{ '<|user|>' + m['content'] }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|assistant|>' }}{%- endif %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "drops-reasoning-chat", template, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="the template renders the turn differently once the next message follows it"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Hi")]}, {"reasoning_content": "Think.", "content": "Hello"}
+        )
+
+
+def test_a_template_that_cannot_render_the_next_message_fails_the_case_with_its_error(tiny_model, tmp_path_factory):
+    # The role-tag template needs each tool message's call id, and these calls have none: its error is the reason.
+    model = tiny_variant(tiny_model, tmp_path_factory, "role-tag-no-id-chat", ROLE_TAG_TEMPLATE, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="the template cannot render the next message: UndefinedError"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+# llava-1.5's shape: every message is `<role>: <text> `, so a turn ends in a space and the next message's role word
+# starts with it: `Ġuser` covers the turn's last character and the next message's first ones.
+TRAILING_SPACE_TEMPLATE = (
+    "{%- for m in messages %}{{ m['role'] + ': ' + (m['content'] or '') + ' ' }}{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ 'assistant:' }}{%- endif %}"
+)
+
+
+@pytest.mark.parametrize("listed", [False, True], ids=["not-a-stop-id", "a-stop-id"])
+def test_a_token_that_straddles_the_end_of_the_turn_fails_the_case(tiny_model, tmp_path_factory, listed):
+    # No token starts where the turn ends, so no generation stops there, whether or not the straddling token is a
+    # stop id: llava-1.5-7b-hf's 16 common cases.
+    model = tiny_variant(tiny_model, tmp_path_factory, "trailing-space-chat", TRAILING_SPACE_TEMPLATE)
+    if listed:
+        write_generation_config(model, "Ġuser")
+    first = f"(the first one after it is 'Ġuser' ({token_id(model, 'Ġuser')}))"
+    reason = f"no token starts where the turn ends once the next message follows it {first}"
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+
+
+def trimmed_offsets_variant(tiny_model, tmp_path_factory, name: str, template: str) -> pathlib.Path:
+    """The role-tag variant with GPT-2's ByteLevel post-processor and ``trim_offsets``, as JetBrains' Mellum2 ships it:
+    a token of spaces alone gets a zero-width offset, after its spaces."""
+    model = tiny_variant(tiny_model, tmp_path_factory, name, template, tokens=ROLE_TAGS)
+    tokenizer = Tokenizer.from_file(str(model / "tokenizer.json"))
+    tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
+    tokenizer.save(str(model / "tokenizer.json"))
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    return model
+
+
+def test_a_zero_width_token_neither_hides_nor_stands_in_for_the_stop_id_that_opens_the_next_message(
+    tiny_model, tmp_path_factory
+):
+    # Spaces the template writes between the turn and the next message are a token that starts after the turn's end,
+    # zero-width under trim_offsets: no token starts where the turn ends, and the reason names that first token.
+    template = ROLE_TAG_TEMPLATE.replace(
+        "{%- else %}{{ '<|user|>' + m['content'] }}", "{%- else %}{{ '  <|user|>' + m['content'] }}"
+    )
+    model = trimmed_offsets_variant(tiny_model, tmp_path_factory, "spaced-tag-chat", template)
+    with pytest.raises(
+        ValueError, match=r"no token starts where the turn ends .*\(the first one after it is 'Ġ+' \(\d+\)\)"
+    ):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    # Spaces that end the turn itself are a zero-width token at its end, and the stop id after them still ends it.
+    model = trimmed_offsets_variant(tiny_model, tmp_path_factory, "trimmed-role-tag-chat", ROLE_TAG_TEMPLATE)
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello  "})
+    assert (out.text, out.end_of_turn) == (
+        "Hello  ",
+        {"stop_id": token_id(model, "<|user|>"), "found_by": "next-message"},
+    )
+
+
+def test_a_turn_with_no_stop_id_that_nothing_follows_fails_the_case(tiny_model, tmp_path_factory):
+    # This template writes nothing for a tool message, so the conversation that goes on ends where the turn ends.
+    template = ROLE_TAG_TEMPLATE.replace(
+        "{%- elif m['role'] == 'tool' %}{{ '<|observation|>' + m['tool_call_id'] + ' ' + m['content'] }}",
+        "{%- elif m['role'] == 'tool' %}",
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "silent-tool-chat", template, tokens=ROLE_TAGS)
+    write_generation_config(model, "<|user|>", "<|observation|>")
+    with pytest.raises(ValueError, match="no stop id in the turn, and nothing follows it"):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}, {"content": "", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_generation_config_without_an_eos_token_id_stops_on_the_tokenizer_s_eos(tiny_model, tmp_path_factory):
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-eos-generation-chat", TEMPLATE)
+    (model / "generation_config.json").write_text(json.dumps({"bos_token_id": 1}))
+    assert generation_eos_ids(str(model), "local") == ([], "generation_config.json")
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert out.end_of_turn == {"stop_id": token_id(model, "<|im_end|>"), "found_by": "turn"}
+
+
+def test_the_next_message_is_a_user_message_after_content_and_one_tool_message_per_call_after_calls():
+    assert next_messages({"content": "Hello"}) == [{"role": "user", "content": "Thanks."}]
+    calls = [{**weather_call(), "id": "call_1"}, {"type": "function", "function": {"name": "f", "arguments": "{}"}}]
+    assert next_messages({"content": "", "tool_calls": calls}) == [
+        {"role": "tool", "tool_call_id": "call_1", "name": "get_weather", "content": "{}"},
+        {"role": "tool", "name": "f", "content": "{}"},
+    ]
+
+
+def test_a_tokenizer_without_an_eos_token_stops_on_the_model_config_eos(tiny_model, tmp_path_factory):
+    # Inkling: the tokenizer declares no eos, no generation_config.json ships, and config.json's eos_token_id is
+    # the template's end marker.
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-eos-chat", TEMPLATE, without_eos=True)
+    (model / "config.json").write_text(json.dumps({"eos_token_id": token_id(model, "<|im_end|>")}))
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello"})
+    assert out.text == "Hello"
+    assert out.end_of_turn == {"stop_id": token_id(model, "<|im_end|>"), "found_by": "turn"}
+
+
+def test_a_checkpoint_with_no_stop_id_at_all_is_refused(tiny_model, tmp_path_factory):
+    # No eos in the tokenizer and no generation or model config naming one: nothing ends a turn.
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-stop-chat", TEMPLATE, without_eos=True)
+    with pytest.raises(ValueError, match="has no stop id"):
+        RoundtripOracle(str(model), "local")
+
+
+def test_a_hub_checkpoint_needs_its_generation_config_cached_or_known_absent(tmp_path, monkeypatch):
+    # Offline, transformers takes a generation_config.json that is merely not cached for one the repository does not
+    # ship, and falls back to config.json. Here the file must be cached at the revision, or known absent: the hub
+    # cache's .no_exist marker, which a download that got a 404 leaves.
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    repo = tmp_path / "models--acme--Tiny-Chat"
+    snapshot = repo / "snapshots" / revision
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").write_text(json.dumps({"text_config": {"eos_token_id": 7}}))
+    fetch = f"hf download acme/Tiny-Chat generation_config.json --revision {revision}"
+    with pytest.raises(FileNotFoundError, match=f"generation_config.json .*`{fetch}`"):
+        generation_eos_ids("acme/Tiny-Chat", revision)
+    absent = repo / ".no_exist" / revision / "generation_config.json"
+    absent.parent.mkdir(parents=True)
+    absent.touch()
+    assert generation_eos_ids("acme/Tiny-Chat", revision) == ([7], "config.json")
+    absent.unlink()
+    (snapshot / "generation_config.json").write_text(json.dumps({"eos_token_id": [7, 8]}))
+    assert generation_eos_ids("acme/Tiny-Chat", revision) == ([7, 8], "generation_config.json")
+
+
+def test_config_json_is_read_with_the_defaults_of_the_class_transformers_has_for_its_model_type(
+    tiny_model, tmp_path_factory
+):
+    # vLLM gives GenerationConfig.from_model_config the config object, which carries its class's defaults: a
+    # config.json of {"model_type": "llama"} states no eos, and LlamaConfig's is 2.
+    model = tiny_variant(tiny_model, tmp_path_factory, "llama-config-chat", TEMPLATE)
+    (model / "config.json").write_text(json.dumps({"model_type": "llama"}))
+    assert generation_eos_ids(str(model), "local") == ([2], "config.json")
+
+
+def test_config_json_of_a_model_type_transformers_does_not_know_is_read_as_written(tiny_model, tmp_path_factory):
+    # Its class is the vendor's code, named by auto_map, which bellwether never runs: the file is read as written.
+    model = tiny_variant(tiny_model, tmp_path_factory, "vendor-config-chat", TEMPLATE)
+    (model / "configuration_acme.py").write_text('raise RuntimeError("the vendor\'s code ran")\n')
+    config = {
+        "model_type": "acme_chat",
+        "auto_map": {"AutoConfig": "configuration_acme.AcmeConfig"},
+        "text_config": {"eos_token_id": 7},
+    }
+    (model / "config.json").write_text(json.dumps(config))
+    assert generation_eos_ids(str(model), "local") == ([7], "config.json")
+
+
+def test_where_hf_generate_would_not_stop_the_run_says_so_once_and_sets_toml_names_its_stop_ids(
+    tmp_path, tiny_model, tmp_path_factory, capsys
+):
+    # Qwen3.5-9B ships no generation_config.json, its config.json lists only <|endoftext|>, and its turns end with
+    # <|im_end|>, the tokenizer's eos: vLLM stops there, transformers' generate does not. The outputs end where vLLM,
+    # the serving engine, stops, and each line carries only its stop id. What generate stops on is a fact of the
+    # checkpoint: the set's table in sets.toml holds the ids and the file they come from, and the run says once for
+    # the model how many outputs generate would not end.
+    model = tiny_variant(tiny_model, tmp_path_factory, "eos-unlisted-chat", TEMPLATE, tokens=("<|endoftext|>",))
+    endoftext, im_end = token_id(model, "<|endoftext|>"), token_id(model, "<|im_end|>")
+    (model / "config.json").write_text(json.dumps({"text_config": {"eos_token_id": endoftext}}))
+    cases = [
+        {"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}},
+        {"name": "other", "request": {"messages": [user("Hi")]}, "message": {"content": "Paris."}},
+    ]
+    status, out_dir = record(tmp_path, model, ("common", cases), kind="parse")
+    assert status == 0
+    for line in read_fixture_file(out_dir / "common.jsonl").values():
+        assert line["reference"]["end_of_turn"] == {"stop_id": im_end, "found_by": "turn"}
+    table = sets_tables(tmp_path)["parse"]["common"]
+    assert (table["generate_stop_ids"], table["generate_stop_ids_from"]) == ([endoftext], "config.json")
+    err = capsys.readouterr().err
+    assert err.count("stop sets differ") == 1
+    assert (
+        f"stop sets differ for {model}: transformers' generate stops on [{endoftext}] (config.json), so 2 of the 2 "
+        f"outputs recorded here end on a stop id it does not stop on: {im_end} ('<|im_end|>')\n"
+    ) in err
+
+
+def test_where_hf_generate_stops_where_vllm_does_the_run_says_nothing(tmp_path, tiny_model, tmp_path_factory, capsys):
+    # The generation config lists the id the turns end on, as most checkpoints' do: generate and vLLM agree.
+    model = tiny_variant(tiny_model, tmp_path_factory, "eos-listed-chat", TEMPLATE, tokens=("<|endoftext|>",))
+    write_generation_config(model, "<|im_end|>", "<|endoftext|>")
+    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, _ = record(tmp_path, model, ("common", cases), kind="parse")
+    assert status == 0
+    table = sets_tables(tmp_path)["parse"]["common"]
+    expected = ([token_id(model, "<|im_end|>"), token_id(model, "<|endoftext|>")], "generation_config.json")
+    assert (table["generate_stop_ids"], table["generate_stop_ids_from"]) == expected
+    assert "stop sets differ" not in capsys.readouterr().err
+
+
+def test_a_checkpoint_without_a_generation_or_model_config_has_no_generate_to_name(tmp_path, tiny_model, capsys):
+    # The tiny model ships neither file, so transformers could not load a model to call generate on: its parse table
+    # names no stop ids of generate's, and the run compares nothing.
+    cases = [{"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, _ = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 0
+    assert set(sets_tables(tmp_path)["parse"]["common"]) == set(set_tables.FIELDS)
+    assert "stop sets differ" not in capsys.readouterr().err
 
 
 def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_model):

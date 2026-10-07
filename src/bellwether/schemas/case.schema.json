@@ -10,6 +10,17 @@
       "description": "a parse line carries the output's token ids and the text each one contributes",
       "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
       "then": {"required": ["output_ids", "output_pieces"]}
+    },
+    {
+      "description": "a round-trip parse line says which stop id ends its output",
+      "if": {
+        "properties": {
+          "kind": {"const": "parse"},
+          "reference": {"properties": {"source": {"pattern": "^roundtrip(:.+)?$"}}, "required": ["source"]}
+        },
+        "required": ["kind", "reference"]
+      },
+      "then": {"properties": {"reference": {"required": ["end_of_turn"]}}}
     }
   ],
   "additionalProperties": false,
@@ -39,6 +50,16 @@
         "pieces": {"type": "array", "items": {"type": "string"}},
         "message": {"type": "object"},
         "finish_reason": {"enum": ["stop", "length", "tool_calls", "content_filter"]},
+        "end_of_turn": {
+          "type": "object",
+          "description": "parse, roundtrip: the stop id the template writes where the turn ends when it is the last message, in the turn (found_by turn) or opening the next message (found_by next-message); the output ends before it",
+          "required": ["stop_id", "found_by"],
+          "additionalProperties": false,
+          "properties": {
+            "stop_id": {"type": "integer", "minimum": 0},
+            "found_by": {"enum": ["turn", "next-message"]}
+          }
+        },
         "provenance": {"type": "object", "description": "oracle versions, HF revision, vendor file sha, bellwether commit"}
       }
     },

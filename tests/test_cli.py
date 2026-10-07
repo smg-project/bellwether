@@ -54,7 +54,12 @@ def test_case_schema_is_valid_and_accepts_examples():
         "output_ids": [5, 6, 7],
         "output_pieces": ["<", "tool", ">"],
         "chunk_plans": {"whole": None, "per_token": None, "random-42": [2, 1]},
-        "reference": {"source": "roundtrip", "message": {"role": "assistant"}, "finish_reason": "tool_calls"},
+        "reference": {
+            "source": "roundtrip",
+            "message": {"role": "assistant"},
+            "finish_reason": "tool_calls",
+            "end_of_turn": {"stop_id": 8, "found_by": "turn"},
+        },
     }
     validator.validate(render)
     validator.validate(parse)
