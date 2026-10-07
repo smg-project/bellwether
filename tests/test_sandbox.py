@@ -77,6 +77,38 @@ def test_the_context_holds_only_the_listed_files_the_corpus_of_the_kind_and_the_
     assert (context / "Dockerfile").read_text().startswith(f"FROM {sandbox.BASE_TAG}\n")
 
 
+def test_the_context_carries_the_caches_marks_for_files_the_repository_does_not_have(listed, snapshot, tmp_path):
+    # Offline, the oracles take a file the cache marks absent (`.no_exist`) as absent, and refuse one it does not.
+    repo = tmp_path / "hub" / "models--acme--X-1"
+    held = repo / "snapshots" / REVISION
+    held.parent.mkdir(parents=True)
+    held.symlink_to(snapshot)
+    (repo / ".no_exist" / REVISION).mkdir(parents=True)
+    (repo / ".no_exist" / REVISION / "chat_template.jinja").write_text("")
+    corpus, context = tmp_path / "corpus", tmp_path / "context"
+    (corpus / "render").mkdir(parents=True)
+    context.mkdir()
+    sandbox.stage(listed, held, "render", tmp_path / "fixtures", corpus, context)
+    marks = context / "hf" / "hub" / "models--acme--X-1" / ".no_exist" / REVISION
+    assert [p.name for p in marks.iterdir()] == ["chat_template.jinja"]
+
+
+def test_the_group_brought_back_replaces_the_hosts_so_a_set_the_run_removed_is_gone(tmp_path):
+    group = tmp_path / "fixtures" / "x-1"
+    (group / "render").mkdir(parents=True)
+    (group / "render" / "removed.jsonl").write_text("{}\n")
+    (group / "manifest.toml").write_text("before")
+    fresh = sandbox.landing(group)
+    (fresh / "render").mkdir()
+    (fresh / "render" / "kept.jsonl").write_text("{}\n")
+    (fresh / "manifest.toml").write_text("after")
+    sandbox.replace_group(fresh, group)
+    files = sorted(p.relative_to(group).as_posix() for p in group.rglob("*") if p.is_file())
+    assert files == ["manifest.toml", "render/kept.jsonl"]
+    assert (group / "manifest.toml").read_text() == "after"
+    assert sorted(p.name for p in group.parent.iterdir()) == ["x-1"]
+
+
 def test_the_run_has_no_network_a_read_only_root_no_privileges_limits_and_no_credential(listed):
     args = sandbox.run_args("run-1", "run-1-work", "run-image", "sha256:base", listed, "parse")
     pairs = set(zip(args, args[1:], strict=False))

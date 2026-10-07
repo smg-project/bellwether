@@ -8,15 +8,16 @@ container that holds bellwether, the checkpoint's files and the corpus, and noth
    revision, with the token if there is one (``inputs.checkpoint_dir``). Every one of them, every Python file
    included, must have the sha256 the manifest lists, or nothing runs.
 2. **A context of only those files.** A build context is staged with exactly the files the manifest lists, in the
-   cache's layout with the commit's file list, the corpus of the one kind recorded, and the group's fixtures.
+   cache's layout with the commit's file list and the cache's marks for files the repository does not have, the corpus
+   of the one kind recorded, and the group's fixtures.
 3. **Two images.** The base image (``docker/vendor/Dockerfile``) is a pinned Python image with the packages
    ``uv.lock`` pins for bellwether and its ``vendor`` extra, installed by hash, and bellwether itself. A run image
    adds the context; it is removed after the run.
 4. **The run.** ``bellwether record --oracle vendor`` runs as a user without privileges, with no network, a read-only
    root, no capabilities, and limits on CPU, memory, processes and time. It writes only to ``/work``, a volume, and
    ``/tmp``. No credential is passed in.
-5. **Back out.** The group's fixtures are copied from the volume to the host, and the container, volume and run
-   image are removed whatever the outcome.
+5. **Back out.** The group's fixtures are copied from the volume to the host and take the place of the host's copy,
+   so a set the run removed is gone there too; the container, volume and run image are removed whatever the outcome.
 """
 
 from __future__ import annotations
@@ -78,6 +79,10 @@ def stage(manifest: Manifest, snapshot: Path, kind: str, fixtures: Path, corpus:
     if tree.is_file():
         (repo / "trees").mkdir()
         shutil.copyfile(tree, repo / "trees" / tree.name)
+    # The cache's marks for files the repository does not have: offline, the oracles take a marked file as absent.
+    absent = snapshot.parents[1] / ".no_exist" / manifest.revision
+    if absent.is_dir():
+        shutil.copytree(absent, repo / ".no_exist" / manifest.revision)
     shutil.copytree(corpus / kind, context / "work" / "corpus" / kind)
     shutil.copytree(fixtures / manifest.slug, context / "work" / "fixtures" / manifest.slug)
     (context / "Dockerfile").write_text(
@@ -98,6 +103,20 @@ def run_args(name: str, volume: str, image: str, base_digest: str, manifest: Man
         "--env", "HF_HOME=/hf", "--env", "HF_HUB_OFFLINE=1", "--env", "HF_MODULES_CACHE=/tmp/hf_modules",
         "--env", "HOME=/tmp", image, "timeout", str(SECONDS), *record,
     ]  # fmt: skip
+
+
+def landing(group: Path) -> Path:
+    """An empty directory beside ``group``, on its file system, for the group's fixtures as the run left them."""
+    return Path(tempfile.mkdtemp(prefix=f".{group.name}-", dir=group.parent))
+
+
+def replace_group(fresh: Path, group: Path) -> None:
+    """Put ``fresh`` in ``group``'s place, so the host holds the group's fixtures as the run left them: a set the run
+    removed is gone here too."""
+    old = group.with_name(f".{group.name}-{uuid.uuid4().hex[:12]}")
+    group.rename(old)
+    fresh.rename(group)
+    shutil.rmtree(old)
 
 
 def docker(*args: str, check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess:
@@ -144,7 +163,12 @@ def run(args: argparse.Namespace) -> int:
             stage(manifest, snapshot, args.kind, args.fixtures, args.corpus, Path(tmp))
             docker("build", "--quiet", "--tag", tag, tmp, quiet=True)
         status = subprocess.run(run_args(name, volume, tag, base, manifest, args.kind)).returncode
-        docker("cp", f"{name}:/work/fixtures/{manifest.slug}/.", str(args.fixtures / manifest.slug))
+        fresh = landing(args.fixtures / manifest.slug)
+        try:
+            docker("cp", f"{name}:/work/fixtures/{manifest.slug}/.", str(fresh))
+            replace_group(fresh, args.fixtures / manifest.slug)
+        finally:
+            shutil.rmtree(fresh, ignore_errors=True)
         return status
     finally:
         docker("rm", "--force", name, check=False, quiet=True)
