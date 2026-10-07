@@ -54,6 +54,16 @@ class ByteTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory, filename_prefix=None):
         return ()
+
+
+class EncoderTokenizer(ByteTokenizer):
+    # Renders its chat format itself, with no template, as Kimi-K3's class does.
+
+    def apply_chat_template(self, conversation, tools=None, tokenize=True, add_generation_prompt=False, **kwargs):
+        text = "".join(f"<|im_start|>{m['role']}\\n{m['content']}<|im_end|>\\n" for m in conversation)
+        if add_generation_prompt:
+            text += "<|im_start|>assistant\\n"
+        return self.encode(text, add_special_tokens=False) if tokenize else text
 """
 TEMPLATE = (
     "{% for m in messages %}<|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>\n{% endfor %}"
@@ -85,6 +95,25 @@ def vendor_checkpoint(tmp_path, monkeypatch) -> pathlib.Path:
 
 
 REQUEST = {"messages": [{"role": "user", "content": "café"}]}
+
+
+def without_a_template(checkpoint: pathlib.Path) -> None:
+    """Make the checkpoint's class one that renders its chat format itself, and drop the template."""
+    config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    config["auto_map"] = {"AutoTokenizer": ["tokenization_byte.EncoderTokenizer", None]}
+    config["tokenizer_class"] = "EncoderTokenizer"
+    del config["chat_template"]
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps(config))
+
+
+def test_in_the_sandbox_a_vendor_class_that_renders_itself_needs_no_template(vendor_checkpoint, monkeypatch):
+    monkeypatch.setenv(vendor.SANDBOX_ENV, "1")
+    without_a_template(vendor_checkpoint)
+    oracle = HfTemplateOracle(str(vendor_checkpoint), "local", vendor_code=True)
+    rendered = oracle.render(REQUEST)
+    assert rendered.text == "<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n"
+    assert rendered.input_ids[0] == 0
+    assert "chat_template_sha256" not in oracle.provenance()
 
 
 def test_outside_the_sandbox_the_vendor_oracle_refuses_before_any_vendor_code_runs(vendor_checkpoint, monkeypatch):

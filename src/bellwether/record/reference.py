@@ -47,11 +47,13 @@ class HfTemplateOracle:
         self.vendor_code = vendor_code
         self.tokenizer = AutoTokenizer.from_pretrained(model, **kwargs)
         template = self.tokenizer.chat_template
-        if template is None:
+        if template is None and not vendor_code:
             raise ValueError(f"{model} at {revision} ships no chat template; the hf-template oracle cannot render it")
-        if not isinstance(template, str):
+        if template is not None and not isinstance(template, str):
             template = json.dumps(template, sort_keys=True)
-        self.template_sha256 = hashlib.sha256(template.encode("utf-8")).hexdigest()
+        # A vendor's class may render its chat format itself (Kimi-K3's does), with no template to hash; its code is
+        # pinned by the manifest's inputs instead.
+        self.template_sha256 = None if template is None else hashlib.sha256(template.encode("utf-8")).hexdigest()
 
     def render(self, request: dict) -> Rendered:
         continue_final = bool(request.get("continue_final_message", False))
@@ -78,7 +80,7 @@ class HfTemplateOracle:
             "tokenizers": tokenizers.__version__,
             "jinja2": jinja2.__version__,
             "tokenizer_class": type(self.tokenizer).__name__,
-            "chat_template_sha256": self.template_sha256,
+            **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
         }
         if self.vendor_code:
             found |= vendor.packages()
