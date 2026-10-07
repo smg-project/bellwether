@@ -21,8 +21,10 @@ license. A row becomes OpenAI chat messages:
 Each assistant turn is a parse case, and each user turn or tool result an assistant turn answers a render case, the
 prompt a model goes on from; a turn with no text is kept as written, a message whose content is "". Every row is taken.
 A row these rules cannot map has no case, and the import names it with its reason; a case that repeats an earlier one is
-left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The sets take more than
-``corpus_sets.LIMIT`` as plain JSON Lines, so ``corpus_sets.write`` stores every one of them compressed in Git LFS. The
+left out, and the import names it with the case it repeats. The sets take more than ``corpus_sets.LIMIT`` as plain JSON
+Lines, so ``corpus_sets.write`` stores every one of them compressed in Git LFS. The import streams them to
+``corpus_sets.write`` and ``check`` one number at a time as it reads the rows (``iter_sets``), so it holds the rows and
+one number's cases rather than every case. The
 dataset ships no LICENSE file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond
 the standard library, this module imports only what it shares with the other importers: the readers of pinned Hugging
 Face and GitHub files (``hf``, ``github``) and the set writer (``corpus_sets``).
@@ -34,6 +36,7 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from . import corpus_sets, github, hf
@@ -265,17 +268,18 @@ def set_name(number: int) -> str:
     return f"{DATASET}-{number:02d}"
 
 
-def build_sets(
-    rows: list[dict], *, set_size: int, skipped: list[tuple[int, str]] | None = None
-) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)`` from every row, by index.
+def iter_sets(
+    rows: Iterable[dict], *, set_size: int, skipped: list[tuple[int, str]] | None = None
+) -> Iterator[tuple[str, str, list[dict]]]:
+    """Corpus lines per set, ``(kind, set name, lines)``, from every row, by index, one number at a time.
 
     A row that cannot be mapped is appended to ``skipped`` with its reason. A set holds whole rows, in index order, and
     at most ``set_size`` cases of either kind; the render set and the parse set of one number hold the same rows. A row
     has no more render cases than parse cases, since the turn each render case ends at is answered by an assistant turn,
-    a parse case, so the parse cases decide when a set is full.
+    a parse case, so the parse cases decide when a set is full. A number's sets come as soon as the next row would not
+    fit beside them, before the rows after it are read, so only one number's cases are held.
     """
-    groups: list[tuple[list[dict], list[dict]]] = [([], [])]
+    number, render, parse = 0, [], []
     for index, row in enumerate(rows):
         try:
             messages, tools = messages_for(row)
@@ -284,26 +288,35 @@ def build_sets(
                 skipped.append((index, str(err)))
             continue
         row_render, row_parse = cases_for(index, messages, tools)
-        render, parse = groups[-1]
         if parse and len(parse) + len(row_parse) > set_size:
-            groups.append(([], []))
-            render, parse = groups[-1]
+            yield from _numbered(number, render, parse)
+            number, render, parse = number + 1, [], []
         render += row_render
         parse += row_parse
-    sets: dict[tuple[str, str], list[dict]] = {}
-    for number, (render, parse) in enumerate(groups):
-        for kind, lines in (("render", render), ("parse", parse)):
-            if lines:
-                sets[(kind, set_name(number))] = lines
-    return sets
+    yield from _numbered(number, render, parse)
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+def _numbered(number: int, render: list[dict], parse: list[dict]) -> Iterator[tuple[str, str, list[dict]]]:
+    for kind, lines in (("render", render), ("parse", parse)):
+        if lines:
+            yield kind, set_name(number), lines
+
+
+def build_sets(
+    rows: list[dict], *, set_size: int, skipped: list[tuple[int, str]] | None = None
+) -> dict[tuple[str, str], list[dict]]:
+    """Corpus lines per ``(kind, set name)``: ``iter_sets``'s sets, all held."""
+    return {(kind, name): lines for kind, name, lines in iter_sets(rows, set_size=set_size, skipped=skipped)}
+
+
+def write_sets(
+    sets: corpus_sets.Sets, corpus_dir: Path, license_text: bytes, summary: corpus_sets.Summary | None = None
+) -> list[Path]:
     """Write every set and the License copy, and remove ``glaive-v2-*`` set files the import no longer writes."""
-    return corpus_sets.write(sets, corpus_dir, f"{DATASET}-", {LICENSE_COPY: license_text})
+    return corpus_sets.write(sets, corpus_dir, f"{DATASET}-", {LICENSE_COPY: license_text}, summary=summary)
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+def check_sets(sets: corpus_sets.Sets, corpus_dir: Path, license_text: bytes) -> list[str]:
     """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
     files = {LICENSE_COPY: license_text}
     return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "slice of the glaive-v2 rows", files)
@@ -324,16 +337,16 @@ def run(args: argparse.Namespace) -> int:
     check_license_text(license_text)
     rows = json.loads(hf.fetch(REPO, REVISION, DATA, DATA_SHA256, cache=args.cache).read_bytes())
     skipped: list[tuple[int, str]] = []
-    sets = build_sets(rows, set_size=SET_SIZE, skipped=skipped)
-    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    sets = iter_sets(rows, set_size=SET_SIZE, skipped=skipped)
     if args.check:
-        problems = check_sets(kept, args.corpus, license_text)
+        problems = check_sets(sets, args.corpus, license_text)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             print(f"{args.corpus}: the glaive-v2 sets equal a fresh import of {SOURCE}")
         return 1 if problems else 0
-    corpus_sets.report(DATASET, sets, kept, repeats, args.corpus)
+    summary = corpus_sets.Summary()
+    write_sets(sets, args.corpus, license_text, summary)
+    corpus_sets.report_summary(DATASET, summary, args.corpus)
     corpus_sets.report_skipped([(str(index), why) for index, why in skipped])
-    write_sets(kept, args.corpus, license_text)
     return 0
