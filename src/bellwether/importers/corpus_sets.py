@@ -10,7 +10,9 @@ every one of them compressed with zstd and kept in Git LFS (``<name>.jsonl.zst``
 (``bellwether.storage``). ``report`` and ``report_skipped`` print what an import keeps and leaves out, in the same words
 for every importer. This module imports nothing beyond the standard library until a compressed set is read or written.
 
-``write`` and ``check`` hold one set's content at a time, and take an import's sets in either of two shapes:
+``write`` and ``check`` hold one set at a time, and no set's content whole: a set goes to ``storage`` as its lines,
+encoded one at a time (``_Encoded``), and is compressed, written and compared as they come. They take an import's sets
+in either of two shapes:
 
 - a mapping ``{(kind, name): lines}``, every set in hand, as an importer that holds its sets passes them after leaving
   out repeats (``leave_out_repeats``) and printing its ``report``. They are written and checked as given, and their
@@ -56,13 +58,38 @@ def _line_bytes(line: dict) -> bytes:
     return (_json(line) + "\n").encode("utf-8")
 
 
-def _content(lines: list[dict]) -> bytearray:
-    """A set's plain content, ``text`` encoded, gathered a line at a time: no str of the whole set is made on the way,
-    which would take four bytes a character once one character is past U+FFFF."""
-    content = bytearray()
-    for line in lines:
-        content += _line_bytes(line)
-    return content
+class _Encoded:
+    """A set's plain content, ``text`` encoded, as ``storage.Pieces``: its lines encoded one at a time, again each time
+    it is read, and its size in bytes, counted once. No copy of the content is made whole, nor a str of it, which would
+    take four bytes a character once one character is past U+FFFF."""
+
+    def __init__(self, lines: list[dict]) -> None:
+        self._lines = lines
+        self._size: int | None = None
+
+    def __iter__(self) -> Iterator[bytes]:
+        return (_line_bytes(line) for line in self._lines)
+
+    def __len__(self) -> int:
+        if self._size is None:
+            self._size = sum(len(piece) for piece in self)
+        return self._size
+
+
+class _FilePieces:
+    """A plain set file's bytes as ``storage.Pieces``, read a piece at a time: what a stream's sets, written plain, are
+    compressed from once their total passes ``LIMIT``."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def __iter__(self) -> Iterator[bytes]:
+        with self._path.open("rb") as handle:
+            while piece := handle.read(storage.READ_SIZE):
+                yield piece
+
+    def __len__(self) -> int:
+        return self._path.stat().st_size
 
 
 def _plain_size(lines: Iterable[dict]) -> int:
@@ -239,7 +266,8 @@ def _sets(sets: Sets, summary: Summary) -> Iterator[tuple[str, str, list[dict]]]
 
     A mapping's sets come as given, in the order of their kinds and names. An iterable's come in its order, each
     without the cases that repeat an earlier one, by ``leave_out_repeats``'s rule, and each case left out goes into
-    ``summary.repeats``. A set name an iterable gives twice is refused: its second set would overwrite the first.
+    ``summary.repeats``. A set name an iterable gives twice is refused: its second set would overwrite the first. A
+    streamed set is let go of before the next is asked for, so that the importer builds the next with only one held.
     """
     if isinstance(sets, Mapping):
         for (kind, name), lines in sorted(sets.items()):
@@ -264,6 +292,7 @@ def _sets(sets: Sets, summary: Summary) -> Iterator[tuple[str, str, list[dict]]]
                 kept.append(line)
         summary.count(kind, name, kept, left_out)
         yield kind, name, kept
+        del lines, kept
 
 
 def write(
@@ -300,21 +329,21 @@ def write(
     writing = form or known or "plain"
     written: dict[tuple[str, str], Path] = {}
     for kind, name, lines in _sets(sets, summary):
-        content = _content(lines)
+        content = _Encoded(lines)
         summary.size += len(content)
         if form == "plain" and summary.size > LIMIT:
             raise ValueError(_contradiction(corpus_dir, prefix, summary.size, form, f" by {kind}/{name}"))
         path = _path(corpus_dir, kind, name, writing)
         storage.write(path, content)
         written[(kind, name)] = path
-        del content
+        del lines, content  # let the set go before the next is built
     final = _form_of(summary.size)
     if form is not None and form != final:
         raise ValueError(_contradiction(corpus_dir, prefix, summary.size, form))
     if final != writing:
         for key, path in written.items():
             compressed = _other_form(path)
-            storage.write(compressed, path.read_bytes())
+            storage.write(compressed, _FilePieces(path))
             written[key] = compressed
     summary.form = final
     paths = [written[key] for key in sorted(written)]
@@ -329,31 +358,21 @@ def write(
     return paths
 
 
-def _compare(paths: dict[str, Path], lines: Iterable[dict]) -> tuple[int, dict[str, str | None]]:
+def _compare(paths: dict[str, Path], lines: list[dict]) -> tuple[int, dict[str, str | None]]:
     """A set's plain size, and for each of ``paths`` (by form) the line naming how its file differs from the set's
-    lines, or None when it holds them; the lines are compared as they are encoded, so no content of the set is built.
+    lines, or None when it holds them; the file is compared as it is read, with the lines as they are encoded
+    (``storage.holds``), so no content of the set is held whole.
 
     A Git LFS pointer, or a frame zstd cannot decompress, is named with ``storage.plain_bytes``'s reason.
     """
-    stored: dict[str, memoryview] = {}
+    content = _Encoded(lines)
     problems: dict[str, str | None] = {}
     for form, path in paths.items():
         try:
-            stored[form] = memoryview(storage.plain_bytes(path))
+            problems[form] = None if storage.holds(path, content) else f"{path}: differs from a fresh import"
         except ValueError as err:  # a Git LFS pointer, or a frame zstd cannot decompress: nothing to compare
             problems[form] = str(err)
-    same = dict.fromkeys(stored, True)
-    size = 0
-    for line in lines:
-        data = _line_bytes(line)
-        for form, view in stored.items():
-            if same[form] and view[size : size + len(data)] != data:
-                same[form] = False
-        size += len(data)
-    for form, view in stored.items():
-        held = same[form] and len(view) == size
-        problems[form] = None if held else f"{paths[form]}: differs from a fresh import"
-    return size, problems
+    return len(content), problems
 
 
 def check(
@@ -388,6 +407,7 @@ def check(
         size, problems = _compare({each: path for each, path in paths.items() if path.is_file()}, lines)
         summary.size += size
         found[(kind, name)] = problems
+        del lines  # let the set go before the next is built
     expected_form = form or known or _form_of(summary.size)
     summary.form = expected_form
     expected: dict[Path, str | None] = {}

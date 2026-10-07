@@ -1,3 +1,4 @@
+import hashlib
 import re
 import tracemalloc
 
@@ -463,17 +464,24 @@ def test_a_form_that_is_not_plain_or_zstd_is_refused(tmp_path):
         corpus_sets.write(as_stream(an_import_with_repeats()), tmp_path, "x-", form="gzip")
 
 
-# Memory: an import streamed one set at a time holds about one set, however many sets it has.
+# Memory: an import streamed one set at a time holds about one set's lines, however many sets it has; no set's
+# content is built whole, to write it or to compare it.
 
-CASE_BYTES = 10_000
+CASE_BYTES = 50_000
 CASES = 20
-SETS = 20
+SETS = 6
 ONE_SET = CASES * CASE_BYTES  # about one set's plain bytes; the import takes SETS times as many
+
+
+def case_text(n: int, i: int) -> str:
+    """Text that compresses about as a corpus line does, unlike a run of one letter."""
+    digits = "".join(hashlib.sha256(f"{n}.{i}.{k}".encode()).hexdigest() for k in range(CASE_BYTES // 64 + 1))
+    return digits[:CASE_BYTES]
 
 
 def many_sets():
     for n in range(SETS):
-        yield "render", f"x-{n:02d}", [render(f"x-{n}-{i}", ask(f"{n}.{i} " + "a" * CASE_BYTES)) for i in range(CASES)]
+        yield "render", f"x-{n:02d}", [render(f"x-{n}-{i}", ask(case_text(n, i))) for i in range(CASES)]
 
 
 def traced_peak(function, *args, **kwargs) -> int:
@@ -489,9 +497,13 @@ def traced_peak(function, *args, **kwargs) -> int:
 
 @pytest.mark.parametrize("form, limit", [("plain", None), ("zstd", 1000), (None, None), (None, 1000)])
 def test_a_streamed_write_and_check_hold_about_one_set_at_a_time(tmp_path, monkeypatch, form, limit):
+    # Beyond one set's lines, both hold only pieces of a file and the compressor's state, which do not grow with a set:
+    # small pieces and a fast level keep those well under a set here, as they are beside a real set's hundreds of MB.
+    monkeypatch.setattr(storage, "READ_SIZE", 16_384)
+    monkeypatch.setattr(storage, "ZSTD_LEVEL", 3)
     if limit:
         monkeypatch.setattr(corpus_sets, "LIMIT", limit)
-    assert traced_peak(corpus_sets.write, many_sets(), tmp_path, "x-", form=form) < 4 * ONE_SET
-    assert traced_peak(corpus_sets.check, many_sets(), tmp_path, "x-", "x part", form=form) < 4 * ONE_SET
+    assert traced_peak(corpus_sets.write, many_sets(), tmp_path, "x-", form=form) < 1.75 * ONE_SET
+    assert traced_peak(corpus_sets.check, many_sets(), tmp_path, "x-", "x part", form=form) < 1.75 * ONE_SET
     assert corpus_sets.check(many_sets(), tmp_path, "x-", "x part", form=form) == []
     assert len(files(tmp_path)) == SETS
