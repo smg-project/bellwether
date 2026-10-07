@@ -127,6 +127,7 @@ class RoundtripOracle:
         )
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
         self.check_every_part_is_rendered(messages, kwargs, message, rendered)
+        self.check_every_part_keeps_its_edges(messages, kwargs, message, rendered)
         self.check_every_argument_is_rendered(messages, kwargs, message, rendered)
         self.check_every_argument_keeps_its_type(messages, kwargs, request.get("tools"), message, rendered)
         if not rendered.startswith(prompt):
@@ -274,6 +275,37 @@ class RoundtripOracle:
                     f"the template does not render the message's {what}: changing its {part} leaves the rendered turn "
                     "as it was, so the output would not carry it"
                 )
+
+    def check_every_part_keeps_its_edges(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
+        """Whitespace at either edge of the message's reasoning and its content must reach the rendered turn too.
+
+        Removing a part's first or last character, when it is whitespace, must change what the template renders, as
+        changing the part must (``check_every_part_is_rendered``). A template that trims the content before writing it
+        (Qwen 3.5's ``|trim``, and Gemma 4's, GLM's and Seed-OSS's) would otherwise give an output without that
+        whitespace, and a parser that returns what the model wrote would be judged wrong against the message
+        (bellwether #81). Removing one character catches a template that strips only some whitespace as well. At most
+        two renders per part, and only for a part with whitespace at an edge; a template that fails on the change has
+        read the part.
+        """
+        for part, what in (("reasoning_content", "reasoning"), ("content", "content")):
+            text = message.get(part)
+            if not isinstance(text, str) or not text:
+                continue
+            for edge, char, rest in (("first", text[0], text[1:]), ("last", text[-1], text[:-1])):
+                if not char.isspace():
+                    continue
+                variant = {"role": "assistant", **as_vllm_gives_it({**message, part: rest})}
+                try:
+                    again = self.tokenizer.apply_chat_template(
+                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
+                    )
+                except Exception:
+                    continue
+                if again == rendered:
+                    raise ValueError(
+                        f"the template trims the message's {what}: removing its {edge} character, {char!r}, leaves "
+                        "the rendered turn as it was, so the output would not carry it"
+                    )
 
     def check_every_argument_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
         """Every argument of every call must reach the rendered turn, and so must every null inside one.

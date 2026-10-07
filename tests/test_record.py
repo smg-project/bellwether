@@ -682,6 +682,73 @@ def test_a_template_that_renders_the_reasoning_and_the_content_records_the_case(
     assert out.text == "<think>97 has no divisor up to 9.</think>Yes, 97 is prime."
 
 
+# Qwen 3.5's, Gemma 4's, GLM's and Seed-OSS's shape: the content trimmed before it is written.
+TRIMS_CONTENT = "{{ m['content'] | trim }}"
+TRIMS_REASONING = "{{ '<think>' + (m['reasoning_content'] | trim) + '</think>' + m['content'] }}"
+
+
+def test_a_template_that_trims_the_content_fails_a_case_whose_content_ends_in_whitespace(tiny_model, tmp_path_factory):
+    # Hermes rows 40 and 219 end their reply with a space; Qwen 3.5's template writes the reply trimmed, so the output
+    # cannot carry the space and a parser that returns what the model wrote would be judged wrong (bellwether #81).
+    model = tiny_variant(tiny_model, tmp_path_factory, "trims-content-chat", turn_template(TRIMS_CONTENT))
+    with pytest.raises(
+        ValueError,
+        match=re.escape("the template trims the message's content: removing its last character, ' ', leaves"),
+    ):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello there. "})
+
+
+def test_a_template_that_trims_the_content_fails_a_case_whose_content_starts_with_whitespace(
+    tiny_model, tmp_path_factory
+):
+    model = tiny_variant(tiny_model, tmp_path_factory, "trims-content-start-chat", turn_template(TRIMS_CONTENT))
+    with pytest.raises(
+        ValueError,
+        match=re.escape("the template trims the message's content: removing its first character, '\\n', leaves"),
+    ):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "\nHello there."})
+
+
+def test_a_template_that_strips_only_newlines_fails_a_case_whose_content_ends_in_one(tiny_model, tmp_path_factory):
+    # A partial strip: the space before the newline reaches the turn, the newline does not.
+    strips = "{{ m['content'].rstrip('\\n') }}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "strips-newlines-chat", turn_template(strips))
+    with pytest.raises(
+        ValueError,
+        match=re.escape("the template trims the message's content: removing its last character, '\\n', leaves"),
+    ):
+        RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello there. \n"})
+
+
+def test_a_template_that_trims_the_reasoning_fails_a_case_whose_reasoning_ends_in_whitespace(
+    tiny_model, tmp_path_factory
+):
+    model = tiny_variant(tiny_model, tmp_path_factory, "trims-reasoning-chat", turn_template(TRIMS_REASONING))
+    with pytest.raises(
+        ValueError,
+        match=re.escape("the template trims the message's reasoning: removing its last character, '\\n', leaves"),
+    ):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Is 97 prime?")]}, {"reasoning_content": "No divisor up to 9.\n", "content": "Yes."}
+        )
+
+
+def test_a_template_that_trims_the_content_records_a_case_whose_content_has_no_edge_whitespace(
+    tiny_model, tmp_path_factory
+):
+    model = tiny_variant(tiny_model, tmp_path_factory, "trims-content-kept-chat", turn_template(TRIMS_CONTENT))
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello there."})
+    assert out.text == "Hello there."
+
+
+def test_a_template_that_writes_the_content_as_it_is_records_a_case_whose_content_ends_in_whitespace(
+    tiny_model, tmp_path_factory
+):
+    model = tiny_variant(tiny_model, tmp_path_factory, "keeps-content-chat", turn_template("{{ m['content'] }}"))
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Hi")]}, {"content": "Hello there. "})
+    assert out.text == "Hello there. "
+
+
 def weather_call_with(arguments: str) -> dict:
     return {"type": "function", "function": {"name": "get_weather", "arguments": arguments}}
 
