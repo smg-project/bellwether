@@ -631,6 +631,57 @@ def test_a_template_that_raises_on_an_unknown_tool_name_still_records_the_case(t
     assert out.text == "<tool_call>get_weather city=Paris</tool_call>"
 
 
+def turn_template(assistant: str) -> str:
+    """The tiny model's template with ``assistant`` as an assistant turn's body, the message as ``m``."""
+    return (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' }}" + assistant + "{{ '<|im_end|>\\n' }}"
+        "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+THINKING = {"reasoning_content": "97 has no divisor up to 9.", "content": "Yes, 97 is prime."}
+
+
+def test_a_template_that_renders_no_reasoning_fails_the_case(items_model):
+    # Phi-4-mini's, Hermes-4's and the Qwen2.5 checkpoints' templates never read reasoning_content; the output would
+    # be the content alone, and a parser that is right would be judged wrong against the message's reasoning.
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render the message's reasoning: changing its reasoning_content leaves"),
+    ):
+        RoundtripOracle(str(items_model), "local").render_output({"messages": [user("Is 97 prime?")]}, THINKING)
+
+
+def test_a_template_that_writes_the_calls_in_place_of_the_content_fails_the_case(tiny_model, tmp_path_factory):
+    # xLAM-2's shape: a message with calls is written as its call list, and its content is dropped.
+    calls_or_content = (
+        "{%- if m['tool_calls'] %}{%- for c in m['tool_calls'] %}"
+        "{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] | tojson + '</tool_call>' }}"
+        "{%- endfor %}{%- else %}{{ m['content'] }}{%- endif %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "calls-or-content-chat", turn_template(calls_or_content))
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render the message's content: changing its content leaves"),
+    ):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]}, {"content": "Checking.", "tool_calls": [weather_call()]}
+        )
+
+
+def test_a_template_that_renders_the_reasoning_and_the_content_records_the_case(tiny_model, tmp_path_factory):
+    both = (
+        "{%- if m['reasoning_content'] %}{{ '<think>' + m['reasoning_content'] + '</think>' }}{%- endif %}"
+        "{{ m['content'] }}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "reasoning-chat", turn_template(both))
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Is 97 prime?")]}, THINKING)
+    assert out.text == "<think>97 has no divisor up to 9.</think>Yes, 97 is prime."
+
+
 # Qwen3.5 to 3.8's shape: each argument is a tag, a string written as it is and any other value as JSON, so a null
 # and the string "null" give the same text.
 TAGGED_CALL = (

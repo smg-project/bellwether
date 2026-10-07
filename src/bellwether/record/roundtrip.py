@@ -126,6 +126,7 @@ class RoundtripOracle:
             [*messages, assistant], tokenize=False, add_generation_prompt=False, **kwargs
         )
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
+        self.check_every_part_is_rendered(messages, kwargs, message, rendered)
         self.check_every_argument_keeps_its_type(messages, kwargs, request.get("tools"), message, rendered)
         if not rendered.startswith(prompt):
             raise ValueError(
@@ -243,6 +244,32 @@ class RoundtripOracle:
                         f"({call['function']['name']}) leaves the rendered turn as it was, so the output would not "
                         "carry it"
                     )
+
+    def check_every_part_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
+        """The message's reasoning and its content, each when it has any, must reach the rendered turn.
+
+        Changing either must change what the template renders, as changing a call must
+        (``check_every_call_is_rendered``). A template that never reads ``reasoning_content`` (Phi-4-mini's, Hermes-4's,
+        the Qwen2.5 checkpoints') or that writes a message's calls in place of its content (xLAM-2's) would otherwise
+        give an output without that part: a parser that is right returns none of it, and would be judged wrong against
+        the message. One render per part; a template that fails on the change has read the part.
+        """
+        for part, what in (("reasoning_content", "reasoning"), ("content", "content")):
+            text = message.get(part)
+            if not isinstance(text, str) or not text:
+                continue
+            variant = {"role": "assistant", **as_vllm_gives_it({**message, part: text + MARKER})}
+            try:
+                again = self.tokenizer.apply_chat_template(
+                    [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
+                )
+            except Exception:
+                continue
+            if again == rendered:
+                raise ValueError(
+                    f"the template does not render the message's {what}: changing its {part} leaves the rendered turn "
+                    "as it was, so the output would not carry it"
+                )
 
     def check_every_argument_keeps_its_type(
         self, messages: list, kwargs: dict, tools: list | None, message: dict, rendered: str
