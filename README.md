@@ -98,6 +98,42 @@ the other kinds exist and exit with status 2 until their milestone lands:
 | M5 | CI in both repositories; weekly record against engine nightlies; reports to `smg-project/artifacts` |
 | M6 | coverage work from the gaps list |
 
+## What bellwether holds
+
+`uv run bellwether count --readme README.md` writes the two tables below from `fixtures/` and `corpus/`, and CI runs it with `--check`, so they say what main holds.
+
+<!-- bellwether count --readme writes everything from here to the end marker: edit none of it by hand -->
+
+### Models
+
+Each checkpoint group is recorded once, by its primary, for every checkpoint that shares its tokenizer and template; the counts are each group's `sets.toml`.
+
+| Group | Model | Checkpoints | Tier | Render cases | Parse cases | Refused | Sources |
+|---|---|---:|---:|---:|---:|---:|---|
+| [deepseek-r1](fixtures/deepseek-r1/sets.toml) | deepseek-ai/DeepSeek-R1 @ 56d4cbbb | 1 | 3 | 23 | 0 | 1 | hand-written |
+| [qwen3-8b](fixtures/qwen3-8b/sets.toml) | Qwen/Qwen3-8B @ b968826d | 6 | 1 | 24 | 16 | 0 | hand-written |
+| all | | 7 | | 47 | 16 | 1 | |
+
+75 more groups (99 checkpoints) have a manifest and nothing recorded yet.
+
+### Corpus
+
+The cases every group is recorded over, by the source they were imported from.
+
+| Source | From | Licenses | Render sets | Render cases | Parse sets | Parse cases | Plain | Stored |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| bfcl | pypi:bfcl-eval==2026.3.23 | Apache-2.0 | 17 | 4119 | 14 | 2735 | 37.0 MB | 37.0 MB, plain |
+| glaive-v2 | hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645 | Apache-2.0 | 71 | 289494 | 71 | 306240 | 1.24 GB | 81.4 MB, zstd in Git LFS |
+| gsm8k | github:openai/grade-school-math@3101c7d5 | MIT | 2 | 8792 | 4 | 17584 | 22.6 MB | 22.6 MB, plain |
+| hand-written | written in this repository | | 1 | 24 | 1 | 16 | 0.0 MB | 0.0 MB, plain |
+| hermes | hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d2 | Apache-2.0 | 3 | 20769 | 3 | 20773 | 99.6 MB | 5.8 MB, zstd in Git LFS |
+| mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
+| shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
+| swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
+| all | | | 108 | 327934 | 119 | 360658 | 1.47 GB | 214.8 MB |
+
+<!-- end of what bellwether count --readme writes -->
+
 ## Quick start
 
 ```bash

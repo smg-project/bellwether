@@ -166,3 +166,88 @@ def test_count_s_help_says_it_counts_per_checkpoint_with_its_group_and_tier(caps
     assert "cases per checkpoint, kind and source, with each checkpoint's group and tier" in " ".join(
         capsys.readouterr().out.split()
     )
+
+
+README = "# x\n\nintro\n\n## What bellwether holds\n\n{begin}\nstale\n{end}\n\n## Next\n\nrest\n"
+
+
+def holdings(tmp_path):
+    """A fixture root with one recorded group (two checkpoints) and one that recorded nothing, and a corpus of two
+    sources: hand-written and an imported one whose lines name two licenses."""
+    fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
+    write_manifest(fixtures, "m1", "org/M1", 1)
+    write_manifest(fixtures, "m1-small", "org/M1-Small", 1, group="m1")
+    write_manifest(fixtures, "m2", "org/M2", 2)
+    (fixtures / "m1" / "sets.toml").write_text(
+        "[render.common]\n"
+        + TABLE.format("plain", 2)
+        + "[parse.bfcl-x]\n"
+        + TABLE.format("plain", 3).replace("rejected = 0", "rejected = 1")
+    )
+    request = {"messages": []}
+    write_lines(
+        corpus / "render" / "common.jsonl", [{"name": "a", "request": request}, {"name": "b", "request": request}]
+    )
+    origin = {"dataset": "bfcl", "source": "pypi:bfcl-eval==1", "license": "Apache-2.0"}
+    lines = [{"name": f"bfcl-x-{n}", "request": request, "origin": {**origin, "row": n}} for n in range(3)]
+    lines.append({"name": "bfcl-x-3", "request": request, "origin": {**origin, "row": 3, "license": "MIT"}})
+    write_lines(corpus / "parse" / "bfcl-x.jsonl", lines)
+    return fixtures, corpus
+
+
+def test_readme_tables_are_written_between_the_markers_and_nothing_else_changes(tmp_path):
+    from bellwether.count import README_BEGIN, README_END
+
+    fixtures, corpus = holdings(tmp_path)
+    readme = tmp_path / "README.md"
+    readme.write_text(README.format(begin=README_BEGIN, end=README_END))
+    args = ["count", "--fixtures", str(fixtures), "--corpus", str(corpus), "--readme", str(readme)]
+    assert main(args) == 0
+    text = readme.read_text()
+    before, _, rest = text.partition(README_BEGIN)
+    tables, _, after = rest.partition(README_END)
+    assert before == "# x\n\nintro\n\n## What bellwether holds\n\n"
+    assert after == "\n\n## Next\n\nrest\n"
+    assert "stale" not in tables
+    assert [line for line in tables.splitlines() if line.startswith("| [m1]")] == [
+        "| [m1](fixtures/m1/sets.toml) | org/M1 @ 01234567 | 2 | 1 | 2 | 3 | 1 | bfcl, hand-written |"
+    ]
+    assert "1 more group (1 checkpoint) has a manifest and nothing recorded yet." in tables
+    assert [line for line in tables.splitlines() if line.startswith(("| bfcl ", "| hand-written "))] == [
+        "| bfcl | pypi:bfcl-eval==1 | Apache-2.0, MIT | 0 | 0 | 1 | 4 | 0.0 MB | 0.0 MB, plain |",
+        "| hand-written | written in this repository | | 1 | 2 | 0 | 0 | 0.0 MB | 0.0 MB, plain |",
+    ]
+
+
+def test_readme_check_passes_when_current_and_fails_when_a_count_changed(tmp_path, capsys):
+    from bellwether.count import README_BEGIN, README_END
+
+    fixtures, corpus = holdings(tmp_path)
+    readme = tmp_path / "README.md"
+    readme.write_text(README.format(begin=README_BEGIN, end=README_END))
+    args = ["count", "--fixtures", str(fixtures), "--corpus", str(corpus), "--readme", str(readme)]
+    assert main([*args, "--check"]) == 1
+    assert "run `bellwether count --readme" in capsys.readouterr().err
+    assert main(args) == 0
+    assert main([*args, "--check"]) == 0
+    write_lines(corpus / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
+    assert main([*args, "--check"]) == 1
+
+
+def test_readme_without_the_markers_is_refused(tmp_path, capsys):
+    fixtures, corpus = holdings(tmp_path)
+    readme = tmp_path / "README.md"
+    readme.write_text("# x\n")
+    assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus), "--readme", str(readme)]) == 1
+    assert "has no tables to replace" in capsys.readouterr().err
+
+
+def test_readme_cuts_a_full_commit_id_to_eight_characters_and_writes_a_gigabyte_as_gigabytes():
+    from bellwether.count import _short, _size
+
+    commit = "e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac"
+    assert _short(f"hf:datasets/glaiveai/glaive-function-calling-v2@{commit}") == (
+        "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645"
+    )
+    assert _short("pypi:bfcl-eval==2026.3.23") == "pypi:bfcl-eval==2026.3.23"
+    assert (_size(37_040_000), _size(1_243_300_000)) == ("37.0 MB", "1.24 GB")
