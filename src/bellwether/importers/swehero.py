@@ -7,6 +7,13 @@ whole training split, with the dataset's ``tools.json`` and card, each read thro
 names: MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause. Qwen3-Coder-480B-A35B-Instruct wrote the assistant turns, running
 in OpenHands. Each shard gives a render set and a parse set, ``swehero-<shard>``.
 
+The code in a trajectory is under its repository's license, so each kept repository's license file and its NOTICE file,
+if any, are copied next to the sets, one copy per repository: ``swehero_licenses.json`` pins them by repository, commit,
+path and sha256 at the commit the repository's first kept row names (scripts/swehero_licenses.py builds it), the import
+fetches them (``github.fetch``), and each case names its copies in ``origin.notices``. A repository the table leaves
+out (no readable commit or license file, or a license file that is not one of the card's four) has its rows named and
+left out.
+
 A request is an OpenAI chat request: the trajectory's messages before a turn, unchanged, each tool message given the
 id of the call it answers, which bellwether writes and ``origin`` marks (``WRITTEN``), and ``tools.json`` as the
 tools. A turn's parse case is its content and its calls, the arguments the JSON strings the data holds. A case for
@@ -21,12 +28,14 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from functools import cache
 from pathlib import Path
+from typing import NamedTuple
 
 import pyarrow.parquet as pq
 
-from . import corpus_sets, hf
+from . import corpus_sets, github, hf
 
 REPO = "nvidia/SWE-Hero-openhands-trajectories"
 REVISION = "150bc119e52c647216fce285fd801f16b6fd745b"
@@ -62,7 +71,12 @@ FORM = "zstd"
 FUNCTION_KEYS = {"name", "description", "parameters", "strict"}  # OpenAI's function definition
 FUNCTION_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
+# The copied license files: under the corpus root, as the table pins them.
+LICENSE_DIR = "licenses"
+LICENSE_TABLE = Path(__file__).with_name("swehero_licenses.json")
+
 LICENSE_NOT_ALLOWED = "the repository's license is not MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause"
+NO_LICENSE_FILE = "no license file of the repository's is pinned"
 UNPAIRED = "its tool results do not pair with the calls before them"
 NOT_AN_OBJECT = "a call's arguments are not a JSON object string"
 CALLS_OUTSIDE_A_TURN = "a message other than an assistant turn carries calls"
@@ -72,6 +86,44 @@ NO_TURN = "no assistant turn's request fits under the cap"
 # ``tool_call_id`` of each tool message in a request, the id of the call it answers by position (``messages_for``).
 # The calls' own ids are the data's.
 WRITTEN = "tool result ids"
+
+
+class Licenses(NamedTuple):
+    """Each kept repository's copied files, by path under the corpus root, and why each other repository has none."""
+
+    notices: Mapping[str, tuple[str, ...]]
+    left_out: Mapping[str, str]
+
+
+def load_license_table() -> dict:
+    """The committed table: ``files`` pins each copy, ``repositories`` names each one's, ``left_out`` gives reasons."""
+    return json.loads(LICENSE_TABLE.read_text("utf-8"))
+
+
+@cache
+def committed_licenses() -> Licenses:
+    table = load_license_table()
+    notices = {
+        repository: tuple(f"{LICENSE_DIR}/{name}" for name in entry["files"])
+        for repository, entry in table["repositories"].items()
+    }
+    return Licenses(notices, dict(table["left_out"]))
+
+
+def license_texts(table: dict, cache_dir: Path) -> dict[str, bytes]:
+    """The bytes of every file the table pins, by its path under the corpus root, fetched by repository, commit and
+    sha256."""
+    texts = {}
+    for name, pin in table["files"].items():
+        owner, repository = pin["repository"].split("/")
+        path = github.fetch(owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache_dir)
+        texts[f"{LICENSE_DIR}/{name}"] = path.read_bytes()
+    return texts
+
+
+def license_files(cache_dir: Path) -> dict[str, bytes]:
+    """The copies the import writes next to its sets: every file the committed table pins."""
+    return license_texts(load_license_table(), cache_dir)
 
 
 class Unusable(ValueError):
@@ -219,9 +271,10 @@ def set_name(shard: int) -> str:
     return f"swehero-{shard}"
 
 
-def origin(shard: int, number: int, row: dict, turn: int, request: dict) -> dict:
+def origin(shard: int, number: int, row: dict, turn: int, request: dict, notices: tuple[str, ...]) -> dict:
     """Where a case came from: the shard, its row and the turn in it, ``tools.json`` (the request's tools), and both
-    licenses that bind the text, the repository's as the dataset labels it.
+    licenses that bind the text, the repository's as the dataset labels it, with the copied files that go with its code
+    (``notices``).
 
     ``written`` lists the text bellwether wrote into the case rather than took from the row: ``WRITTEN`` when the
     request holds a tool message, whose ``tool_call_id`` the dataset does not have.
@@ -239,6 +292,7 @@ def origin(shard: int, number: int, row: dict, turn: int, request: dict) -> dict
         "trajectory_id": row["trajectory_id"],
         "repository": row["repo"],
         "repository_license": row["license"],
+        "notices": list(notices),
         "license": LICENSE,
     }
     if any(message["role"] == "tool" for message in request["messages"]):
@@ -247,7 +301,7 @@ def origin(shard: int, number: int, row: dict, turn: int, request: dict) -> dict
 
 
 def case_lines(
-    shard: int, number: int, row: dict, messages: list[dict], turn: int, tools: list[dict]
+    shard: int, number: int, row: dict, messages: list[dict], turn: int, tools: list[dict], notices: tuple[str, ...]
 ) -> tuple[dict, dict]:
     """The render and the parse line for the assistant turn at ``turn`` of row ``number`` of ``shard``.
 
@@ -264,27 +318,38 @@ def case_lines(
     name = f"{set_name(shard)}-{number}-{turn}"
     request = request_for(messages, turn, tools)
     notes = f"SWE-Hero {row['instance_id']}: the assistant turn at message {turn} of {len(messages)} ({calls})"
-    found = origin(shard, number, row, turn, request)
+    found = origin(shard, number, row, turn, request, notices)
     render = {"name": name, "request": request, "notes": notes, "origin": found}
     return render, {"name": name, "request": request, "message": message, "notes": notes, "origin": found}
 
 
 def build_sets(
-    shard: int, rows: Iterable[dict], tools: list[dict], skipped: list[tuple[str, str]] | None = None
+    shard: int,
+    rows: Iterable[dict],
+    tools: list[dict],
+    skipped: list[tuple[str, str]] | None = None,
+    licenses: Licenses | None = None,
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)`` from the rows of ``shard``: a render and a parse case for each chosen turn
     of each row, in the sets ``swehero-<shard>``.
 
-    An unusable row (its repository's license, its results, its arguments) is appended to ``skipped`` as
-    ``("shard <n> row <row>: <detail>", <reason>)``, the pair ``corpus_sets.report_skipped`` prints. A row that gives
-    no turn is appended too.
+    An unusable row (its repository's license, its license file, its results, its arguments) is appended to
+    ``skipped`` as ``("shard <n> row <row>: <detail>", <reason>)``, the pair ``corpus_sets.report_skipped`` prints. A
+    row that gives no turn is appended too. ``licenses`` defaults to the committed table; a repository it does not name
+    stops the import, since the table is then out of date.
     """
     skipped = [] if skipped is None else skipped
+    licenses = committed_licenses() if licenses is None else licenses
     render, parse = [], []
     for number, row in enumerate(rows):
         try:
             if row["license"] not in REPOSITORY_LICENSES:
                 raise Unusable(LICENSE_NOT_ALLOWED, str(row["license"]))
+            notices = licenses.notices.get(row["repo"])
+            if notices is None:
+                if row["repo"] not in licenses.left_out:
+                    raise ValueError(f"{row['repo']}: swehero_licenses.json does not name it; rebuild the table")
+                raise Unusable(NO_LICENSE_FILE, f"{row['repo']}: {licenses.left_out[row['repo']]}")
             messages = messages_for(row["trajectory"])
         except Unusable as err:
             skipped.append((f"shard {shard} row {number}: {err.detail}", err.reason))
@@ -293,7 +358,7 @@ def build_sets(
         if not chosen:
             skipped.append((f"shard {shard} row {number}: {no_turn(messages, tools)}", NO_TURN))
         for turn in chosen:
-            render_line, parse_line = case_lines(shard, number, row, messages, turn, tools)
+            render_line, parse_line = case_lines(shard, number, row, messages, turn, tools, notices)
             render.append(render_line)
             parse.append(parse_line)
     return {("render", set_name(shard)): render, ("parse", set_name(shard)): parse} if render else {}
@@ -309,14 +374,21 @@ def iter_sets(
             yield kind, set_name, lines
 
 
-def write_sets(sets: corpus_sets.Sets, corpus_dir: Path, summary: corpus_sets.Summary | None = None) -> list[Path]:
-    """Write every set, and remove ``swehero-*`` files no shard writes any more."""
-    return corpus_sets.write(sets, corpus_dir, "swehero-", form=FORM, summary=summary)
+def write_sets(
+    sets: corpus_sets.Sets,
+    corpus_dir: Path,
+    summary: corpus_sets.Summary | None = None,
+    files: dict[str, bytes] | None = None,
+) -> list[Path]:
+    """Write every set and the copied license files (``files``), and remove ``swehero-*`` files no shard writes any
+    more."""
+    return corpus_sets.write(sets, corpus_dir, "swehero-", files, form=FORM, summary=summary)
 
 
-def check_sets(sets: corpus_sets.Sets, corpus_dir: Path) -> list[str]:
-    """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "swehero-", "SWE-Hero shard", form=FORM)
+def check_sets(sets: corpus_sets.Sets, corpus_dir: Path, files: dict[str, bytes] | None = None) -> list[str]:
+    """One line per set file, or copied license file, that differs from a fresh import; empty when the corpus is what
+    the import writes."""
+    return corpus_sets.check(sets, corpus_dir, "swehero-", "SWE-Hero shard", files, form=FORM)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -326,10 +398,11 @@ def run(args: argparse.Namespace) -> int:
     # The card's license is checked before any shard is downloaded.
     hf.check_card_license(REPO, REVISION, FILES[hf.CARD], CARD_LICENSE, cache=args.cache)
     tools = check_tools(json.loads(fetch(TOOLS_FILE).read_text(encoding="utf-8")))
+    files = license_files(args.cache)
     skipped: list[tuple[str, str]] = []
     sets = iter_sets(fetch, tools, skipped)
     if args.check:
-        problems = check_sets(sets, args.corpus)
+        problems = check_sets(sets, args.corpus, files)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
@@ -337,7 +410,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"{args.corpus}: the SWE-Hero sets equal a fresh import of {SOURCE}, {whole}")
         return 1 if problems else 0
     summary = corpus_sets.Summary()
-    write_sets(sets, args.corpus, summary)
+    write_sets(sets, args.corpus, summary, files)
     corpus_sets.report_summary("SWE-Hero", summary, args.corpus)
     corpus_sets.report_skipped(skipped)
     return 0

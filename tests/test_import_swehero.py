@@ -31,6 +31,22 @@ TOOLS = [
 ]
 
 
+# The license table the tests' rows read: owner/repo's code goes with one copied license file, and gone/repo has none.
+# The committed table is the real one's (test_the_committed_license_table_pins_every_copy_it_names).
+NOTICE = "licenses/swehero-owner-repo-0123456789ab-LICENSE"
+LICENSES = swehero.Licenses(
+    notices={"owner/repo": (NOTICE,)}, left_out={"gone/repo": "pull request 7 is not on GitHub"}
+)
+LICENSE_TEXTS = {NOTICE: b"MIT License\n"}
+COMMITTED_LICENSES = swehero.committed_licenses
+
+
+@pytest.fixture(autouse=True)
+def license_table(monkeypatch):
+    monkeypatch.setattr(swehero, "committed_licenses", lambda: LICENSES)
+    monkeypatch.setattr(swehero, "license_files", lambda cache: LICENSE_TEXTS)
+
+
 def test_tools_in_openai_shape_pass_unchanged():
     assert swehero.check_tools(TOOLS) is TOOLS
 
@@ -271,6 +287,7 @@ def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
         "trajectory_id": "trajectory-0",
         "repository": "owner/repo",
         "repository_license": "MIT",
+        "notices": [NOTICE],
         "license": "CC-BY-4.0",
         "written": ["tool result ids"],
     }
@@ -365,6 +382,39 @@ def test_rows_under_each_reviewed_repository_license_are_kept():
     )
 
 
+def test_a_row_whose_repository_has_no_pinned_license_file_is_named_and_left_out():
+    skipped: list = []
+    gone = {**row(), "repo": "gone/repo", "instance_id": "gone__repo-7"}
+    sets = swehero.build_sets(13, [gone, row(1)], TOOLS, skipped)
+    assert sorted({line["origin"]["row"] for line in sets[PARSE]}) == [1]
+    assert skipped == [("shard 13 row 0: gone/repo: pull request 7 is not on GitHub", swehero.NO_LICENSE_FILE)]
+
+
+def test_a_repository_the_license_table_does_not_name_stops_the_import():
+    stranger = {**row(), "repo": "new/repo", "instance_id": "new__repo-1"}
+    with pytest.raises(ValueError, match=re.escape("new/repo: swehero_licenses.json does not name it")):
+        swehero.build_sets(13, [stranger], TOOLS)
+
+
+def test_the_committed_license_table_pins_every_copy_it_names():
+    table = swehero.load_license_table()
+    files, repositories, left_out = table["files"], table["repositories"], table["left_out"]
+    assert len(repositories) > 1000 and not set(repositories) & set(left_out)
+    for repository, entry in repositories.items():
+        assert set(entry["license"].split(" AND ")) <= set(swehero.REPOSITORY_LICENSES), repository
+        own = [name for name in entry["files"] if files[name]["repository"] == repository]
+        assert own and all(files[name]["commit"] == entry["commit"] for name in own), repository
+    for name, pin in files.items():
+        repository, commit, path = pin["repository"], pin["commit"], pin["path"]
+        assert name == f"swehero-{repository.replace('/', '-')}-{commit[:12]}-{path.replace('/', '-')}"
+        assert re.fullmatch(r"[0-9a-f]{40}", commit) and re.fullmatch(r"[0-9a-f]{64}", pin["sha256"]), name
+    assert all(left_out.values())
+    licenses = COMMITTED_LICENSES()
+    assert set(licenses.notices) == set(repositories) and licenses.left_out == left_out
+    some = next(iter(repositories))
+    assert licenses.notices[some] == tuple(f"licenses/{name}" for name in repositories[some]["files"])
+
+
 def test_a_row_that_gives_no_turn_is_named(monkeypatch):
     monkeypatch.setattr(swehero, "MAX_REQUEST_BYTES", 100)
     skipped: list = []
@@ -430,7 +480,8 @@ def test_written_sets_read_back_and_check_clean_and_a_changed_missing_or_stale_f
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "swehero-12"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
-    swehero.write_sets(sets, corpus)
+    swehero.write_sets(sets, corpus, files=LICENSE_TEXTS)
+    assert (corpus / NOTICE).read_bytes() == LICENSE_TEXTS[NOTICE]
     assert sorted(path.name for path in (corpus / "render").iterdir()) == [
         "bfcl-simple-python.jsonl",
         "common.jsonl",
@@ -443,7 +494,9 @@ def test_written_sets_read_back_and_check_clean_and_a_changed_missing_or_stale_f
     assert [(case.name, case.message, case.origin) for case in cases] == [
         (line["name"], line["message"], line["origin"]) for line in sets[PARSE]
     ]
-    assert swehero.check_sets(sets, corpus) == []
+    assert swehero.check_sets(sets, corpus, files=LICENSE_TEXTS) == []
+    (corpus / NOTICE).write_bytes(b"changed\n")
+    assert swehero.check_sets(sets, corpus, files=LICENSE_TEXTS) == [f"{corpus / NOTICE}: differs from a fresh import"]
     (corpus / "parse" / "swehero-13.jsonl").write_text("{}\n")
     (corpus / "render" / "swehero-13.jsonl").unlink()
     (corpus / "render" / "swehero-stale.jsonl").write_text("{}\n")
@@ -602,7 +655,8 @@ def test_past_the_limit_the_command_writes_every_set_compressed_and_checks_it(tm
     assert "a fresh import writes this set as swehero-0.jsonl.zst" in capsys.readouterr().err
     assert main(argv) == 0
     assert sorted(path.relative_to(corpus).as_posix() for path in corpus.rglob("*") if path.is_file()) == [
-        f"{kind}/swehero-{shard}.jsonl.zst" for kind in ("parse", "render") for shard in (0, 1)
+        NOTICE,  # the copied license file, as it is
+        *(f"{kind}/swehero-{shard}.jsonl.zst" for kind in ("parse", "render") for shard in (0, 1)),
     ]
     assert [case.name for case in read_cases(corpus / "parse" / "swehero-0.jsonl.zst")] == [
         "swehero-0-0-2",
