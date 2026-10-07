@@ -57,6 +57,7 @@ together.
 | BFCL | `bfcl-<category>` for the 17 categories of smg's weekly run. The 13 single-turn categories: 3635 render cases, one per row except 6 `live_irrelevance` rows that repeat an earlier case; 2420 parse cases, one per row with a ground truth, except 76 Java and JavaScript rows whose values are not strings (#26) and 5 rows where no call the rule builds passes BFCL's own checker (the import names them), with 2233 distinct messages among them. The four multi_turn categories, `bfcl-multi-turn-{base,miss-func,miss-param,long-context}`, first turn only: 484 render cases, one per row except 316 that repeat an earlier case; 315 parse cases, one per row whose first turn has a ground-truth call (175 miss_func and miss_param rows have none) except 310 that repeat an earlier case, with 166 distinct messages among them. The import names every row it gives no parse case | `pypi:bfcl-eval==2026.3.23`, sha256 `3bb6dfa5f0c68ad403c9ec50b00db2bb3b4cc9b38ab1ff33f48fe30d853d3a0a` | Apache-2.0, checked in the wheel's METADATA on every import; the wheel has no LICENSE file, so the import copies `LICENSE` from `github:ShishirPatil/gorilla@6ea57973c7a6097fd7c5915698c54c17c5b1b6c8`, the commit the wheel was built from (sha256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`), to `corpus/licenses/bfcl-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla |
 | GSM8K | `gsm8k-train` and `gsm8k-test`: 7473 and 1319 render cases, one per row; `gsm8k-<split>-reasoning-content` and `gsm8k-<split>-content`: the same rows as parse cases, one set per message shape (no row of the pinned files is left out: every row is usable, and no case repeats an earlier one; all 17584 messages are distinct) | `github:openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c`; sha256 `17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465` (`grade_school_math/data/train.jsonl`), `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` (`grade_school_math/data/test.jsonl`), `86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b` (`LICENSE`) | MIT, checked against the LICENSE file's sha256 on every import and copied to `corpus/licenses/gsm8k-LICENSE` | Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
 | Shapes (BFCL and GSM8K) | `shapes-<shape>` for six message shapes, `reasoning`, `content`, `reasoning-content`, `reasoning-calls`, `content-calls` and `reasoning-content-calls`: 1000 parse cases each, all distinct, with 6000 distinct messages among them, the same 1000 pairs of a BFCL parse case and a GSM8K test row in every set | BFCL's and GSM8K's pins above: the wheel, and `grade_school_math/data/test.jsonl` with `LICENSE` | Apache-2.0 for the BFCL part of each case and MIT for the GSM8K part, each checked by its importer's check on every import; the GSM8K notice is the copy in `corpus/licenses/gsm8k-LICENSE` | Berkeley Function Calling Leaderboard, Gorilla project, UC Berkeley: https://github.com/ShishirPatil/gorilla; Training Verifiers to Solve Math Word Problems, Cobbe et al. 2021, OpenAI: https://github.com/openai/grade-school-math |
+| MGSM | `mgsm-<lang>` for 10 of its 11 languages (bn, de, es, fr, ja, ru, sw, te, th, zh): 250 render cases each, 2500 in all, one per row, and none for English (below); `mgsm-<lang>-content` for all 11: the same rows as parse cases, the final answer alone as content, 2750 cases holding 134 distinct messages; `mgsm-exemplars`: 88 parse cases, the 8 worked exemplars of each language (no row or exemplar of the pinned files is left out, and no case repeats an earlier one) | `github:google-research/url-nlp@3622039cf51f7eeffa58b957332a8e8c337981d7`, directory `mgsm/`; the sha256 of each file is listed below | CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/), checked against the LICENSE file's sha256 and first line on every import and copied to `corpus/licenses/mgsm-LICENSE`; the GSM8K problems it translates are MIT (below) | MGSM, Shi et al. 2022, Google Research: https://github.com/google-research/url-nlp |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -148,15 +149,77 @@ no `reasoning_content`. The text does not answer the request: what a case probes
 `{"dataset": "shapes", "parts": [...]}`, the BFCL case's origin and then the GSM8K row's, each as its importer writes
 it, and `bellwether count` counts the cases under `shapes`.
 
-Set names starting with `bfcl-`, `gsm8k-` or `shapes-` belong to that importer: `bellwether import bfcl` deletes any
-`bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import gsm8k` any `gsm8k-*` one, and
-`bellwether import shapes` any `shapes-*` one. Name hand-written sets otherwise.
+A case of `mgsm-<lang>` or `mgsm-<lang>-content` is one of GSM8K's first 250 test problems in one of eleven languages:
+English, which is GSM8K's own text, and ten human translations. Its request is the question as a single user turn, as
+GSM8K's is. MGSM's files give each problem's final answer and not GSM8K's worked solution, so `mgsm-<lang>-content`
+holds the final answer alone as `content`, as the file writes it: four final answers in each language keep GSM8K's
+thousands separators (`2,125`). A row must be `question<TAB>final answer`, split at the tab only (a quote is part of the
+question), with a final answer that is an integer in ASCII digits. Any other line but an empty one, a line of spaces
+included, would be left out of every set of its language with its reason printed; the pinned files have none. Case names
+carry the language and the row's 0-based line index (`mgsm-ja-7`, `mgsm-ja-content-7`).
+
+English has no render set: its 250 questions are GSM8K's first 250 test questions verbatim, so `mgsm-en-<row>` would
+send what `gsm8k-test-<row>` sends, byte for byte, and `gsm8k-test` already covers them. `mgsm-en-content` stays, since
+no GSM8K parse case holds a final answer alone as its message.
+
+The eleven content sets hold one list of final answers eleven times. The 250 problems have 134 distinct final answers,
+and MGSM writes each the same way in every language, so the 2750 cases hold 134 distinct messages between them: their
+requests differ by language, their messages do not. The sets stay one per language, and the import prints both counts,
+of cases and of distinct messages.
+
+`mgsm-exemplars` holds the 8 worked exemplars of each language from `exemplars.py`, which the import parses as Python
+source and never runs. An exemplar is a question after a label (`Question: `, `問題：`) and an answer after a label
+(`Step-by-Step Answer: `): the worked solution, then a final sentence that states the exemplar's final answer (`The
+answer is 11.`, `答えは11です。`, `Ответ — 11.`, `คำตอบคือ 11`). The import knows each language's wording: its two labels
+and the words its final sentence opens with. A case's request is the question without its label; its message holds the
+solution as `reasoning_content` and the final sentence, as written, as `content`. The final sentence starts where its
+opening words last appear and must state, in ASCII digits, the final answer `EXEMPLAR_NUMBER_ANSWERS` gives the
+exemplar; Telugu exemplars 3 and 4 carry words after that sentence, which stay in `content`. An exemplar that does not
+read this way in its language's wording would be left out with its reason printed; the pinned file has none. Case names
+carry the language and the exemplar's key (`mgsm-exemplars-ja-1`), and `origin.row` its place in the file
+(`MGSM_EXEMPLARS['ja']['1']`).
+
+The import changes MGSM's text in one way only: it drops the exemplars' two labels and any whitespace before their final
+sentence. It keeps the rest as written, whitespace at the edges of a question included, and writes no text of its own:
+every string in a case's request and message is MGSM's. Some of MGSM's Bengali text is not in Unicode's NFC form: 238
+of the 250 Bengali questions, and the solutions of exemplars `bn-2` to `bn-8`, write U+09DF BENGALI LETTER YYA or
+U+09DC BENGALI LETTER RRA as one code point, which NFC writes as two. A tokenizer that normalizes to NFC, as Qwen3-8B's
+does, encodes the NFC text, so `bellwether record --kind parse` rejects those seven exemplars for such a model ("the
+output text does not survive a tokenize-detokenize round trip"), and issue #57 tracks it.
+
+MGSM is CC-BY-4.0, which asks that a copy credit its creators, say what was changed, and give the license's text or
+its URI (section 3(a)(1)): the table gives the credit and the URI, and the paragraphs above say what the import changes.
+The URI alone would do, but the corpus keeps each dataset's license file next to its sets, so `bellwether import mgsm`
+also writes the pinned `mgsm/LICENSE` to `corpus/licenses/mgsm-LICENSE`, and `--check` compares it as it does a set.
+The problems MGSM translates are GSM8K's, under MIT, whose notice goes with the corpus as
+`corpus/licenses/gsm8k-LICENSE`.
+
+MGSM's files at `3622039c`, by sha256:
+
+- `mgsm/LICENSE`: `c97deeeca4ae375a0334bc7f7af5f707aabfcec959c53c783b9f8771d28fd5b3`
+- `mgsm/exemplars.py`: `239dda1557bb2ba76b71e5ef744ddd0b454da0b453e5f8b909498ceff690a919`
+- `mgsm/mgsm_bn.tsv`: `6b00bc7cc635547e866989284afa924d789b5affa2eb8de623c385dd943ad977`
+- `mgsm/mgsm_de.tsv`: `4dfea30fede44b813e2e496f5f0534049e83c7cc8aed6e00600b30ec62053626`
+- `mgsm/mgsm_en.tsv`: `50021d0f28cc957edcb44e7806425b1c7fbd648ddcb9e0a8ec689d10e57d40fa`
+- `mgsm/mgsm_es.tsv`: `5bd27ebdf00140cec845c5298dc17715f5cd57d8edda6df1976db40bf3f0750a`
+- `mgsm/mgsm_fr.tsv`: `36207c1c03fd7cd3ea491441eb755408199f94e4a647851df531bbaedc99d606`
+- `mgsm/mgsm_ja.tsv`: `59a2b50debe77981fd784cb3b2bef1505e3abf2a37116dc9d7a366ab029b4637`
+- `mgsm/mgsm_ru.tsv`: `6bd30fd2e80c5bac23f566fb4ae0e6a55a19578401fbf9a01fb21beb3645fef8`
+- `mgsm/mgsm_sw.tsv`: `2bac828d77229e65d7c7197b1ad4a2cb5b1fe99b163f2cbdd66501de6a2115c4`
+- `mgsm/mgsm_te.tsv`: `dd6b1452c244bb2e4ba254c01ea84137f80c1cefc57d69c23b0ed88b9c0f36b7`
+- `mgsm/mgsm_th.tsv`: `f3932dc5ad8e9d0ea82b017adc1e1461dd647af861e7166d6741986602a0cfd6`
+- `mgsm/mgsm_zh.tsv`: `b2fa63151022370a0de1f4211c8c284eae74b0f5a3b003b1d5982c0d4a73f661`
+
+Set names starting with `bfcl-`, `gsm8k-`, `mgsm-` or `shapes-` belong to that importer: `bellwether import bfcl`
+deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import gsm8k` any `gsm8k-*` one,
+`bellwether import mgsm` any `mgsm-*` one, and `bellwether import shapes` any `shapes-*` one. Name hand-written sets
+otherwise.
 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` and downloads them on a miss. It then needs PyPI to
 still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from PyPI does not,
-and the check fails until the importer pins another. GSM8K's files, and the LICENSE the BFCL import copies, are read
-from `raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that commit.
-`bellwether import shapes --check` reads the same pinned files as the other two.
+and the check fails until the importer pins another. GSM8K's and MGSM's files, and the LICENSE the BFCL import copies,
+are read from `raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that
+commit. `bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports.
 
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.

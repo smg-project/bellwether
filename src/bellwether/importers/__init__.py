@@ -14,6 +14,10 @@ def run(args: argparse.Namespace) -> int:
         from .gsm8k import run as run_gsm8k
 
         return run_gsm8k(args)
+    if args.dataset == "mgsm":
+        from .mgsm import run as run_mgsm
+
+        return run_mgsm(args)
     if args.dataset == "shapes":
         from .shapes import run as run_shapes
 
