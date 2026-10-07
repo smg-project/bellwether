@@ -126,6 +126,7 @@ class RoundtripOracle:
             [*messages, assistant], tokenize=False, add_generation_prompt=False, **kwargs
         )
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
+        self.check_every_argument_keeps_its_type(messages, kwargs, request.get("tools"), message, rendered)
         if not rendered.startswith(prompt):
             raise ValueError(
                 "the template does not extend the generation prompt when the turn is appended; "
@@ -242,6 +243,50 @@ class RoundtripOracle:
                         f"({call['function']['name']}) leaves the rendered turn as it was, so the output would not "
                         "carry it"
                     )
+
+    def check_every_argument_keeps_its_type(
+        self, messages: list, kwargs: dict, tools: list | None, message: dict, rendered: str
+    ) -> None:
+        """Every argument of the message's calls must come back from the output with its JSON type.
+
+        A template that writes arguments as tags (``<parameter=to>\\nnull\\n</parameter>``) leaves a value's type to the
+        reader, which takes it from the tool's declared parameter types: for a parameter declared a string, vLLM v0.31.0
+        keeps the text ``null`` as the string "null" (``rust/src/parser/src/tool/parameters.rs:294-302``), and ``false``
+        or ``2`` as strings too (``:332``); smg does the same. So a top-level argument whose JSON type the declared
+        ``type`` does not admit (an int is also a number) is rendered again with each candidate of another type and the
+        same text in its place: for a value that is not a string, ``json.dumps`` of it (with non-ASCII text escaped and
+        as it is) and Python's ``str`` of it, as strings; for a string, what ``json.loads`` makes of it, when that is
+        not a string. Where no type is declared (no function of that name, no properties, no entry for the name, or no
+        ``type`` that is a string or a list of strings), the readers already differ (smg infers JSON, vLLM keeps a
+        string), so the output must carry the type by itself: every value is checked, and a string also takes the Python
+        literal it spells (``True``, ``False``, ``None``). A render that equals the turn as recorded means the output
+        does not carry the value's type, and the case is refused. A template that fails on a candidate is skipped for
+        that candidate, as in ``check_every_call_is_rendered``. A template that writes JSON (Qwen3-8B's) renders
+        ``null`` and ``"null"`` differently, so those cases pass.
+
+        A null under declared types other than a string alone is checked against the text ``None`` only: every reader
+        turns the text ``null`` into null there (the same vLLM lines, and its test
+        ``string_param_preserves_literal_null_text`` at ``:706``), but vLLM's parser, as ``vllm serve`` runs it
+        (``vllm/tool_parsers/utils.py``, ``coerce_to_schema_type``), reads ``None`` as the string "None", and
+        Qwen3-Coder's template writes a null that way.
+
+        The guard's stated limit: only top-level arguments are checked; values nested inside arrays and objects are
+        not.
+        """
+        for index, call in enumerate(message.get("tool_calls") or []):
+            function = call["function"]["name"]
+            for name, value in json.loads(call["function"]["arguments"]).items():
+                types = declared_types(tools, function, name)
+                for candidate in same_text_candidates(value, types):
+                    variant = {"role": "assistant", **as_vllm_gives_it(with_argument(message, index, name, candidate))}
+                    try:
+                        again = self.tokenizer.apply_chat_template(
+                            [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
+                        )
+                    except Exception:
+                        continue
+                    if again == rendered:
+                        raise ValueError(type_not_carried(function, name, value, candidate, types))
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
@@ -517,3 +562,113 @@ def with_marker_argument(message: dict, index: int) -> dict:
     function = message["tool_calls"][index]["function"]
     function["arguments"] = json.dumps({**json.loads(function["arguments"]), MARKER: MARKER})
     return message
+
+
+def with_argument(message: dict, index: int, name: str, value: object) -> dict:
+    """A copy of the message whose call ``index`` carries ``value`` as its argument ``name``, in the same place."""
+    message = copy.deepcopy(message)
+    function = message["tool_calls"][index]["function"]
+    function["arguments"] = json.dumps({**json.loads(function["arguments"]), name: value})
+    return message
+
+
+def declared_types(tools: list | None, function: str, parameter: str) -> list[str] | None:
+    """The types the request's tools declare for ``parameter`` of ``function``, or None when they declare none.
+
+    The type is the ``type`` of ``parameters.properties[parameter]`` in the first function of that name, a string or a
+    list of strings.
+    """
+    schema = next((t["function"] for t in tools or [] if (t.get("function") or {}).get("name") == function), {})
+    properties = (schema.get("parameters") or {}).get("properties")
+    entry = properties.get(parameter) if isinstance(properties, dict) else None
+    kind = entry.get("type") if isinstance(entry, dict) else None
+    if isinstance(kind, str):
+        return [kind]
+    if isinstance(kind, list) and kind and all(isinstance(k, str) for k in kind):
+        return kind
+    return None
+
+
+def json_types(value: object) -> set[str]:
+    """The JSON types ``value`` has; an int is also a number."""
+    if value is None:
+        return {"null"}
+    if isinstance(value, bool):
+        return {"boolean"}
+    if isinstance(value, int):
+        return {"integer", "number"}
+    if isinstance(value, float):
+        return {"number"}
+    if isinstance(value, str):
+        return {"string"}
+    return {"array"} if isinstance(value, list) else {"object"}
+
+
+PYTHON_LITERALS = {"True": True, "False": False, "None": None}
+
+
+def json_readings(value: str) -> list:
+    """The value a string's text reads as JSON, when that is not a string; none otherwise."""
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return []
+    return [] if isinstance(parsed, str) else [parsed]
+
+
+def same_text_candidates(value: object, types: list[str] | None) -> list:
+    """Values of another type that a template may write as it writes ``value``, whose declared ``types`` may be None.
+
+    There are none when the declared types admit the value. A null under declared types other than a string alone has
+    one: the string "None". Every reader reads the text ``null`` back as null there, but vLLM's parser
+    (``vllm/tool_parsers/utils.py``, ``coerce_to_schema_type``) reads only ``null`` as null, and a template that writes
+    values with Jinja's ``string`` (Qwen3-Coder's) writes a null as ``None``.
+    """
+    if value is None and types is not None and set(types) != {"string"}:
+        return ["None"]
+    if types is not None and json_types(value) & set(types):
+        # The declared types admit the value. A string whose text is JSON of another type the union admits is the
+        # exception: a template writes the string "null" as it writes null, and vLLM's parser tries every other declared
+        # type before a string, so a reader hands back null. The text None is not one: vLLM reads only null as null.
+        others = set(types) - {"string"}
+        if not isinstance(value, str) or not others:
+            return []
+        return [reading for reading in json_readings(value) if json_types(reading) & others]
+    if not isinstance(value, str):
+        # transformers' tojson writes non-ASCII text as it is; json.dumps's default escapes it.
+        return list(dict.fromkeys([json.dumps(value), json.dumps(value, ensure_ascii=False), str(value)]))
+    candidates = []
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        parsed = value
+    if not isinstance(parsed, str):
+        candidates.append(parsed)
+    if types is None and value in PYTHON_LITERALS:
+        candidates.append(PYTHON_LITERALS[value])
+    return candidates
+
+
+def type_not_carried(function: str, name: str, value: object, candidate: object, types: list[str] | None) -> str:
+    """Why a case is refused when ``candidate`` renders as ``value``, argument ``name`` of a call to ``function``."""
+    said = f"the template renders {function}'s {name} {named(value)} as it renders {named(candidate)}"
+    if types is None:
+        return f"{said}, and the tools declare no type for {name}, so no reader can tell the two apart in the output"
+    kinds = " or ".join(kind if kind == "null" else f"{'an' if kind[:1] in 'aeiou' else 'a'} {kind}" for kind in types)
+    if isinstance(value, str) and json_types(value) & set(types):
+        reading = json.dumps(candidate)
+        return (
+            f"{said}, and the tool declares {name} {kinds}; vLLM's parser tries {reading} before a string, so it "
+            f"hands back {reading}"
+        )
+    if value is None and set(types) != {"string"}:
+        return (
+            f"{said}, and vLLM reads the text None as the string 'None' under {kinds}, "
+            "so it does not get null back from the output"
+        )
+    return f"{said}, and the tool declares {name} {kinds}, so no reader gets {named(value)} back from the output"
+
+
+def named(value: object) -> str:
+    """How a reason names a value: a string as the string it is, anything else as JSON."""
+    return f"the string {value!r}" if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
