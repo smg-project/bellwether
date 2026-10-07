@@ -150,7 +150,8 @@ The cases every group is recorded over, by the source they were imported from.
 | shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
 | swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
 | swehero | hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119 | CC-BY-4.0 | 14 | 79627 | 14 | 101568 | 14.84 GB | 882.8 MB, zstd in Git LFS |
-| all | | | 122 | 407561 | 133 | 462226 | 16.31 GB | 1.10 GB |
+| tau2 | github:sierra-research/tau2-bench@4ce7c039 | MIT | 22 | 124175 | 22 | 127433 | 9.77 GB | 30.8 MB, zstd in Git LFS |
+| all | | | 144 | 531736 | 155 | 589659 | 26.08 GB | 1.13 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
