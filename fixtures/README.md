@@ -64,9 +64,11 @@ sglang = { tool_parser = "qwen25", reasoning_parser = "qwen3" }
 ```
 
 `revision` is a 40-character commit hash, never a branch or tag, which could move under a consumer that caches the
-fixtures. `[inputs]` lists every file the oracle reads, each with its sha256: the tokenizer files, the chat template
-files, and each named template (`additional_chat_templates/<name>.jinja`, of which transformers takes `tool_use` when a
-request has tools). Three JSON files are read only in part, so each is hashed over the canonical JSON (`json.dumps(...,
+fixtures. The one exception is `local`, accepted only when `model` is an absolute path: a checkpoint given as a
+directory, such as the tests' tiny model, has no commits to pin, and a Hugging Face id is never an absolute path.
+`[inputs]` lists every file the oracle reads, each with its sha256: the tokenizer files, the chat template files, and
+each named template (`additional_chat_templates/<name>.jinja`, of which transformers takes `tool_use` when a request has
+tools). Three JSON files are read only in part, so each is hashed over the canonical JSON (`json.dumps(...,
 sort_keys=True)`, a missing field as null) of the fields read, `bellwether.inputs.NARROWED`: `chat_template.json` over
 its `chat_template`, the template vLLM reads through the processor; `generation_config.json` over `bos_token_id`,
 `eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group; and `config.json` over `model_type`
