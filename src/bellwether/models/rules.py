@@ -59,6 +59,7 @@ TIER1 = (
     "zai-org/GLM-5.3-Flash",
     "Qwen/",
     "tencent/Hy4-preview",
+    "moonshotai/Kimi-K3",  # added 2026-10-07; recorded by the vendor-code oracle (bellwether sandbox-record)
 )
 
 UNCHECKED = "unchecked"  # --registry-only: the Hub was not asked

@@ -115,9 +115,9 @@ def test_the_gpt_oss_checkpoints_set_aside_are_named_whether_the_name_or_the_arc
     assert [row.model for row in registry_only_rows(entries, BUILT)] == ["OpenGVLab/InternVL3_5-1B"]
 
 
-def test_simos_models_the_list_lacks_are_named() -> None:
+def test_the_maintainers_models_the_list_lacks_are_named() -> None:
     rows = registry_only_rows(excerpt_entries(), BUILT)
-    assert missing_from_tier1(rows) == ["MiniMaxAI/MiniMax-M3", "tencent/Hy4-preview"]
+    assert missing_from_tier1(rows) == ["MiniMaxAI/MiniMax-M3", "tencent/Hy4-preview", "moonshotai/Kimi-K3"]
 
 
 def details(model: str, created: date, downloads: int, architectures: tuple[str, ...], **flags) -> Details:

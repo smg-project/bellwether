@@ -175,8 +175,13 @@ def test_a_current_chat_checkpoint_ships_a_template_dates_from_2025_and_is_no_co
     assert not rules.is_current_chat(None)
 
 
-def test_simos_models_are_tier_one_whatever_their_date() -> None:
-    for model in ("deepseek-ai/DeepSeek-V4.1-Flash", "MiniMaxAI/MiniMax-M3", "zai-org/GLM-5.3-Flash"):
+def test_the_maintainers_models_are_tier_one_whatever_their_date() -> None:
+    for model in (
+        "deepseek-ai/DeepSeek-V4.1-Flash",
+        "MiniMaxAI/MiniMax-M3",
+        "zai-org/GLM-5.3-Flash",
+        "moonshotai/Kimi-K3",
+    ):
         assert rules.tier_of(model, None, BUILT, current_chat=False) == 1
     assert rules.tier_of("tencent/Hy4-preview", date(2020, 1, 1), BUILT, current_chat=False) == 1
 
@@ -195,7 +200,7 @@ def test_tier_two_is_the_twelve_months_before_the_list_is_built() -> None:
     assert rules.tier_of("example/a", date(2027, 2, 28), date(2028, 2, 29), current_chat=False) == 2
 
 
-def test_tier_one_follows_simos_order_and_the_other_tiers_follow_downloads() -> None:
+def test_tier_one_follows_the_maintainers_order_and_the_other_tiers_follow_downloads() -> None:
     rows = [
         ("tencent/Hy4-preview", 1, 5),
         ("Qwen/Qwen3-8B", 1, 900),
