@@ -65,3 +65,119 @@ def test_case_schema_is_valid_and_accepts_examples():
     validator.validate(parse)
     bad = dict(render, id="Kimi-K3/render/x")
     assert list(validator.iter_errors(bad)), "ids must be lowercase slugs"
+
+
+VLLM_COMMIT = "db9527a46873454610df6dbedf79a36d6bf1a7f6"
+
+
+def second_reference_lines() -> tuple[dict, dict]:
+    """A render line with a second reference beside its reference, and a parse line kept for its second references."""
+    render = {
+        "id": "apertus-8b-instruct-2509/render/bfcl-simple-python-0",
+        "kind": "render",
+        "model": "swiss-ai/Apertus-8B-Instruct-2509",
+        "request": {"messages": [{"role": "user", "content": "hi"}], "tools": []},
+        "reference": {"source": "hf-template", "input_ids": [1, 2], "text": "hi"},
+        "second_references": {
+            "tool_chat_template_apertus.jinja": {
+                "source": "hf-template",
+                "input_ids": [1, 3, 2],
+                "text": "tools hi",
+                "provenance": {"vllm_commit": VLLM_COMMIT, "chat_template_sha256": "a" * 64},
+            }
+        },
+    }
+    parse = {
+        "id": "mistral-7b-instruct-v0.3/parse/bfcl-simple-python-0",
+        "kind": "parse",
+        "model": "mistralai/Mistral-7B-Instruct-v0.3",
+        "request": {"messages": [{"role": "user", "content": "hi"}], "tools": []},
+        "tools": [],
+        "malformed": False,
+        "reference": {"source": "roundtrip", "rejected": "the template wants call ids of nine letters or digits"},
+        "second_references": {
+            "tool_chat_template_mistral.jinja": {
+                "source": "roundtrip",
+                "ids": [5, 6],
+                "pieces": ["[TOOL_CALLS]", "[]"],
+                "text": "[TOOL_CALLS][]",
+                "chunk_plans": {"whole": None, "per_token": None},
+                "message": {"role": "assistant", "content": ""},
+                "finish_reason": "tool_calls",
+                "end_of_turn": {"stop_id": 2, "found_by": "turn"},
+                "provenance": {"vllm_commit": VLLM_COMMIT, "chat_template_sha256": "b" * 64},
+            },
+            "tool_chat_template_mistral_parallel.jinja": {
+                "source": "roundtrip",
+                "rejected": "a second reference refuses a case as the first one does",
+                "provenance": {"vllm_commit": VLLM_COMMIT, "chat_template_sha256": "c" * 64},
+            },
+        },
+    }
+    return render, parse
+
+
+def test_case_schema_accepts_second_references():
+    validator = Draft202012Validator(json.loads(schema_path().read_text()))
+    render, parse = second_reference_lines()
+    validator.validate(render)
+    validator.validate(parse)
+    recorded_first = {
+        **{key: value for key, value in parse.items() if key != "reference"},
+        "reference": {
+            "source": "roundtrip",
+            "text": "x",
+            "message": {"role": "assistant"},
+            "end_of_turn": {"stop_id": 2, "found_by": "turn"},
+        },
+        "output_ids": [7],
+        "output_pieces": ["x"],
+    }
+    validator.validate(recorded_first)
+
+
+def lines_off_the_proposal() -> list:
+    render, parse = second_reference_lines()
+    entry = render["second_references"]["tool_chat_template_apertus.jinja"]
+    recorded = parse["second_references"]["tool_chat_template_mistral.jinja"]
+    without_second = {key: value for key, value in parse.items() if key != "second_references"}
+    both_reasons = {"source": "roundtrip", "rejected": "a", "not_applicable": "b"}
+    no_ids = {key: value for key, value in recorded.items() if key != "ids"}
+    no_end_of_turn = {key: value for key, value in recorded.items() if key != "end_of_turn"}
+    commitless = {**entry, "provenance": {"chat_template_sha256": "a" * 64}}
+    return [
+        pytest.param({**render, "second_references": {"apertus": entry}}, id="a key that is not a template file"),
+        pytest.param({**render, "second_references": {}}, id="no second reference under the key"),
+        pytest.param(
+            {**render, "second_references": {"tool_chat_template_apertus.jinja": commitless}},
+            id="an entry without the template's vLLM commit",
+        ),
+        pytest.param(
+            {**render, "second_references": {"tool_chat_template_apertus.jinja": {**entry, "source": "vendor-code"}}},
+            id="an entry from another oracle",
+        ),
+        pytest.param({**parse, "reference": both_reasons}, id="a reference with both reasons"),
+        pytest.param(without_second, id="a reference without a result and no second reference"),
+        pytest.param({**parse, "output_ids": [5, 6]}, id="the reference's output beside a reference without one"),
+        pytest.param(
+            {**parse, "second_references": {"tool_chat_template_mistral.jinja": no_ids}},
+            id="a parse entry with a result but no output ids",
+        ),
+        pytest.param(
+            {
+                **parse,
+                "reference": {"source": "roundtrip", "text": "x", "end_of_turn": {"stop_id": 2, "found_by": "turn"}},
+            },
+            id="a parse reference with a result but no output ids",
+        ),
+        pytest.param(
+            {**parse, "second_references": {"tool_chat_template_mistral.jinja": no_end_of_turn}},
+            id="a round-trip entry with a result but no end of turn",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("line", lines_off_the_proposal())
+def test_case_schema_refuses_second_references_off_the_proposal(line):
+    validator = Draft202012Validator(json.loads(schema_path().read_text()))
+    assert list(validator.iter_errors(line))
