@@ -6,7 +6,10 @@ One copy per repository: for every repository among the rows the importer keeps,
 if any, at the root of its tree at one commit. The commit is the one the repository's first kept row (in shard and row
 order) names: the commit in its ``instance_id`` (``owner__repo-<commit>``), or, where the id names a pull request
 (``owner__repo-<number>``, as SWE-rebench's and SWE-Gym's do), that pull request's base commit on GitHub; when the pull
-request is gone, the repository's next rows are tried, up to three. A license file is ``LICENSE``, ``LICENCE`` or
+request is gone, the repository's next rows are tried, up to three. When that commit has no license file at its root,
+the base of the newest pull request among the repository's rows is read instead, and its license file is taken for the
+earlier rows too: tornado's LICENSE is from 2013-08, and its first row's commit from 2013-01. A license file is
+``LICENSE``, ``LICENCE`` or
 ``COPYING``, bare or with ``.txt``, ``.md`` or ``.rst``, or with a license's name after a dash, dot or underscore
 (``LICENSE-MIT``, ``LICENSE-APACHE``); a symbolic link is followed to the file it names. A NOTICE file is ``NOTICE``,
 bare or with one of those extensions. Each file is pinned by repository, commit, path and sha256 and named for them.
@@ -55,6 +58,7 @@ FULL_TEXT = {
     "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
 }
 TRIES = 3
+NO_LICENSE_FILE = "no license file at the root"
 
 
 def license_kind(text: str) -> str:
@@ -119,26 +123,32 @@ def raw(repository: str, commit: str, path: str, cache: Path) -> bytes:
 
 
 def first_refs() -> dict[str, dict]:
-    """``repository -> {"label", "refs"}``: the label and up to ``TRIES`` refs of its kept rows, in shard and row
-    order. A ref is ``("commit", sha)`` or ``("pull", number)``."""
+    """``repository -> {"label", "refs", "newest"}``: the label, up to ``TRIES`` refs of its kept rows in shard and row
+    order, and the number of the newest pull request any of its rows names (or ``None``). A ref is
+    ``("commit", sha)`` or ``("pull", number)``."""
     found: dict[str, dict] = {}
     for name in swehero.SHARD_FILES:
         path = hf.fetch(swehero.REPO, swehero.REVISION, name, swehero.FILES[name])
         for row in swehero.read_rows(path):
             if row["license"] not in CARD_LICENSES:
                 continue
-            entry = found.setdefault(row["repo"], {"label": row["license"], "refs": []})
+            entry = found.setdefault(row["repo"], {"label": row["license"], "refs": [], "newest": None})
             suffix = row["instance_id"].removeprefix(row["repo"].replace("/", "__") + "-")
             ref = ("commit", suffix) if pinned.COMMIT_ID.fullmatch(suffix) else ("pull", suffix)
             if ref[0] == "pull" and not suffix.isdigit():
                 ref = ("none", row["instance_id"])
             if ref not in entry["refs"] and len(entry["refs"]) < TRIES:
                 entry["refs"].append(ref)
+            if ref[0] == "pull" and (entry["newest"] is None or int(suffix) > int(entry["newest"])):
+                entry["newest"] = suffix
     return found
 
 
-def survey(repository: str, refs: list[tuple[str, str]], cache: Path) -> dict:
-    """What the repository's first readable ref holds at its root: its commit, files and license, or why none."""
+def survey(repository: str, refs: list[tuple[str, str]], cache: Path, newest: str | None = None) -> dict:
+    """What the repository's first readable ref holds at its root: its commit, files and license, or why none.
+
+    When that commit has no license file at its root, the base of ``newest``, the repository's newest pull request among
+    its rows, is read instead: a license file the repository added later is taken for its earlier rows too."""
     reasons = []
     for kind, value in refs:
         if kind == "none":
@@ -151,37 +161,51 @@ def survey(repository: str, refs: list[tuple[str, str]], cache: Path) -> dict:
                 reasons.append(f"pull request {value} is not on GitHub")
                 continue
             commit = pull["base"]["sha"]
-        tree = gh(f"repos/{repository}/git/trees/{commit}", cache)
-        if tree is None:
+        found = at_commit(repository, commit, f"{kind} {value}", cache)
+        if found is None:
             reasons.append(f"commit {commit[:12]} is not on GitHub")
             continue
-        entries = {entry["path"]: entry for entry in tree["tree"] if entry["type"] == "blob"}
-        files = []
-        for path in sorted(entries):
-            role = "license" if LICENSE_NAME.match(path) else "notice" if NOTICE_NAME.match(path) else None
-            if role is None:
-                continue
-            target = path
-            if entries[path]["mode"] == "120000":  # a symbolic link: the file it names
-                target = str(PurePosixPath(raw(repository, commit, path, cache).decode().strip()))
-            data = raw(repository, commit, target, cache)
-            files.append({"role": role, "path": target, "sha256": hashlib.sha256(data).hexdigest()})
-        licenses = [f for f in files if f["role"] == "license"]
-        if not licenses:
-            return {"commit": commit, "from": f"{kind} {value}", "left_out": "no license file at the root"}
-        # The repository's own license file decides; others, often for vendored code, are copied beside it. With no
-        # such file, the files named for licenses decide together (LICENSE-MIT and LICENSE-APACHE, a dual license).
-        deciding = [f for f in licenses if MAIN_LICENSE_NAME.match(f["path"])] or licenses
-        texts = [raw(repository, commit, f["path"], cache).decode("utf-8", "replace") for f in deciding]
-        kinds = sorted({license_kind(text) for text in texts} - {"unknown"}) or ["unknown"]
-        outside = [k for k in kinds if k not in CARD_LICENSES]
-        found = {"commit": commit, "from": f"{kind} {value}", "files": files, "license": " AND ".join(kinds)}
-        if outside:
-            found["left_out"] = f"its license file at {commit[:12]} is {', '.join(outside)}, not one of the card's four"
-        elif "Apache-2.0" in kinds and not any(is_full_apache_text(text) for text in texts):
-            found["full_text"] = True
+        if found.get("left_out") == NO_LICENSE_FILE and newest is not None and (kind, value) != ("pull", newest):
+            pull = gh(f"repos/{repository}/pulls/{newest}", cache)
+            later = pull and at_commit(repository, pull["base"]["sha"], f"pull {newest}", cache)
+            if later and later.get("left_out") != NO_LICENSE_FILE:
+                return later
         return found
     return {"left_out": "; ".join(reasons) or "no row names a commit or a pull request"}
+
+
+def at_commit(repository: str, commit: str, origin: str, cache: Path) -> dict | None:
+    """The repository's license and NOTICE files at the root of ``commit`` and the license they state, or why the
+    repository is left out; ``None`` when GitHub does not have the commit. ``origin`` names the row's ref."""
+    tree = gh(f"repos/{repository}/git/trees/{commit}", cache)
+    if tree is None:
+        return None
+    entries = {entry["path"]: entry for entry in tree["tree"] if entry["type"] == "blob"}
+    files = []
+    for path in sorted(entries):
+        role = "license" if LICENSE_NAME.match(path) else "notice" if NOTICE_NAME.match(path) else None
+        if role is None:
+            continue
+        target = path
+        if entries[path]["mode"] == "120000":  # a symbolic link: the file it names
+            target = str(PurePosixPath(raw(repository, commit, path, cache).decode().strip()))
+        data = raw(repository, commit, target, cache)
+        files.append({"role": role, "path": target, "sha256": hashlib.sha256(data).hexdigest()})
+    licenses = [f for f in files if f["role"] == "license"]
+    if not licenses:
+        return {"commit": commit, "from": origin, "left_out": NO_LICENSE_FILE}
+    # The repository's own license file decides; others, often for vendored code, are copied beside it. With no
+    # such file, the files named for licenses decide together (LICENSE-MIT and LICENSE-APACHE, a dual license).
+    deciding = [f for f in licenses if MAIN_LICENSE_NAME.match(f["path"])] or licenses
+    texts = [raw(repository, commit, f["path"], cache).decode("utf-8", "replace") for f in deciding]
+    kinds = sorted({license_kind(text) for text in texts} - {"unknown"}) or ["unknown"]
+    outside = [k for k in kinds if k not in CARD_LICENSES]
+    found = {"commit": commit, "from": origin, "files": files, "license": " AND ".join(kinds)}
+    if outside:
+        found["left_out"] = f"its license file at {commit[:12]} is {', '.join(outside)}, not one of the card's four"
+    elif "Apache-2.0" in kinds and not any(is_full_apache_text(text) for text in texts):
+        found["full_text"] = True
+    return found
 
 
 def name_of(repository: str, commit: str, path: str) -> str:
@@ -191,7 +215,7 @@ def name_of(repository: str, commit: str, path: str) -> str:
 def build(cache: Path) -> dict:
     refs = first_refs()
     with concurrent.futures.ThreadPoolExecutor(4) as pool:
-        surveys = pool.map(lambda r: survey(r, refs[r]["refs"], cache), sorted(refs))
+        surveys = pool.map(lambda r: survey(r, refs[r]["refs"], cache, refs[r]["newest"]), sorted(refs))
         surveyed = dict(zip(sorted(refs), surveys, strict=True))
     full_text = name_of(FULL_TEXT["repository"], FULL_TEXT["commit"], FULL_TEXT["path"])
     files, repositories, left_out = {}, {}, {}
