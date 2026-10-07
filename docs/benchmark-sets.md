@@ -6,7 +6,7 @@ https://github.com/smg-project/bellwether/issues/23#issuecomment-6017548219
 
 ## What this is for
 
-Simo's statement of bellwether's job (2026-10-06):
+The maintainer's statement of bellwether's job (2026-10-06):
 
 > Given a request, what's expected tokens. Given a token, what's expected output text. With insane
 > amount of data. Then smg uses it in many places. Tokenizer, detokenization, gRPC router, and
@@ -35,8 +35,8 @@ and each bump a pull request that shows what changed.
 
 ## Which models
 
-Every generative model that vLLM or SGLang supports, except gpt-oss, which Simo set aside. Two scope
-lines are assumptions Simo has not confirmed: multimodal chat models are in, with text-only cases
+Every generative model that vLLM or SGLang supports, except gpt-oss, which the maintainer set aside. Two scope
+lines are assumptions the maintainer has not confirmed: multimodal chat models are in, with text-only cases
 for now; embedding, reranking and classification models are out.
 
 - **Where the list comes from.** `bellwether models` builds it and writes one row per checkpoint,
@@ -85,7 +85,7 @@ for now; embedding, reranking and classification models are out.
     `chat_template.json` by its bytes, which split three Qwen3-VL pairs whose templates differ only
     in that file's indentation and trailing whitespace.
 - **Order.**
-  1. Simo's tier: DeepSeek-V4.1-Flash, MiniMax-M3, the latest GLM (GLM-5.3-Flash), every current
+  1. The maintainer's tier: DeepSeek-V4.1-Flash, MiniMax-M3, the latest GLM (GLM-5.3-Flash), every current
      Qwen chat checkpoint, and Hy4-preview.
   2. Every checkpoint created in the twelve months before the list is built, in order of its
      downloads over the last 30 days as the Hub reports them (ground rule 15). Kimi-K3 and
@@ -98,7 +98,7 @@ for now; embedding, reranking and classification models are out.
 ## Sources
 
 BFCL's single-turn categories come first, because they carry tool definitions and function calls,
-the path Symphony is built for. Every other source on #23 follows (Simo, 2026-10-06: "Why not all
+the path Symphony is built for. Every other source on #23 follows (the maintainer, 2026-10-06: "Why not all
 of them"), each its own importer on BFCL's pattern, in this order:
 
 1. GSM8K, with outlines combined from GSM8K text and BFCL calls: reasoning only, prose only,
@@ -190,7 +190,7 @@ base's in what the simulators return in later turns, keeps 3 render and 6 parse 
 ## Recording
 
 `record` stays the recorder. Every case is recorded from two sources of truth, neither of which
-needs a model (Simo, 2026-10-06, #23):
+needs a model (the maintainer, 2026-10-06, #23):
 
 - **Hugging Face:** the checkpoint's own published files.
   - transformers' `apply_chat_template` with the checkpoint's tokenizer and template gives the
@@ -270,9 +270,9 @@ record BFCL's render cases, and the parse figures here are for those 45):
 - **The reference's arguments string.**
   - For templates that write JSON, it is the bytes in the output.
   - For tagged formats, it is the canonical JSON a parser builds from the tags. Whether that is the
-    target, and in which canonical form, is #24; the form is Simo's call at S2.
+    target, and in which canonical form, is #24; the form is the maintainer's call at S2.
   - Each parse line records, per call, whether the arguments string occurs verbatim in the output
-    (`arguments_verbatim`). That adds a field to the case schema, so it waits for Simo's approval.
+    (`arguments_verbatim`). That adds a field to the case schema, so it waits for the maintainer's approval.
     When it is false for a template that writes JSON, the reference still holds the canonical
     string, and each such template is reported as its own kind.
   - When engine witnesses land for a tagged format, each engine's argument string is kept per case.
@@ -294,7 +294,7 @@ length, so they add no information that could go stale, and compressed they cost
 
 ## Second references from vLLM's example tool templates
 
-Simo's decision on #59 (2026-10-06): where vLLM's docs name one of its example tool templates
+The maintainer's decision on #59 (2026-10-06): where vLLM's docs name one of its example tool templates
 (`examples/tool_chat_template_*.jinja`) for a checkpoint, bellwether records a second reference
 with that template, at vLLM's pinned commit, beside the checkpoint's own template, and a
 disagreement between the two is an issue. A user who follows vLLM's docs for tool calling starts
@@ -429,7 +429,7 @@ decided with the second).
 
 ### Proposed case-schema change
 
-A case-schema change waits for Simo's approval, and witnesses are still question 4, so this is a
+A case-schema change waits for the maintainer's approval, and witnesses are still question 4, so this is a
 proposal (question 7). It is a separate commit, so the rest of this design can land without it.
 
 - **`second_references`** on render and parse lines: an object keyed by the example template's file
@@ -453,7 +453,7 @@ proposal (question 7). It is a separate commit, so the rest of this design can l
 
 Each step is its own pull request.
 
-1. This design and the mapping; the case-schema change once Simo approves it.
+1. This design and the mapping; the case-schema change once the maintainer approves it.
 2. Not applicable in `record`: the probe, `not_applicable` in `sets.toml` and `count`, and #59's
    eight groups recorded again.
 3. Consumers skip a line whose first reference records no result: `verify`, smg's consumer test,
@@ -498,7 +498,7 @@ Decision:
 - **Plain in git:** the hand-written sets and the corpus. The corpus is the reviewable input, so a
   change to an importer reads as a case-level diff. An import whose sets pass 50 MB of plain JSON
   Lines in all (`corpus_sets.LIMIT`) stores every one of them in the fixtures' form instead, whole
-  (Simo, on #45: no sampling). The corpus readers take both forms, and a clone fetches these sets,
+  (the maintainer, on #45: no sampling). The corpus readers take both forms, and a clone fetches these sets,
   since `record` and the import checks read them.
 - **Benchmark fixture sets:** zstd-compressed JSON Lines (`<set>.jsonl.zst`), stored with Git LFS
   in this repository.
@@ -521,7 +521,7 @@ What it costs:
   fetched twice.
 - **Past the allowance:** GitHub stops LFS uploads and downloads for the whole organization until
   the next billing cycle or until more is bought. Git itself, the code and the hand-written sets
-  keep working. The organization's allowance is not known here; it is a question for Simo.
+  keep working. The organization's allowance is not known here; it is a question for the maintainer.
 
 Why: plain files in git would put gigabytes, then tens of gigabytes, in every checkout. Compression
 cuts LFS storage and transfer about 23 times. A clone fetches only the sets it asks for, and there
@@ -551,7 +551,7 @@ hand-written) as a table or JSON, read from the `sets.toml` files. The README ca
 - **Weekly:** every group is re-recorded and each set's plain-content sha256 is compared with
   `sets.toml`, which needs no download; one other member of each group is recorded and compared.
 - **Credentials:** recording downloads tokenizer files, so CI uses a Hugging Face token stored as
-  a repository secret, for rate limits and for gated repositories. Simo adds it; no token is ever
+  a repository secret, for rate limits and for gated repositories. The maintainer adds it; no token is ever
   asked for or written here.
 
 ## Delivery
@@ -585,9 +585,9 @@ Each step is its own pull request.
 11. Second references from vLLM's example tool templates, and not applicable, in the steps of
     "Delivery of second references".
 
-## Questions for Simo
+## Questions for the maintainer
 
-1. Answered (2026-10-06): Git LFS goes ahead, and Simo raises the organization's allowance if the
+1. Answered (2026-10-06): Git LFS goes ahead, and the maintainer raises the organization's allowance if the
    sets pass it.
 2. `arguments_verbatim` on parse lines, a case-schema addition (#24).
 3. The two scope assumptions: multimodal chat models are in, with text-only cases; embedding,
