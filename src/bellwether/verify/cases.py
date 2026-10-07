@@ -15,7 +15,7 @@ import zstandard
 
 from bellwether.manifest import Manifest
 from bellwether.record import sets as set_tables
-from bellwether.record.fixtures import (
+from bellwether.storage import (
     COMPRESSED_SUFFIX,
     LFS_POINTER_PREFIX,
     is_compressed,
