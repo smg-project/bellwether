@@ -127,6 +127,7 @@ class RoundtripOracle:
         )
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
         self.check_every_part_is_rendered(messages, kwargs, message, rendered)
+        self.check_every_argument_is_rendered(messages, kwargs, message, rendered)
         self.check_every_argument_keeps_its_type(messages, kwargs, request.get("tools"), message, rendered)
         if not rendered.startswith(prompt):
             raise ValueError(
@@ -270,6 +271,33 @@ class RoundtripOracle:
                     f"the template does not render the message's {what}: changing its {part} leaves the rendered turn "
                     "as it was, so the output would not carry it"
                 )
+
+    def check_every_argument_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
+        """Every argument of every call must reach the rendered turn, and so must every null inside one.
+
+        Removing an argument, or an entry whose value is null from an object at any depth inside one, must change what
+        the template renders, as renaming a call must (``check_every_call_is_rendered``). A template that writes
+        nothing for a value (MiniMax M3's leaves out every null, at every depth) would otherwise give an output that
+        does not hold it, and a parser that is right could not return it. One render per argument and per nested
+        null; a template that fails on the change has read the argument.
+        """
+        for index, call in enumerate(message.get("tool_calls") or []):
+            arguments = json.loads(call["function"]["arguments"])
+            for path, value in argument_entries(arguments):
+                variant = {"role": "assistant", **as_vllm_gives_it(without_entry(message, index, path))}
+                try:
+                    again = self.tokenizer.apply_chat_template(
+                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
+                    )
+                except Exception:
+                    continue
+                if again == rendered:
+                    null = ", whose value is null" if value is None else ""
+                    raise ValueError(
+                        f"the template writes nothing for argument {entry_name(path)} of call {index} "
+                        f"({call['function']['name']}){null}: removing it leaves the rendered turn as it was, so the "
+                        "output would not carry it"
+                    )
 
     def check_every_argument_keeps_its_type(
         self, messages: list, kwargs: dict, tools: list | None, message: dict, rendered: str
@@ -574,6 +602,46 @@ def check_parse_call_arguments(message: dict) -> None:
 
 
 MARKER = "bellwether_marker"
+
+
+def argument_entries(arguments: dict) -> Iterator[tuple[tuple[str | int, ...], object]]:
+    """Each argument, and each entry whose value is null in an object at any depth inside one, by its path."""
+    for key, value in arguments.items():
+        yield (key,), value
+        yield from nested_nulls(value, (key,))
+
+
+def nested_nulls(value: object, path: tuple[str | int, ...]) -> Iterator[tuple[tuple[str | int, ...], object]]:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if item is None:
+                yield (*path, key), None
+            else:
+                yield from nested_nulls(item, (*path, key))
+    elif isinstance(value, list):
+        for position, item in enumerate(value):
+            yield from nested_nulls(item, (*path, position))
+
+
+def entry_name(path: tuple[str | int, ...]) -> str:
+    """``options.unit`` for a key inside an argument, ``items[0].unit`` through a list."""
+    name = str(path[0])
+    for part in path[1:]:
+        name += f"[{part}]" if isinstance(part, int) else f".{part}"
+    return name
+
+
+def without_entry(message: dict, index: int, path: tuple[str | int, ...]) -> dict:
+    """A copy of the message whose call ``index`` lacks the argument, or the entry inside one, at ``path``."""
+    message = copy.deepcopy(message)
+    function = message["tool_calls"][index]["function"]
+    arguments = json.loads(function["arguments"])
+    parent = arguments
+    for part in path[:-1]:
+        parent = parent[part]
+    del parent[path[-1]]
+    function["arguments"] = json.dumps(arguments)
+    return message
 
 
 def renamed(message: dict, index: int) -> dict:
