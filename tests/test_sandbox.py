@@ -109,6 +109,31 @@ def test_the_group_brought_back_replaces_the_hosts_so_a_set_the_run_removed_is_g
     assert sorted(p.name for p in group.parent.iterdir()) == ["x-1"]
 
 
+@pytest.mark.parametrize("status, copied", [(0, True), (1, True), (124, False), (137, False), (143, False)])
+def test_the_group_comes_back_only_from_a_run_that_finished(listed, tmp_path, monkeypatch, status, copied):
+    # 1 is the recorder refusing some cases, its usual outcome; a run the time or memory limit stopped, or one that was
+    # stopped, leaves the host's fixtures as they were.
+    calls = []
+
+    def docker(*args, **kwargs):
+        calls.append(args[0])
+        if args[0] == "cp":
+            (pathlib.Path(args[2]) / "manifest.toml").write_text("from the run")
+        return subprocess.CompletedProcess(args, 0)
+
+    group = listed.path.parent
+    monkeypatch.setattr(sandbox, "checked_snapshot", lambda manifest: tmp_path)
+    monkeypatch.setattr(sandbox, "base_image", lambda: "sha256:base")
+    monkeypatch.setattr(sandbox, "stage", lambda *args: None)
+    monkeypatch.setattr(sandbox, "docker", docker)
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, status))
+    namespace = type("Args", (), {"model": "acme/X-1", "kind": "render", "fixtures": group.parent, "corpus": tmp_path})
+    assert sandbox.run(namespace) == status
+    assert ("cp" in calls) == copied
+    assert ((group / "manifest.toml").read_text() == "from the run") == copied
+    assert sorted(p.name for p in group.parent.iterdir()) == [group.name]
+
+
 def test_the_run_has_no_network_a_read_only_root_no_privileges_limits_and_no_credential(listed):
     args = sandbox.run_args("run-1", "run-1-work", "run-image", "sha256:base", listed, "parse")
     pairs = set(zip(args, args[1:], strict=False))

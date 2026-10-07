@@ -16,8 +16,10 @@ container that holds bellwether, the checkpoint's files and the corpus, and noth
 4. **The run.** ``bellwether record --oracle vendor`` runs as a user without privileges, with no network, a read-only
    root, no capabilities, and limits on CPU, memory, processes and time. It writes only to ``/work``, a volume, and
    ``/tmp``. No credential is passed in.
-5. **Back out.** The group's fixtures are copied from the volume to the host and take the place of the host's copy,
-   so a set the run removed is gone there too; the container, volume and run image are removed whatever the outcome.
+5. **Back out.** When the recorder finished, refusals or not, the group's fixtures are copied from the volume to the
+   host and take the place of the host's copy, so a set the run removed is gone there too; a run the time or memory
+   limit stopped leaves the host's fixtures unchanged. The container, volume and run image are removed whatever the
+   outcome.
 """
 
 from __future__ import annotations
@@ -40,6 +42,10 @@ BASE_TAG = "bellwether-vendor-base"
 USER = "10001:10001"
 LIMITS = ("--cpus", "2", "--memory", "6g", "--pids-limit", "512")
 SECONDS = 4 * 3600  # the longest a group's recording may take
+# The statuses of a run whose fixtures are copied back: the recorder finished (0), or refused some cases (1, its usual
+# outcome). A run the time limit stopped (124), the memory limit killed (137) or that was stopped (143) has its
+# fixtures left in the container.
+FINISHED = (0, 1)
 
 
 class Refused(ValueError):
@@ -163,6 +169,12 @@ def run(args: argparse.Namespace) -> int:
             stage(manifest, snapshot, args.kind, args.fixtures, args.corpus, Path(tmp))
             docker("build", "--quiet", "--tag", tag, tmp, quiet=True)
         status = subprocess.run(run_args(name, volume, tag, base, manifest, args.kind)).returncode
+        if status not in FINISHED:
+            print(
+                f"bellwether sandbox-record: the run stopped with status {status}; the host's fixtures are unchanged",
+                file=sys.stderr,
+            )
+            return status
         fresh = landing(args.fixtures / manifest.slug)
         try:
             docker("cp", f"{name}:/work/fixtures/{manifest.slug}/.", str(fresh))
