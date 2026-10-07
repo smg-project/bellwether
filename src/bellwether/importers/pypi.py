@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
-import os
 from pathlib import Path
 
 import httpx
 
-CACHE = Path.home() / ".cache" / "bellwether" / "datasets"
+from bellwether import storage
+
+from . import pinned
 
 
-def sha256_of(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def fetch(project: str, version: str, filename: str, sha256: str, cache: Path = CACHE) -> Path:
+def fetch(project: str, version: str, filename: str, sha256: str, cache: Path = pinned.CACHE) -> Path:
     """The cached path of ``filename`` from ``project==version`` on PyPI, its bytes checked against ``sha256``."""
     path = cache / filename
-    if path.is_file() and sha256_of(path.read_bytes()) == sha256:
+    if path.is_file() and pinned.sha256_of_file(path) == sha256:
         return path
     listing = httpx.get(f"https://pypi.org/pypi/{project}/{version}/json", timeout=60)
     listing.raise_for_status()
@@ -27,11 +23,5 @@ def fetch(project: str, version: str, filename: str, sha256: str, cache: Path = 
         raise ValueError(f"{project}=={version} on PyPI has no file {filename}")
     download = httpx.get(urls[filename], timeout=300, follow_redirects=True)
     download.raise_for_status()
-    digest = sha256_of(download.content)
-    if digest != sha256:
-        raise ValueError(f"{filename}: sha256 {digest} is not the pinned {sha256}")
-    cache.mkdir(parents=True, exist_ok=True)
-    partial = path.with_name(path.name + ".partial")
-    partial.write_bytes(download.content)
-    os.replace(partial, path)
-    return path
+    pinned.check(filename, pinned.sha256_of(download.content), sha256)
+    return storage.write_whole(path, download.content)

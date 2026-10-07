@@ -1,11 +1,12 @@
 """Request corpora: JSON Lines files of cases, shared across models or specific to one.
 
 ``corpus/<kind>/<set>.jsonl`` holds cases every model records; ``corpus/<kind>/<slug>/<set>.jsonl``
-adds cases for one model to the set of the same name. A line is ``{"name", "request", "notes"}``,
-plus ``"message"`` for a parse case (the assistant message the output must parse to) and ``"origin"``
-for an imported one (the dataset, file and row it came from). ``name`` is a
-lowercase slug that becomes the last part of the fixture id, so it is unique across every set of a
-kind.
+adds cases for one model to the set of the same name. A set may be stored compressed instead, as
+``<set>.jsonl.zst`` (``bellwether.storage``): an import past ``corpus_sets.LIMIT`` writes its sets so.
+A line is ``{"name", "request", "notes"}``, plus ``"message"`` for a parse case (the assistant
+message the output must parse to) and ``"origin"`` for an imported one (the dataset, file and row it
+came from). ``name`` is a lowercase slug that becomes the last part of the fixture id, so it is
+unique across every set of a kind.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bellwether import jsonl
+from bellwether import jsonl, storage
 
 _NAME = re.compile(r"^[a-z0-9-]+$")
 
@@ -32,7 +33,7 @@ class Case:
 def read_cases(path: Path) -> list[Case]:
     cases: list[Case] = []
     names: set[str] = set()
-    for number, data in jsonl.loads(path.read_text(encoding="utf-8"), path):
+    for number, data in jsonl.loads(storage.plain_text(path), path):
         name = data.get("name")
         if not isinstance(name, str) or not _NAME.match(name):
             raise ValueError(f"{path}:{number}: `name` must be a lowercase slug, got {name!r}")
@@ -57,7 +58,8 @@ def load_corpus(corpus_dir: Path, kind: str, slug: str) -> dict[str, list[Case]]
     """Case sets for ``kind``: the shared files, then the model's own, merged by set name.
 
     The fixture id carries the case name but not the set name, so a name used in two files of the
-    same kind, whether two sets or a shared set and a model's addition to it, is an error.
+    same kind, whether two sets or a shared set and a model's addition to it, is an error. A set is
+    read in either form, and a set stored in both forms in one directory is an error too.
     """
     sets: dict[str, list[Case]] = {}
     owner: dict[str, Path] = {}
@@ -66,11 +68,16 @@ def load_corpus(corpus_dir: Path, kind: str, slug: str) -> dict[str, list[Case]]
             continue
         # iterdir raises when a directory that exists cannot be read; glob would return nothing,
         # and the run would then rebuild the fixtures from an incomplete corpus.
-        for path in sorted(p for p in directory.iterdir() if p.is_file() and p.suffix == ".jsonl"):
+        found: dict[str, Path] = {}
+        for path in sorted(p for p in directory.iterdir() if p.is_file() and storage.stem(p) is not None):
+            name = storage.stem(path)
+            if name in found:
+                raise ValueError(f"{path}: set {name} is stored in both forms, beside {found[name]}")
+            found[name] = path
             cases = read_cases(path)
             for case in cases:
                 if case.name in owner:
                     raise ValueError(f"{path}: case name {case.name!r} is already used in {owner[case.name]}")
                 owner[case.name] = path
-            sets.setdefault(path.stem, []).extend(cases)
+            sets.setdefault(name, []).extend(cases)
     return sets

@@ -16,6 +16,7 @@ from pathlib import Path
 from bellwether import __version__
 from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
+from bellwether.importers import pinned
 from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
 from bellwether.models import run as models_run
@@ -99,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     importer.add_argument(
         "--cache",
         type=Path,
-        default=Path.home() / ".cache" / "bellwether" / "datasets",
+        default=pinned.CACHE,
         help="where pinned files are kept",
     )
     importer.add_argument(

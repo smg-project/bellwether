@@ -5,7 +5,7 @@ import zipfile
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import bfcl, github, pypi
+from bellwether.importers import bfcl, github, pinned, pypi
 from bellwether.record.corpus import read_cases
 
 WHEEL = "pkg-1.0-py3-none-any.whl"
@@ -35,14 +35,14 @@ def serve(data: bytes, calls: list[str]):
 def test_fetch_uses_a_cached_wheel_whose_hash_matches_without_the_network(tmp_path, monkeypatch):
     (tmp_path / WHEEL).write_bytes(b"wheel bytes")
     monkeypatch.setattr(pypi.httpx, "get", lambda *a, **k: pytest.fail("no download expected"))
-    path = pypi.fetch("pkg", "1.0", WHEEL, pypi.sha256_of(b"wheel bytes"), cache=tmp_path)
+    path = pypi.fetch("pkg", "1.0", WHEEL, pinned.sha256_of(b"wheel bytes"), cache=tmp_path)
     assert path.read_bytes() == b"wheel bytes"
 
 
 def test_fetch_downloads_the_named_file_and_caches_it(tmp_path, monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(pypi.httpx, "get", serve(b"wheel bytes", calls))
-    path = pypi.fetch("pkg", "1.0", WHEEL, pypi.sha256_of(b"wheel bytes"), cache=tmp_path)
+    path = pypi.fetch("pkg", "1.0", WHEEL, pinned.sha256_of(b"wheel bytes"), cache=tmp_path)
     assert path == tmp_path / WHEEL and path.read_bytes() == b"wheel bytes"
     assert calls == ["https://pypi.org/pypi/pkg/1.0/json", "https://files.example/pkg.whl"]
 
@@ -50,14 +50,14 @@ def test_fetch_downloads_the_named_file_and_caches_it(tmp_path, monkeypatch):
 def test_fetch_replaces_a_cached_wheel_whose_hash_does_not_match(tmp_path, monkeypatch):
     (tmp_path / WHEEL).write_bytes(b"stale")
     monkeypatch.setattr(pypi.httpx, "get", serve(b"wheel bytes", []))
-    path = pypi.fetch("pkg", "1.0", WHEEL, pypi.sha256_of(b"wheel bytes"), cache=tmp_path)
+    path = pypi.fetch("pkg", "1.0", WHEEL, pinned.sha256_of(b"wheel bytes"), cache=tmp_path)
     assert path.read_bytes() == b"wheel bytes"
 
 
 def test_fetch_rejects_a_download_that_is_not_the_pinned_one_and_caches_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(pypi.httpx, "get", serve(b"tampered", []))
     with pytest.raises(ValueError, match="is not the pinned"):
-        pypi.fetch("pkg", "1.0", WHEEL, pypi.sha256_of(b"wheel bytes"), cache=tmp_path)
+        pypi.fetch("pkg", "1.0", WHEEL, pinned.sha256_of(b"wheel bytes"), cache=tmp_path)
     assert list(tmp_path.iterdir()) == []
 
 

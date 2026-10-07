@@ -10,24 +10,17 @@ import pytest
 import zstandard
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
+from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.manifest import find_manifest, load_manifest, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
-from bellwether.record.fixtures import (
-    canonical_line,
-    is_lfs_pointer,
-    lfs_pull_command,
-    plain_text,
-    read_fixture_file,
-    schema_path,
-    validator,
-    write_fixture_file,
-)
+from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it
+from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -187,6 +180,34 @@ def test_corpus_reads_a_case_whose_text_holds_unicode_line_breaks_intact(tmp_pat
     path.write_text(json.dumps(case, ensure_ascii=False) + "\n", encoding="utf-8")
     [read] = read_cases(path)
     assert read.request == {"messages": [user(BREAKS)]} and read.message == {"content": BREAKS}
+
+
+def write_compressed(path: pathlib.Path, lines: list[dict]) -> None:
+    """A corpus set in the compressed form an import past corpus_sets.LIMIT writes."""
+    storage.write(path, "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines).encode("utf-8"))
+
+
+def test_corpus_reads_a_compressed_set_under_the_sets_name_with_its_lines_intact(tmp_path):
+    imported = {"name": "x-0", "request": {"messages": [user(BREAKS)]}, "origin": {"dataset": "x"}}
+    write_compressed(tmp_path / "render" / "x-a.jsonl.zst", [imported])
+    write_jsonl(tmp_path / "render" / "common.jsonl", [{"name": "a", "request": {"messages": []}}])
+    sets = load_corpus(tmp_path, "render", "tiny-chat")
+    assert {name: [case.name for case in cases] for name, cases in sets.items()} == {"common": ["a"], "x-a": ["x-0"]}
+    assert sets["x-a"][0].request == {"messages": [user(BREAKS)]} and sets["x-a"][0].origin == {"dataset": "x"}
+
+
+def test_corpus_refuses_a_set_stored_in_both_forms(tmp_path):
+    write_jsonl(tmp_path / "render" / "x-a.jsonl", [{"name": "a", "request": {"messages": []}}])
+    write_compressed(tmp_path / "render" / "x-a.jsonl.zst", [{"name": "b", "request": {"messages": []}}])
+    with pytest.raises(ValueError, match="x-a.jsonl.zst: set x-a is stored in both forms, beside .*x-a.jsonl$"):
+        load_corpus(tmp_path, "render", "tiny-chat")
+
+
+def test_corpus_names_a_set_git_lfs_has_not_fetched_with_the_command_that_fetches_it(tmp_path):
+    (tmp_path / "render").mkdir()
+    (tmp_path / "render" / "x-a.jsonl.zst").write_text(LFS_POINTER)
+    with pytest.raises(ValueError, match="x-a.jsonl.zst is a Git LFS pointer; fetch it first: git lfs pull"):
+        load_corpus(tmp_path, "render", "tiny-chat")
 
 
 def test_reference_oracle_renders_the_checkpoint_template_and_its_ids(tiny_model):
@@ -1053,6 +1074,7 @@ def lfs_clone(git_sandbox, monkeypatch) -> pathlib.Path:
     write_manifest(source / "fixtures", "m", "acme/M")
     write_fixture_file(source / "fixtures" / "m" / "render" / "common.jsonl", render_cases("a"))
     write_fixture_file(source / "fixtures" / "m" / "render" / "bench-x.jsonl.zst", render_cases("x-0", "x-1"))
+    write_compressed(source / "corpus" / "render" / "big-x.jsonl.zst", [{"name": "big-x-0", "request": {}}])
     git(source, "add", "-A")
     git(source, "commit", "-q", "-m", "fixtures")
     git(source, "push", "-q", remote.as_uri(), "main")
@@ -1069,6 +1091,17 @@ def test_unpack_fetches_the_sets_a_default_clone_holds_as_pointers(lfs_clone, mo
     source = lfs_clone.parent / "source" / "fixtures" / "m" / "render"
     assert (out / "m" / "render" / "bench-x.jsonl").read_text() == plain_text(source / "bench-x.jsonl.zst")
     assert (out / "m" / "render" / "common.jsonl").read_text() == (source / "common.jsonl").read_text()
+
+
+@needs_git_lfs
+def test_a_compressed_corpus_set_is_kept_in_git_lfs_and_a_default_clone_fetches_it(lfs_clone):
+    # .lfsconfig keeps a clone from fetching the fixture sets only: record and import --check read the corpus whole.
+    listed = subprocess.run(["git", "lfs", "ls-files", "--name-only"], cwd=lfs_clone, capture_output=True, text=True)
+    assert "corpus/render/big-x.jsonl.zst" in listed.stdout.split()
+    fetched = lfs_clone / "corpus" / "render" / "big-x.jsonl.zst"
+    assert not is_lfs_pointer(fetched)
+    assert plain_text(fetched) == plain_text(lfs_clone.parent / "source" / "corpus" / "render" / "big-x.jsonl.zst")
+    assert is_lfs_pointer(lfs_clone / "fixtures" / "m" / "render" / "bench-x.jsonl.zst")
 
 
 @needs_git
@@ -1191,6 +1224,15 @@ def test_rewriting_an_unchanged_compressed_set_keeps_its_bytes(tmp_path):
     assert path.read_bytes() == other_bytes
     write_fixture_file(path, render_cases("a"))
     assert path.read_bytes() != other_bytes
+
+
+def test_a_compressed_fixture_set_cut_short_is_replaced_by_the_next_write(tmp_path):
+    # A record run cut short leaves a frame zstd cannot read; the next run must rewrite it, not stop on it.
+    path = tmp_path / "set.jsonl.zst"
+    write_fixture_file(path, render_cases("a", "b"))
+    path.write_bytes(path.read_bytes()[: path.stat().st_size // 2])
+    write_fixture_file(path, render_cases("a", "b"))
+    assert list(read_fixture_file(path)) == ["m/render/a", "m/render/b"]
 
 
 def test_record_keeps_the_old_form_when_the_new_file_cannot_be_written(tmp_path, tiny_model, monkeypatch):

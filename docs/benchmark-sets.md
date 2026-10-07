@@ -311,17 +311,19 @@ All-model figures, from the 45-model probe (BFCL single-turn alone):
 Decision:
 
 - **Plain in git:** the hand-written sets and the corpus. The corpus is the reviewable input, so a
-  change to an importer reads as a case-level diff. A source whose corpus passes 50 MB moves to the
-  fixtures' form.
+  change to an importer reads as a case-level diff. An import whose sets pass 50 MB of plain JSON
+  Lines in all (`corpus_sets.LIMIT`) stores every one of them in the fixtures' form instead, whole
+  (Simo, on #45: no sampling). The corpus readers take both forms, and a clone fetches these sets,
+  since `record` and the import checks read them.
 - **Benchmark fixture sets:** zstd-compressed JSON Lines (`<set>.jsonl.zst`), stored with Git LFS
   in this repository.
 - **`sets.toml` per group, committed plain:** every set's case count, rejected count, plain size,
   and the sha256 of its plain content. `count` and the README read it without LFS, and a reviewer
   reads its diff. The weekly check compares plain-content hashes, so it does not depend on the
   compressor writing the same bytes on every machine.
-- **`.lfsconfig`:** sets `lfs.fetchexclude` to the benchmark sets, so a default clone downloads
-  none of them. `bellwether unpack --model` or `git lfs pull --include` fetches what a consumer asks
-  for.
+- **`.lfsconfig`:** sets `lfs.fetchexclude` to the benchmark fixture sets, so a default clone
+  downloads none of them. `bellwether unpack --model` or `git lfs pull --include` fetches what a
+  consumer asks for. Compressed corpus sets are not excluded.
 
 What it costs:
 

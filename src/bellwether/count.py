@@ -11,6 +11,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from bellwether import jsonl, storage
 from bellwether.manifest import KINDS, load_manifest
 from bellwether.record import sets as set_tables
 
@@ -18,16 +19,20 @@ HAND_WRITTEN = "hand-written"
 
 
 def set_sources(corpus: Path) -> dict[tuple[str, str], str]:
-    """``(kind, set)`` -> the dataset a corpus set was imported from, read from the set's first line."""
+    """``(kind, set)`` -> the dataset a corpus set was imported from, read from the set's first record, in either form.
+
+    A set is streamed, decompressed as it is read when compressed, and read no further than its first record: a source
+    past ``corpus_sets.LIMIT`` can be gigabytes, and the first record names its dataset.
+    """
     found: dict[tuple[str, str], str] = {}
     for kind in KINDS:
         if (corpus / kind).is_dir():
-            for path in sorted((corpus / kind).rglob("*.jsonl")):
-                with path.open(encoding="utf-8") as handle:
-                    first = next((line for line in handle if line.strip()), None)
-                origin = json.loads(first).get("origin") if first else None
+            for path in sorted(p for p in (corpus / kind).rglob("*") if p.is_file() and storage.stem(p) is not None):
+                with storage.open_text(path) as lines:
+                    _, first = next(jsonl.load(lines, path), (None, None))
+                origin = first.get("origin") if first else None
                 if isinstance(origin, dict):
-                    found[(kind, path.stem)] = origin["dataset"]
+                    found[(kind, storage.stem(path))] = origin["dataset"]
     return found
 
 

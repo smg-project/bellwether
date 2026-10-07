@@ -16,13 +16,13 @@ from pathlib import Path
 
 from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest
 from bellwether.record import sets as set_tables
-from bellwether.record.fixtures import (
-    COMPRESSED_SUFFIX,
+from bellwether.storage import (
     is_lfs_pointer,
     lfs_include,
     lfs_pull_command,
     plain_text,
     repository_root,
+    stem,
 )
 
 # Linux caps one command-line argument at 131,072 bytes; a full re-record changes thousands of sets.
@@ -43,8 +43,8 @@ def set_files(manifest: Manifest) -> list[tuple[str, str, Path]]:
         kind_dir = manifest.path.parent / kind
         if kind_dir.is_dir():
             for path in sorted(kind_dir.iterdir()):
-                name = path.name.removesuffix(COMPRESSED_SUFFIX).removesuffix(".jsonl")
-                if name != path.name:
+                name = stem(path)
+                if name is not None:
                     found.append((kind, name, path))
     return found
 
