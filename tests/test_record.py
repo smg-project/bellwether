@@ -1087,9 +1087,16 @@ def test_the_case_schema_is_packaged_with_the_module():
 
 
 def test_fixture_writer_rejects_a_line_off_the_schema(tmp_path):
-    good = {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "hf-template"}}
+    good = {
+        "id": "tiny-chat/render/a",
+        "kind": "render",
+        "model": "m",
+        "reference": {"source": "hf-template", "input_ids": [1]},
+    }
     with pytest.raises(ValueError, match="tiny-chat/render/a: does not match the case schema at reference/source"):
-        write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": {**good, "reference": {"source": "guess"}}})
+        write_fixture_file(
+            tmp_path / "x.jsonl", {"tiny-chat/render/a": {**good, "reference": {"source": "guess", "input_ids": [1]}}}
+        )
     with pytest.raises(ValueError, match="at \\(root\\)"):
         write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": {**good, "extra": 1}})
     write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": good})
@@ -1118,7 +1125,7 @@ def test_a_fixture_file_reads_a_case_whose_text_holds_unicode_line_breaks_intact
         "kind": "render",
         "model": "m",
         "request": {"messages": [user(BREAKS)]},
-        "reference": {"source": "hf-template", "text": BREAKS},
+        "reference": {"source": "hf-template", "input_ids": [1], "text": BREAKS},
     }
     write_fixture_file(tmp_path / "x.jsonl", {"tiny-chat/render/a": line})
     assert BREAKS in (tmp_path / "x.jsonl").read_text(encoding="utf-8")
@@ -1180,7 +1187,12 @@ def test_the_case_schema_takes_a_well_formed_end_of_turn_and_asks_it_of_round_tr
     engine["reference"]["source"] = "engine:vllm"
     validator().validate(engine)
     validator().validate(
-        {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "roundtrip"}}
+        {
+            "id": "tiny-chat/render/a",
+            "kind": "render",
+            "model": "m",
+            "reference": {"source": "roundtrip", "input_ids": [1]},
+        }
     )
 
 
@@ -1819,7 +1831,7 @@ def render_cases(*names: str) -> dict[str, dict]:
             "id": case_id,
             "kind": "render",
             "model": "m",
-            "reference": {"source": "hf-template", "text": "Café ☕"},
+            "reference": {"source": "hf-template", "input_ids": [1], "text": "Café ☕"},
         }
     return cases
 

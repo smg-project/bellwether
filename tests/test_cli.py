@@ -181,3 +181,93 @@ def lines_off_the_proposal() -> list:
 def test_case_schema_refuses_second_references_off_the_proposal(line):
     validator = Draft202012Validator(json.loads(schema_path().read_text()))
     assert list(validator.iter_errors(line))
+
+
+def test_case_schema_accepts_a_render_line_kept_for_its_second_reference():
+    render, _ = second_reference_lines()
+    line = {
+        **render,
+        "reference": {"source": "hf-template", "rejected": "the template wants a description on every tool"},
+    }
+    Draft202012Validator(json.loads(schema_path().read_text())).validate(line)
+
+
+def lines_with_one_fault() -> list:
+    """Lines the schema refuses for one reason each, with where it reports it and the keyword that refuses it."""
+    render, parse = second_reference_lines()
+    apertus = "second_references/tool_chat_template_apertus.jinja"
+    mistral = "second_references/tool_chat_template_mistral.jinja"
+    entry = render["second_references"]["tool_chat_template_apertus.jinja"]
+    recorded = parse["second_references"]["tool_chat_template_mistral.jinja"]
+    no_result = {key: value for key, value in entry.items() if key not in ("input_ids", "text")}
+    reason = "the template refuses the case"
+
+    def render_entry(value: dict) -> dict:
+        return {**render, "second_references": {"tool_chat_template_apertus.jinja": value}}
+
+    def parse_entry(value: dict) -> dict:
+        return {**parse, "second_references": {**parse["second_references"], "tool_chat_template_mistral.jinja": value}}
+
+    detokenize = {
+        "id": "apertus-8b-instruct-2509/detokenize/a",
+        "kind": "detokenize",
+        "model": "swiss-ai/Apertus-8B-Instruct-2509",
+        "reference": {"source": "engine:vllm", "not_applicable": reason},
+        "second_references": {"tool_chat_template_apertus.jinja": {**no_result, "rejected": reason}},
+    }
+    return [
+        # A reference gives its result or a reason for recording none, never both and never neither.
+        pytest.param(render_entry(no_result), apertus, "required", id="a render entry with no result and no reason"),
+        pytest.param(
+            {**render, "reference": {"source": "hf-template"}},
+            "reference",
+            "required",
+            id="a render reference with no result and no reason",
+        ),
+        pytest.param(
+            render_entry({**entry, "rejected": reason}), apertus, "not", id="a render entry with a result and a reason"
+        ),
+        pytest.param(
+            parse_entry({**no_result, "source": "roundtrip", "not_applicable": reason, "ids": [5]}),
+            mistral,
+            "not",
+            id="a parse entry not applicable with output ids",
+        ),
+        pytest.param(
+            {**parse, "reference": {**parse["reference"], "message": {"role": "assistant"}}},
+            "reference",
+            "not",
+            id="a reference with a reason and a result",
+        ),
+        # An entry comes from the reference's oracle for the case's kind.
+        pytest.param(
+            render_entry({**entry, "source": "roundtrip"}),
+            f"{apertus}/source",
+            "const",
+            id="a render entry from the round trip",
+        ),
+        pytest.param(
+            parse_entry({**recorded, "source": "hf-template"}),
+            f"{mistral}/source",
+            "const",
+            id="a parse entry from hf-template",
+        ),
+        # Not applicable is a parse outcome.
+        pytest.param(
+            {**render, "reference": {"source": "hf-template", "not_applicable": reason}},
+            "reference",
+            "not",
+            id="a render reference not applicable",
+        ),
+        pytest.param(
+            render_entry({**no_result, "not_applicable": reason}), apertus, "not", id="a render entry not applicable"
+        ),
+        pytest.param(detokenize, "reference", "not", id="a detokenize reference not applicable"),
+    ]
+
+
+@pytest.mark.parametrize(("line", "where", "keyword"), lines_with_one_fault())
+def test_case_schema_refuses_a_line_for_its_one_fault(line, where, keyword):
+    validator = Draft202012Validator(json.loads(schema_path().read_text()))
+    errors = [("/".join(map(str, error.absolute_path)), error.validator) for error in validator.iter_errors(line)]
+    assert errors == [(where, keyword)]

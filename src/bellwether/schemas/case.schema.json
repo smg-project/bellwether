@@ -38,20 +38,43 @@
       }
     },
     {
-      "description": "a parse line's second reference that records the case carries the token ids and pieces of its own output, and from the round trip the stop id that ends it",
+      "description": "a parse line's second reference comes from the round trip, and when it records the case it carries the token ids and pieces of its own output and the stop id that ends it",
       "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
       "then": {
         "properties": {
           "second_references": {
             "additionalProperties": {
+              "properties": {"source": {"const": "roundtrip"}},
               "if": {"$ref": "#/$defs/records_the_case"},
-              "then": {
-                "required": ["ids", "pieces"],
-                "if": {"properties": {"source": {"const": "roundtrip"}}, "required": ["source"]},
-                "then": {"required": ["end_of_turn"]}
-              }
+              "then": {"required": ["ids", "pieces", "end_of_turn"]}
             }
           }
+        }
+      }
+    },
+    {
+      "description": "a render reference that records the case carries the prompt ids, and so does a render second reference, which comes from hf-template",
+      "if": {"properties": {"kind": {"const": "render"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "reference": {"if": {"$ref": "#/$defs/records_the_case"}, "then": {"required": ["input_ids"]}},
+          "second_references": {
+            "additionalProperties": {
+              "properties": {"source": {"const": "hf-template"}},
+              "if": {"$ref": "#/$defs/records_the_case"},
+              "then": {"required": ["input_ids"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "only a parse case can be not applicable",
+      "if": {"properties": {"kind": {"not": {"const": "parse"}}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "reference": {"not": {"required": ["not_applicable"]}},
+          "second_references": {"additionalProperties": {"not": {"required": ["not_applicable"]}}}
         }
       }
     }
@@ -75,7 +98,7 @@
     "reference": {
       "type": "object",
       "required": ["source"],
-      "allOf": [{"$ref": "#/$defs/at_most_one_reason"}],
+      "allOf": [{"$ref": "#/$defs/result_or_reason"}],
       "properties": {
         "source": {"type": "string", "pattern": "^(vendor-code|hf-template|hf-tokenizer|roundtrip|vendor-verifier|response-template|engine)(:.+)?$"},
         "input_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}},
@@ -108,7 +131,7 @@
         "type": "object",
         "required": ["source", "provenance"],
         "additionalProperties": false,
-        "allOf": [{"$ref": "#/$defs/at_most_one_reason"}],
+        "allOf": [{"$ref": "#/$defs/result_or_reason"}],
         "properties": {
           "source": {"enum": ["hf-template", "roundtrip"], "description": "the reference's oracle for the kind: hf-template for render, roundtrip for parse"},
           "input_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "render: the prompt token ids"},
@@ -150,6 +173,28 @@
       "description": "a reference with a result: it gives no reason for recording none",
       "not": {"anyOf": [{"required": ["rejected"]}, {"required": ["not_applicable"]}]}
     },
-    "at_most_one_reason": {"not": {"required": ["rejected", "not_applicable"]}}
+    "at_most_one_reason": {"not": {"required": ["rejected", "not_applicable"]}},
+    "gives_no_result": {
+      "description": "no result field: a reference that gives a reason records nothing",
+      "not": {
+        "anyOf": [
+          {"required": ["input_ids"]},
+          {"required": ["ids"]},
+          {"required": ["text"]},
+          {"required": ["pieces"]},
+          {"required": ["chunk_plans"]},
+          {"required": ["message"]},
+          {"required": ["finish_reason"]},
+          {"required": ["end_of_turn"]}
+        ]
+      }
+    },
+    "result_or_reason": {
+      "description": "a reference gives its result or one reason for recording none, never both; the rules by kind above say which result it gives",
+      "allOf": [
+        {"$ref": "#/$defs/at_most_one_reason"},
+        {"if": {"not": {"$ref": "#/$defs/records_the_case"}}, "then": {"$ref": "#/$defs/gives_no_result"}}
+      ]
+    }
   }
 }
