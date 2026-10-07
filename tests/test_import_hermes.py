@@ -1,0 +1,615 @@
+import hashlib
+import json
+from collections import Counter
+from types import SimpleNamespace
+
+import huggingface_hub
+import pytest
+
+from bellwether.cli import main
+from bellwether.importers import corpus_sets, github, hermes, hf, pinned
+
+REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
+CARD = "---\nlicense: apache-2.0\ntask_categories:\n- text-generation\n---\n\n# Hermes Function-Calling V1\n"
+APACHE = b"\n                                 Apache License\n                           Version 2.0, January 2004\n"
+
+WEATHER = {
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Weather in a city.",
+        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+    },
+}
+TOOLS = json.dumps([WEATHER])
+# The dataset's three system prompts, word for word, around a tools element: func_calling and
+# func_calling_singleturn use the first two, glaive_func_calling the third.
+FUNCTION_CALLING = (
+    "You are a function calling AI model. You are provided with function signatures within <tools> </tools> XML tags."
+    " You may call one or more functions to assist with the user query. Don't make assumptions about what values to"
+    " plug into functions.\n<tools>\n" + TOOLS + "\n</tools>\nFor each function call return a json object with function"
+    " name and arguments within <tool_call> </tool_call> tags with the following schema:\n<tool_call>\n"
+    '{"name": <function-name>, "arguments": <args-dict>}\n</tool_call>\n'
+)
+EXTRACTION = (
+    "You are an expert structured information extraction AI model. You will be provided with documents to extract"
+    " information from. You are also provided with the json schema to output extracted information in the function"
+    " signatures within XML tags <tools></tools>. Don't make assumptions about what values to plug into json schema."
+    " \n<tools>\n" + TOOLS + "\n</tools>\nFor each extraction function call return a json object with function name and"
+    " arguments followed by a <tool_call> tag with the following schema:\n<tool_call>\n"
+    '{"name": <function-name>, "arguments": <args-dict>}\n</tool_call>'
+)
+GLAIVE = (
+    "You are a function calling AI model. You are provided with function signatures within <tools></tools> XML tags."
+    "You may call one or more functions to assist with the user query. Don't make assumptions about what values to"
+    " plug into functions.Here are the available tools:<tools>\n" + TOOLS + "\n</tools>Use the following pydantic"
+    " model json schema for each tool call you will make: {'title': 'FunctionCall', 'type': 'object', 'properties':"
+    " {'arguments': {'title': 'Arguments', 'type': 'object'}, 'name': {'title': 'Name', 'type': 'string'}},"
+    " 'required': ['arguments', 'name']}For each function call return a json object with function name and arguments"
+    " within <tool_call></tool_call> XML tags as follows:\n<tool_call>\n{tool_call}\n</tool_call>"
+)
+
+
+def test_the_hermes_tool_prompt_is_taken_out_of_the_system_message():
+    for text in (FUNCTION_CALLING, EXTRACTION, GLAIVE):
+        assert hermes.system_message(text, TOOLS) == ""
+
+
+def test_text_around_the_tool_prompt_stays_as_the_system_message_as_it_is():
+    # No pinned row has any (the system turn of every row with tools is the prompt alone), so nothing trims it.
+    text = "You are Bob, a terse assistant.\n\n" + GLAIVE + "\nAnswer in French. "
+    assert hermes.system_message(text, TOOLS) == "You are Bob, a terse assistant.\n\n\nAnswer in French. "
+
+
+def test_a_row_without_tools_keeps_its_system_message_as_it_is():
+    text = "You are a helpful assistant, with no access to external functions. "
+    assert hermes.system_message(text, None) == text
+
+
+def test_a_system_message_whose_tool_list_is_not_the_rows_tools_is_unmappable():
+    # The shape of func_calling row 1109 and 60 others: the field is "[]", the prompt holds a broken list.
+    broken = EXTRACTION.replace(TOOLS, '[{"type": "object", "properties": {}}}]')
+    with pytest.raises(hermes.Unmappable, match="the system message lists tools the row does not declare"):
+        hermes.system_message(broken, None)
+    with pytest.raises(hermes.Unmappable, match="the system message carries no Hermes tool prompt with the row's"):
+        hermes.system_message(FUNCTION_CALLING, json.dumps([WEATHER, WEATHER]))
+
+
+PARIS = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
+ZURICH = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Z\\u00fcrich"}}\n</tool_call>'
+
+
+def test_a_turn_of_calls_has_empty_content_and_a_prose_turn_is_its_content_byte_for_byte():
+    calls = [
+        {"name": "get_weather", "arguments": {"city": "Paris"}},
+        {"name": "get_weather", "arguments": {"city": "Zürich"}},
+    ]
+    assert hermes.split_calls(PARIS + "\n" + ZURICH + "\n") == ("", calls)
+    prose = "Here it is:\n- a\n- b \n"
+    assert hermes.split_calls(prose) == (prose, [])
+
+
+def test_prose_before_the_calls_is_the_content_as_it_is():
+    # No pinned turn of calls has any (their content is empty), so nothing trims it.
+    content, calls = hermes.split_calls("\nLet me check both.\n\n" + PARIS + "\n" + ZURICH)
+    assert content == "\nLet me check both.\n\n" and len(calls) == 2
+
+
+def test_text_after_a_call_is_unmappable_because_a_message_holds_its_content_before_its_calls():
+    for text in (PARIS + "\nDone.", PARIS + "\nand\n" + ZURICH):
+        with pytest.raises(hermes.Unmappable, match="text after a <tool_call> block"):
+            hermes.split_calls(text)
+
+
+def test_a_block_that_is_not_json_is_unmappable():
+    # The shape of the 793 extraction rows: a backslash and an "n" where the newlines belong, and Python quotes.
+    text = '<tool_call>\\n{"arguments": {"queries": [\'How?\']}, "name": "ExpertQAExtractor"}\\n</tool_call>'
+    with pytest.raises(hermes.Unmappable, match="a <tool_call> block that is not JSON"):
+        hermes.split_calls(text)
+
+
+def test_a_block_that_is_not_a_name_and_an_arguments_object_is_unmappable():
+    for body in (
+        '{"arguments": {"queries": ["How?"], "name": "ExpertQAExtractor"}}',  # 6 extraction rows, once unescaped
+        '{"name": "get_weather", "arguments": "{\\"city\\": \\"Paris\\"}"}',
+        '{"name": "get_weather", "arguments": {}, "id": "call_1"}',
+        '[{"name": "get_weather", "arguments": {}}]',
+    ):
+        with pytest.raises(hermes.Unmappable, match='a <tool_call> block that is not {"name": .*, "arguments": {.*}}'):
+            hermes.split_calls(f"<tool_call>\n{body}\n</tool_call>")
+
+
+def test_a_tag_without_its_pair_is_unmappable_rather_than_prose():
+    for text in ("Sure.\n<tool_call>\n{}", "Sure.\n</tool_call>", PARIS + "\n<tool_call>"):
+        with pytest.raises(hermes.Unmappable, match="a <tool_call> tag without its pair"):
+            hermes.split_calls(text)
+
+
+SUNNY = '<tool_response>\n{"name": "get_weather", "content": {"sky": "sunny", "temp": 18}}\n</tool_response>'
+SNOW = '<tool_response>\n{"name": "get_weather", "content": {"sky": "snow", "note": "\\u2744"}}\n</tool_response>'
+
+
+def test_a_tool_turn_is_the_json_of_each_response_block_in_order():
+    assert hermes.responses(SUNNY + "\n" + SNOW + "\n") == [
+        {"name": "get_weather", "content": {"sky": "sunny", "temp": 18}},
+        {"name": "get_weather", "content": {"sky": "snow", "note": "❄"}},
+    ]
+
+
+def test_a_tool_turn_that_is_not_only_response_blocks_of_json_is_unmappable():
+    for text, reason in [
+        ("Result:\n" + SUNNY, "text outside the <tool_response> blocks"),
+        (SUNNY + "\n<tool_response>\n{}", "a <tool_response> tag without its pair"),
+        ("sunny", "a tool turn without a <tool_response> block"),
+        ('<tool_response>\n{"temp": 18,}\n</tool_response>', "a <tool_response> block that is not JSON"),
+    ]:
+        with pytest.raises(hermes.Unmappable, match=reason):
+            hermes.responses(text)
+
+
+def row(*turns: tuple[str, str], tools: str = TOOLS, **extra) -> dict:
+    return {
+        "id": "4f1c2a",
+        "conversations": [{"from": source, "value": value} for source, value in turns],
+        "tools": tools,
+        "category": "Weather",
+        "subcategory": "Forecast",
+        "task": "Check the weather",
+        **extra,
+    }
+
+
+CONVERSATION = row(
+    ("system", GLAIVE),
+    ("human", "Weather in Paris and Zürich?"),
+    ("gpt", PARIS + "\n" + ZURICH),
+    ("tool", SUNNY + "\n" + SNOW),
+    ("gpt", "Sunny in Paris, snow in Zürich."),
+    ("human", "And tomorrow in Paris?"),
+    ("gpt", PARIS + "\n"),
+    ("tool", SUNNY + "\n"),
+    ("gpt", "Sunny again."),
+    ("human", "Thanks!"),
+)
+
+
+def call(city: str, id_: str | None = None) -> dict:
+    """A get_weather call as a parse case expects it, or, given ``id_``, as the history holds it."""
+    found = {"type": "function", "function": {"name": "get_weather", "arguments": f'{{"city": "{city}"}}'}}
+    return found if id_ is None else {"id": id_, **found}
+
+
+def test_a_conversation_gives_a_render_case_per_answered_user_turn_or_tool_result_and_a_parse_case_per_assistant_turn():
+    render, parse = hermes.row_cases(CONVERSATION, 7, "glaive_func_calling")
+    user = {"role": "user", "content": "Weather in Paris and Zürich?"}
+    # A parse case expects its calls as a parser returns them, without ids; the history gives each call the id
+    # call_<n>, numbered across the conversation, for the tool message that answers it to name.
+    both = {"content": "", "tool_calls": [call("Paris"), call("Zürich")]}
+    made = {"role": "assistant", "content": "", "tool_calls": [call("Paris", "call_0"), call("Zürich", "call_1")]}
+    results = [
+        {
+            "role": "tool",
+            "tool_call_id": "call_0",
+            "content": '{"name": "get_weather", "content": {"sky": "sunny", "temp": 18}}',
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": '{"name": "get_weather", "content": {"sky": "snow", "note": "❄"}}',
+        },
+    ]
+    answer = {"content": "Sunny in Paris, snow in Zürich."}
+    again = {"role": "user", "content": "And tomorrow in Paris?"}
+    tomorrow = {"content": "", "tool_calls": [call("Paris")]}
+    tomorrow_made = {"role": "assistant", "content": "", "tool_calls": [call("Paris", "call_2")]}
+    result = {"role": "tool", "tool_call_id": "call_2", "content": results[0]["content"]}
+    history = [user, made, *results, {"role": "assistant", **answer}, again]
+
+    def request(messages):
+        # No add_generation_prompt: the oracles add the generation prompt when a request does not say otherwise, and a
+        # request that sets the default differs by its bytes from another importer's that does not.
+        return {"messages": messages, "tools": [WEATHER]}
+
+    def origin(turn, written=False):
+        found = {
+            "dataset": "hermes",
+            "source": f"hf:datasets/NousResearch/hermes-function-calling-v1@{REVISION}",
+            "sha256": "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
+            "file": "glaive-function-calling-5k.json",
+            "row": 7,
+            "row_id": "4f1c2a",
+            "turn": turn,
+            "license": "Apache-2.0",
+        }
+        # A case whose request holds a call holds ids bellwether wrote, and its origin says so.
+        return {**found, "written": ["tool call ids"]} if written else found
+
+    notes = "Hermes glaive_func_calling row 7 turn {}: Weather / Forecast"
+    # A tool result an assistant turn answers is where a model goes on after its tools: its prompt is a render case.
+    after_results = [user, made, *results]
+    after_result = [*history, tomorrow_made, result]
+    assert render == [
+        {
+            "name": "hermes-glaive-func-calling-7-1",
+            "request": request([user]),
+            "notes": notes.format(1),
+            "origin": origin(1),
+        },
+        {
+            "name": "hermes-glaive-func-calling-7-3",
+            "request": request(after_results),
+            "notes": notes.format(3),
+            "origin": origin(3, written=True),
+        },
+        {
+            "name": "hermes-glaive-func-calling-7-5",
+            "request": request(history),
+            "notes": notes.format(5),
+            "origin": origin(5, written=True),
+        },
+        {
+            "name": "hermes-glaive-func-calling-7-7",
+            "request": request(after_result),
+            "notes": notes.format(7),
+            "origin": origin(7, written=True),
+        },
+    ]
+    assert [(line["name"], line["request"]["messages"], line["message"]) for line in parse] == [
+        ("hermes-glaive-func-calling-7-2", [user], both),
+        ("hermes-glaive-func-calling-7-4", after_results, answer),
+        ("hermes-glaive-func-calling-7-6", history, tomorrow),
+        ("hermes-glaive-func-calling-7-8", after_result, {"content": "Sunny again."}),
+    ]
+    assert [line["origin"] for line in parse] == [origin(2), origin(4, True), origin(6, True), origin(8, True)]
+    assert parse[0] == {
+        "name": "hermes-glaive-func-calling-7-2",
+        "request": request([user]),
+        "message": both,
+        "notes": notes.format(2),
+        "origin": origin(2),
+    }
+
+
+def test_a_tool_result_no_assistant_turn_answers_gives_no_render_case():
+    turns = [("system", GLAIVE), ("human", "Weather in Paris?"), ("gpt", PARIS), ("tool", SUNNY)]
+    render, parse = hermes.row_cases(row(*turns), 0, "glaive_func_calling")
+    assert [line["name"] for line in render] == ["hermes-glaive-func-calling-0-1"]
+    assert [line["name"] for line in parse] == ["hermes-glaive-func-calling-0-2"]
+
+
+def test_a_response_without_a_call_or_a_call_without_a_response_is_unmappable():
+    ask = ("human", "Weather in Paris?")
+    for turns, reason in [
+        ([ask, ("tool", SUNNY), ("gpt", "Sunny.")], "a response without a call"),  # 10 func_calling rows
+        ([ask, ("gpt", PARIS), ("tool", SUNNY + "\n" + SNOW), ("gpt", "Sunny.")], "a response without a call"),
+        ([ask, ("gpt", PARIS + "\n" + ZURICH), ("tool", SUNNY), ("gpt", "Sunny.")], "a call without a response"),
+        ([ask, ("gpt", PARIS), ask, ("gpt", "Sunny.")], "a call without a response"),
+    ]:
+        with pytest.raises(hermes.Unmappable, match=reason):
+            hermes.row_cases(row(("system", GLAIVE), *turns), 0, "func_calling")
+    # A row may end on its calls, as every func_calling_singleturn row does: no later request holds them.
+    render, parse = hermes.row_cases(row(("system", FUNCTION_CALLING), ask, ("gpt", PARIS)), 0, "func_calling")
+    assert len(render) == len(parse) == 1
+
+
+def test_a_call_to_a_function_the_row_does_not_declare_is_unmappable():
+    movie = '<tool_call>\n{"name": "get_movie_details", "arguments": {"title": "The Holiday"}}\n</tool_call>'
+    with pytest.raises(hermes.Unmappable, match="a call to get_movie_details, which the row's tools do not declare"):
+        turns = [("system", GLAIVE), ("human", "Tell me about The Holiday."), ("gpt", movie)]
+        hermes.row_cases(row(*turns), 0, "glaive_func_calling")
+
+
+def test_a_tool_that_is_not_an_openai_function_tool_is_unmappable():
+    joke = {"name": "get_random_joke", "description": "Get a random joke", "parameters": None}  # glaive row 1288
+    tools = json.dumps([WEATHER, joke])
+    turns = [("system", GLAIVE.replace(TOOLS, tools)), ("human", "A joke?"), ("gpt", "Why did the cloud stay home?")]
+    with pytest.raises(hermes.Unmappable, match="a tool that is not an OpenAI function tool"):
+        hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
+
+
+CLOCK = {"name": "get_time", "description": "Time in a city.", "parameters": {"type": "object", "properties": {}}}
+
+
+def test_each_tool_that_is_not_an_openai_function_tool_is_unmappable():
+    for tool in (
+        "get_time",  # not an object
+        {"type": "code_interpreter", "function": CLOCK},  # not a function tool
+        {"type": "function", "function": "get_time"},  # a function that is not an object
+        {"type": "function"},  # no function
+        {"type": "function", "function": {**CLOCK, "name": 7}},  # a name that is not a string
+        {"type": "function", "function": {"description": "Time in a city."}},  # no name
+    ):
+        tools = json.dumps([WEATHER, tool])
+        turns = [("system", GLAIVE.replace(TOOLS, tools)), ("human", "Hi"), ("gpt", "Hello!")]
+        with pytest.raises(hermes.Unmappable, match="a tool that is not an OpenAI function tool"):
+            hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
+
+
+def test_rows_that_differ_only_by_their_tools_give_cases_of_their_own():
+    # glaive_func_calling pairs one chat with several tool lists, and a case's tools are part of its request: such
+    # cases are distinct, and stay, though their messages are the same.
+    clock = json.dumps([{"type": "function", "function": CLOCK}])
+    hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
+    hello_clock = row(("system", GLAIVE.replace(TOOLS, clock)), ("human", "Hi"), ("gpt", "Hello!"), tools=clock)
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [hello, hello_clock]}))
+    assert repeats == []
+    names = ["hermes-glaive-func-calling-0-2", "hermes-glaive-func-calling-1-2"]
+    assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == names
+
+
+def test_a_row_whose_tools_declare_one_name_twice_is_unmappable():
+    # 44 glaive_func_calling rows taken do, 42 of them with two different definitions: a call to that name could be
+    # held to either, and no engine is asked to choose.
+    fahrenheit = {**WEATHER, "function": {**WEATHER["function"], "description": "Weather in a city, in Fahrenheit."}}
+    for tools in (json.dumps([WEATHER, WEATHER]), json.dumps([WEATHER, fahrenheit])):
+        turns = [("system", GLAIVE.replace(TOOLS, tools)), ("human", "Weather in Paris?"), ("gpt", PARIS)]
+        with pytest.raises(hermes.Unmappable, match="two tools under one name"):
+            hermes.row_cases(row(*turns, tools=tools), 0, "glaive_func_calling")
+
+
+def test_a_row_without_tools_sends_none_and_keeps_its_system_message():
+    plain = "You are a helpful assistant, with no access to external functions."  # 865 glaive_func_calling rows
+    turns = [("system", plain), ("human", "Hi"), ("gpt", "Hello!")]
+    render, parse = hermes.row_cases(row(*turns, tools="null"), 3, "glaive_func_calling")
+    messages = [{"role": "system", "content": plain}, {"role": "user", "content": "Hi"}]
+    assert render[0]["request"] == {"messages": messages}
+    assert parse[0]["request"] == render[0]["request"] and parse[0]["message"] == {"content": "Hello!"}
+
+
+def test_a_turn_from_an_unknown_speaker_is_unmappable_rather_than_dropped():
+    turns = [("system", GLAIVE), ("human", "Hi"), ("observation", "noted"), ("gpt", "Hello!")]
+    with pytest.raises(hermes.Unmappable, match="a turn from 'observation'"):
+        hermes.row_cases(row(*turns), 0, "glaive_func_calling")
+
+
+def ask(city: str) -> dict:
+    call = PARIS.replace("Paris", city) + "\n"
+    return row(("system", FUNCTION_CALLING), ("human", f"Weather in {city}?"), ("gpt", call))
+
+
+ORPHAN = row(("system", FUNCTION_CALLING), ("human", "Weather in Paris?"), ("tool", SUNNY), ("gpt", "Sunny."))
+
+
+def answered(city: str) -> dict:
+    """ask(city), then the weather and the assistant's answer, as a func_calling row goes on."""
+    opening = [(turn["from"], turn["value"]) for turn in ask(city)["conversations"]]
+    return row(*opening, ("tool", SUNNY), ("gpt", "Sunny."))
+
+
+def test_sets_take_every_row_and_name_each_row_they_skip():
+    skipped: list = []
+    rows = {"func_calling_singleturn": [ask("Paris"), ORPHAN, ask("Rome")], "func_calling": [ORPHAN, ask("Lima")]}
+    sets = hermes.build_sets(rows, skipped=skipped)
+    names = ["hermes-func-calling-singleturn-0-1", "hermes-func-calling-singleturn-2-1"]
+    assert [line["name"] for line in sets[("render", "hermes-func-calling-singleturn")]] == names
+    assert [line["name"] for line in sets[("parse", "hermes-func-calling-singleturn")]] == [n[:-1] + "2" for n in names]
+    assert [line["name"] for line in sets[("render", "hermes-func-calling")]] == ["hermes-func-calling-1-1"]
+    assert skipped == [
+        ("func_calling_singleturn row 1", "a response without a call"),
+        ("func_calling row 0", "a response without a call"),
+    ]
+
+
+def test_a_func_calling_row_keeps_what_follows_the_opening_it_shares_with_its_singleturn_row():
+    # func_calling's rows begin as func_calling_singleturn's of the same index (1883 of 1893 rows): the opening's cases
+    # repeat those and are left out, and the cases after the tool result stay, so neither func_calling set is empty.
+    rows = {"func_calling_singleturn": [ask("Paris")], "func_calling": [answered("Paris")]}
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets(rows))
+    assert repeats == [
+        ("hermes-func-calling-0-1", "hermes-func-calling-singleturn-0-1"),
+        ("hermes-func-calling-0-2", "hermes-func-calling-singleturn-0-2"),
+    ]
+    assert [line["name"] for line in sets[("render", "hermes-func-calling")]] == ["hermes-func-calling-0-3"]
+    assert [line["name"] for line in sets[("parse", "hermes-func-calling")]] == ["hermes-func-calling-0-4"]
+
+
+def test_a_config_whose_rows_give_no_case_has_no_set():
+    assert hermes.build_sets({"func_calling": [ORPHAN, ORPHAN, ORPHAN]}) == {}
+
+
+def test_rows_that_open_with_the_same_turns_give_the_cases_of_those_turns_once():
+    # Six pairs of the glaive_func_calling rows taken open with the same turns and part later, as rows 48 and 622 do.
+    hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
+    hey = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hey there!"))
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [hello, hey, hello]}))
+    name = "hermes-glaive-func-calling-{}".format
+    assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]] == [name("0-1")]
+    assert [line["name"] for line in sets[("parse", "hermes-glaive-func-calling")]] == [name("0-2"), name("1-2")]
+    assert repeats == [(name("1-1"), name("0-1")), (name("2-1"), name("0-1")), (name("2-2"), name("0-2"))]
+    # Calls carry the same ids in both rows, so the cases at and after them repeat too.
+    opening = [(turn["from"], turn["value"]) for turn in CONVERSATION["conversations"][:5]]
+    rome = row(*opening, ("human", "And in Rome?"), ("gpt", "Rain."))
+    sets, repeats = corpus_sets.leave_out_repeats(hermes.build_sets({"glaive_func_calling": [CONVERSATION, rome]}))
+    # The render case at the shared tool result (turn 3) repeats as well.
+    render_repeats = [(name("1-1"), name("0-1")), (name("1-3"), name("0-3"))]
+    assert repeats == [*render_repeats, (name("1-2"), name("0-2")), (name("1-4"), name("0-4"))]
+    assert [line["name"] for line in sets[("render", "hermes-glaive-func-calling")]][-1] == name("1-5")
+
+
+def test_written_sets_check_clean_and_a_changed_or_stale_hermes_file_is_reported(tmp_path):
+    sets, corpus = hermes.build_sets({"glaive_func_calling": [CONVERSATION]}), tmp_path / "corpus"
+    (corpus / "render").mkdir(parents=True)
+    for name in ("common", "bfcl-simple-python", "hermes-old"):
+        (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
+    written = hermes.write_sets(sets, corpus, APACHE)
+    kinds = ("parse", "render")
+    copy = corpus / "licenses" / "hermes-LICENSE"
+    assert written == [*(corpus / kind / "hermes-glaive-func-calling.jsonl" for kind in kinds), copy]
+    assert not (corpus / "render" / "hermes-old.jsonl").exists()
+    for name in ("common", "bfcl-simple-python"):
+        assert (corpus / "render" / f"{name}.jsonl").read_text() == "{}\n"
+    text = (corpus / "parse" / "hermes-glaive-func-calling.jsonl").read_bytes().decode("utf-8")
+    assert "Zürich" in text and text.endswith("\n") and len(text.splitlines()) == 4
+    assert hermes.check_sets(sets, corpus, APACHE) == []
+    (corpus / "parse" / "hermes-glaive-func-calling.jsonl").write_text("{}\n")
+    (corpus / "render" / "hermes-stale.jsonl").write_text("{}\n")
+    assert hermes.check_sets(sets, corpus, APACHE) == [
+        f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: differs from a fresh import",
+        f"{corpus / 'render' / 'hermes-stale.jsonl'}: no Hermes config writes it",
+    ]
+
+
+def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE, **rows: list[dict]) -> SimpleNamespace:
+    """``hf_hub_download`` served from files written here, each pinned by its sha256 in place of the dataset's: the
+    card, and each config's rows (no config given: none); and ``github.fetch`` serving ``license_text``. Returns the
+    downloads asked for: ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256), with
+    ``github_caches`` the cache each was given.
+    """
+    paths = {hf.CARD: tmp_path / "hub" / hf.CARD}
+    paths[hf.CARD].parent.mkdir(parents=True)
+    paths[hf.CARD].write_text(card, encoding="utf-8")
+    monkeypatch.setattr(hermes, "CARD_SHA256", hashlib.sha256(paths[hf.CARD].read_bytes()).hexdigest())
+    for config, (filename, _) in list(hermes.CONFIGS.items()):
+        paths[filename] = tmp_path / "hub" / filename
+        paths[filename].write_text(json.dumps(rows.get(config, [])), encoding="utf-8")
+        sha256 = hashlib.sha256(paths[filename].read_bytes()).hexdigest()
+        monkeypatch.setitem(hermes.CONFIGS, config, (filename, sha256))
+    calls: list[tuple] = []
+
+    def download(repo_id, filename, **kwargs):
+        calls.append((repo_id, filename, kwargs))
+        return str(paths[filename])
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    fetched: list[tuple] = []
+    caches: list = []
+
+    def fetch(owner, repo, commit, path, sha256, cache=None):
+        fetched.append((owner, repo, commit, path, sha256))
+        caches.append(cache)
+        served = tmp_path / "github" / path
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_bytes(license_text)
+        return served
+
+    monkeypatch.setattr(github, "fetch", fetch)
+    return SimpleNamespace(hub=calls, github=fetched, github_caches=caches)
+
+
+def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_out_then_checks(
+    tmp_path, monkeypatch, capsys
+):
+    hello = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hello!"))
+    hey = row(("system", GLAIVE), ("human", "Hi"), ("gpt", "Hey there!"))
+    served = serve(
+        tmp_path,
+        monkeypatch,
+        func_calling_singleturn=[ask("Paris"), ORPHAN, ORPHAN, ask("Oslo"), ask("Rome"), *[ORPHAN] * 6],
+        func_calling=[answered("Paris"), answered("Lima")],
+        glaive_func_calling=[hello, hello, hey],
+    )
+    corpus, cache = tmp_path / "corpus", tmp_path / "cache"
+    argv = ["import", "hermes", "--corpus", str(corpus), "--cache", str(cache)]
+    assert main([*argv, "--check"]) == 1
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert f"{corpus / 'render' / 'hermes-func-calling-singleturn.jsonl'}: 3 cases" in lines
+    assert f"{corpus / 'render' / 'hermes-func-calling.jsonl'}: 3 cases, 1 left out as repeats" in lines
+    assert (
+        f"{corpus / 'parse' / 'hermes-func-calling.jsonl'}: 3 cases, 1 left out as repeats, 2 distinct messages"
+        in lines
+    )
+    assert f"{corpus / 'render' / 'hermes-glaive-func-calling.jsonl'}: 1 cases, 2 left out as repeats" in lines
+    assert (
+        f"{corpus / 'parse' / 'hermes-glaive-func-calling.jsonl'}: 2 cases, 1 left out as repeats, 2 distinct messages"
+        in lines
+    )
+    assert f"{corpus}: 15 cases in the 6 Hermes sets, 5 left out as repeats, 7 distinct messages" in lines
+    # Every row is named, however many share a reason.
+    rows = ", ".join(f"func_calling_singleturn row {index}" for index in (1, 2, 5, 6, 7, 8, 9, 10))
+    assert f"no case for 8 row(s) ({rows}): a response without a call" in lines
+    assert "no case hermes-func-calling-0-1: it repeats hermes-func-calling-singleturn-0-1" in lines
+    assert "no case hermes-glaive-func-calling-2-1: it repeats hermes-glaive-func-calling-0-1" in lines
+    assert main([*argv, "--check"]) == 0
+    assert f"{corpus}: the Hermes sets equal a fresh import of hf:datasets/" in capsys.readouterr().out
+    # Every file comes from the dataset at the pinned commit, and is kept under --cache, the License copy too.
+    assert {(repo, options["revision"]) for repo, _, options in served.hub} == {
+        ("NousResearch/hermes-function-calling-v1", REVISION)
+    }
+    assert {options["cache_dir"] for _, _, options in served.hub} == {cache / "huggingface"}
+    assert set(served.github_caches) == {cache}
+
+
+def test_the_command_refuses_a_set_that_the_repeats_would_leave_empty_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, func_calling_singleturn=[ask("Paris")], func_calling=[ask("Paris")])
+    corpus = tmp_path / "corpus"
+    with pytest.raises(ValueError, match="every case of render/hermes-func-calling, parse/hermes-func-calling repeats"):
+        main(["import", "hermes", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")])
+    assert not corpus.exists()
+
+
+def test_the_command_checks_the_cards_license_before_it_reads_any_row_and_writes_nothing_on_a_refusal(
+    tmp_path, monkeypatch
+):
+    served = serve(tmp_path, monkeypatch, card=CARD.replace("apache-2.0", "mit"), func_calling=[ask("Paris")])
+    corpus = tmp_path / "corpus"
+    refusal = "the card's license is 'mit', not the reviewed 'apache-2.0'; review it before importing"
+    with pytest.raises(
+        ValueError, match=f"hf:datasets/NousResearch/hermes-function-calling-v1@{REVISION} README.md: {refusal}"
+    ):
+        main(["import", "hermes", "--corpus", str(corpus)])
+    assert [filename for _, filename, _ in served.hub] == ["README.md"] and not corpus.exists()
+
+
+def test_the_command_writes_the_apache_license_next_to_the_sets(tmp_path, monkeypatch):
+    served = serve(tmp_path, monkeypatch)
+    corpus = tmp_path / "corpus"
+    assert main(["import", "hermes", "--corpus", str(corpus)]) == 0
+    assert (corpus / "licenses" / "hermes-LICENSE").read_bytes() == APACHE
+    # The dataset ships no LICENSE or NOTICE file; its card names apache-2.0, so the copy is the License as the Apache
+    # Software Foundation publishes it, from its website's repository at the one commit that file has.
+    commit, sha256 = "01b1be9fbc5cd93b6794f5653a58b9b863807f84", hermes.LICENSE_SHA256
+    assert served.github == [("apache", "www-site", commit, "content/licenses/LICENSE-2.0.txt", sha256)]
+    assert sha256 == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+
+def test_check_names_the_license_copy_when_it_is_missing_or_differs(tmp_path, monkeypatch, capsys):
+    serve(tmp_path, monkeypatch)
+    corpus = tmp_path / "corpus"
+    copy = corpus / "licenses" / "hermes-LICENSE"
+    argv = ["import", "hermes", "--corpus", str(corpus)]
+    assert main(argv) == 0
+    copy.unlink()
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE + b"Additional terms apply.\n")
+    assert main([*argv, "--check"]) == 1
+    copy.write_bytes(APACHE)
+    assert main([*argv, "--check"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"{copy}: missing", f"{copy}: differs from a fresh import"]
+
+
+def test_the_command_refuses_a_license_text_that_is_not_the_apache_license_and_writes_nothing(tmp_path, monkeypatch):
+    serve(tmp_path, monkeypatch, license_text=b"MIT License\n\nCopyright (c) 2024\n")
+    with pytest.raises(ValueError, match="not the Apache License 2.0; review it before importing"):
+        main(["import", "hermes", "--corpus", str(tmp_path / "corpus")])
+    assert not (tmp_path / "corpus").exists()
+
+
+def real_rows(config: str) -> list[dict]:
+    """The pinned file of ``config`` from the Hugging Face cache; skipped when it is not there (no download)."""
+    filename, sha256 = hermes.CONFIGS[config]
+    cached = huggingface_hub.try_to_load_from_cache(
+        hermes.REPO, filename, cache_dir=pinned.CACHE / "huggingface", revision=hermes.REVISION, repo_type="dataset"
+    )
+    if not isinstance(cached, str):
+        pytest.skip(f"{filename} is not in the importers' cache; `bellwether import hermes` downloads it")
+    return hermes.read_rows(hf.fetch(hermes.REPO, hermes.REVISION, filename, sha256))
+
+
+def system_outcome(row: dict) -> str:
+    tools = row["tools"] if json.loads(row["tools"]) else None
+    try:
+        return hermes.system_message(row["conversations"][0]["value"], tools)
+    except hermes.Unmappable as err:
+        return f"refused: {err}"
+
+
+def test_on_the_real_rows_every_tool_prompt_comes_out_whole_and_only_the_rows_without_tools_keep_one():
+    refused = "refused: the system message lists tools the row does not declare"
+    for config in ("func_calling_singleturn", "func_calling"):
+        assert Counter(system_outcome(row) for row in real_rows(config)) == {"": 1832, refused: 61}
+    assert Counter(system_outcome(row) for row in real_rows("glaive_func_calling")) == {
+        "": 4344,
+        "You are a helpful assistant, with no access to external functions.": 865,
+    }

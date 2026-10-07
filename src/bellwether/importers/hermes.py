@@ -1,0 +1,375 @@
+"""Hermes function-calling conversations as corpus sets: NousResearch/hermes-function-calling-v1.
+
+The data is three JSON files of the Hugging Face dataset at a pinned revision, kept under the importers' cache and
+checked against their sha256 on every use (``hf.fetch``), with the license read from the dataset card
+(``hf.check_card_license``). Each row is a conversation in Hermes's own format; the importer turns it into OpenAI chat
+requests and assistant messages:
+
+- the request's ``tools`` are the row's ``tools`` field;
+- the system turn loses the Hermes tool prompt (``TOOL_PROMPTS``), Hermes's own rendering of those tools, since the
+  checkpoint's template renders them from ``tools``; what else it holds stays (``system_message``);
+- a ``human`` turn is a user message;
+- a ``gpt`` turn is an assistant message: its prose is ``content`` and each ``<tool_call>`` block one call
+  (``split_calls``). A parse case expects the calls as a parser returns them, without ids; in the history each call
+  has the id ``call_<n>``, numbered across the conversation, which bellwether writes and ``origin`` marks
+  (``WRITTEN``);
+- each ``<tool_response>`` block of a ``tool`` turn is a tool message answering the call in the same position.
+
+Every row of each config is read. Every assistant turn is a parse case, and every user turn or tool result an assistant
+turn answers is a render case: the prompt a model goes on from. A row with no
+faithful OpenAI form gives no case, and the import names it with its reason (``Unmappable``); a case that repeats an
+earlier one is left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats, so
+every case is distinct.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+from . import corpus_sets, github, hf
+
+REPO = "NousResearch/hermes-function-calling-v1"
+REVISION = "dae3e1d28cfbcf4b915c04ea1e072030529b4bda"
+SOURCE = hf.source(REPO, REVISION)
+LICENSE = "Apache-2.0"
+CARD_SHA256 = "a01aa1fe59858148f87d0a584e69bd4e33a9a3c70a177fe1517cad57ead45ae5"
+CARD_LICENSE = "apache-2.0"  # the license key of the reviewed card's YAML front matter; LICENSE is its SPDX name
+# Apache-2.0 4(a) asks that a copy of the License go with the work, and the dataset ships no LICENSE or NOTICE file, so
+# the import copies the License as the Apache Software Foundation publishes it (https://www.apache.org/licenses/
+# LICENSE-2.0.txt, the same bytes), from the foundation's website repository at the one commit that file has.
+LICENSE_OWNER, LICENSE_REPO = "apache", "www-site"
+LICENSE_COMMIT = "01b1be9fbc5cd93b6794f5653a58b9b863807f84"
+LICENSE_PATH = "content/licenses/LICENSE-2.0.txt"
+LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+# Where the import writes that copy, under the corpus root.
+LICENSE_COPY = "licenses/hermes-LICENSE"
+# The card's configs that hold tool calls, with their files and sha256. The json_mode_* configs are structured-output
+# cases, not tool calls, and are left for later.
+CONFIGS = {
+    "func_calling_singleturn": (
+        "func-calling-singleturn.json",
+        "fb2df9fe3f295dfd65b223c2dbf04d6b90006357d737f8f8927749f0bea09527",
+    ),
+    "func_calling": ("func-calling.json", "769478035a886678d525d057ea66e3fd1e247f43e35c8d6d7cc866e080b6742b"),
+    "glaive_func_calling": (
+        "glaive-function-calling-5k.json",
+        "b98eb3f160359f27ad15018e974ce6db444f566eb5be4aa9e4aa690b34d50832",
+    ),
+}
+
+# The dataset's system prompts for tools, as (text before, text after) a ``<tools>`` element that holds the row's
+# ``tools`` field: func_calling and func_calling_singleturn use the first two, glaive_func_calling the third. Each is
+# Hermes's rendering of the tool list, which the checkpoint's template renders in its own words from ``tools``.
+TOOL_PROMPTS = (
+    (
+        "You are a function calling AI model. You are provided with function signatures within <tools> </tools> XML"
+        " tags. You may call one or more functions to assist with the user query. Don't make assumptions about what"
+        " values to plug into functions.\n",
+        "\nFor each function call return a json object with function name and arguments within <tool_call>"
+        " </tool_call> tags with the following schema:\n<tool_call>\n"
+        '{"name": <function-name>, "arguments": <args-dict>}\n</tool_call>\n',
+    ),
+    (
+        "You are an expert structured information extraction AI model. You will be provided with documents to extract"
+        " information from. You are also provided with the json schema to output extracted information in the"
+        " function signatures within XML tags <tools></tools>. Don't make assumptions about what values to plug into"
+        " json schema. \n",
+        "\nFor each extraction function call return a json object with function name and arguments followed by a"
+        " <tool_call> tag with the following schema:\n<tool_call>\n"
+        '{"name": <function-name>, "arguments": <args-dict>}\n</tool_call>',
+    ),
+    (
+        "You are a function calling AI model. You are provided with function signatures within <tools></tools> XML"
+        " tags.You may call one or more functions to assist with the user query. Don't make assumptions about what"
+        " values to plug into functions.Here are the available tools:",
+        "Use the following pydantic model json schema for each tool call you will make: {'title': 'FunctionCall',"
+        " 'type': 'object', 'properties': {'arguments': {'title': 'Arguments', 'type': 'object'}, 'name': {'title':"
+        " 'Name', 'type': 'string'}}, 'required': ['arguments', 'name']}For each function call return a json object"
+        " with function name and arguments within <tool_call></tool_call> XML tags as follows:\n<tool_call>\n"
+        "{tool_call}\n</tool_call>",
+    ),
+)
+
+
+# The text bellwether writes into a Hermes case that the dataset does not have, as ``origin`` names it: the id of each
+# call in a request's history, and the ``tool_call_id`` of the tool message that answers it.
+WRITTEN = "tool call ids"
+
+
+class Unmappable(ValueError):
+    """A row that has no faithful OpenAI form: the import names it with this reason and takes no case from it."""
+
+
+def read_rows(path: Path) -> list[dict]:
+    return json.loads(path.read_bytes().decode("utf-8"))
+
+
+def system_message(text: str, tools: str | None) -> str:
+    """What is left of a system turn once the Hermes tool prompt carrying ``tools`` (the row's field) is taken out.
+
+    ``tools`` is ``None`` for a row that declares no tool; its system message is kept as it is, unless it holds a
+    ``<tools>`` element, whose tools the row would then not declare. What is left stays as it is: in every pinned row
+    with tools the prompt is the whole turn, so nothing is left.
+    """
+    if tools is None:
+        if "<tools>" in text:
+            raise Unmappable("the system message lists tools the row does not declare")
+        return text
+    for before, after in TOOL_PROMPTS:
+        prompt = f"{before}<tools>\n{tools}\n</tools>{after}"
+        if prompt in text:
+            return text.replace(prompt, "", 1)
+    raise Unmappable("the system message carries no Hermes tool prompt with the row's tools")
+
+
+CALL = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL)
+
+
+def split_calls(text: str) -> tuple[str, list[dict]]:
+    """The content of an assistant turn and its calls, one ``{"name", "arguments"}`` object per ``<tool_call>``.
+
+    The content is the text before the first block, as it is: the whole turn when it has no block, empty in every
+    pinned turn of calls. Between and after the blocks there may be only whitespace, since a message renders its
+    content before its calls.
+    """
+    pieces = CALL.split(text)  # text, block, text, block, ..., text
+    if any(tag in piece for piece in pieces[0::2] for tag in ("<tool_call>", "</tool_call>")):
+        raise Unmappable("a <tool_call> tag without its pair")
+    if any(piece.strip() for piece in pieces[2::2]):
+        raise Unmappable("text after a <tool_call> block")
+    return pieces[0], [_call(body) for body in pieces[1::2]]
+
+
+def _call(body: str) -> dict:
+    try:
+        call = json.loads(body)
+    except json.JSONDecodeError:
+        raise Unmappable("a <tool_call> block that is not JSON") from None
+    if not (
+        isinstance(call, dict)
+        and set(call) == {"name", "arguments"}
+        and isinstance(call["name"], str)
+        and isinstance(call["arguments"], dict)
+    ):
+        raise Unmappable('a <tool_call> block that is not {"name": <string>, "arguments": {<object>}}')
+    return call
+
+
+RESPONSE = re.compile(r"<tool_response>(.*?)</tool_response>", re.DOTALL)
+
+
+def responses(text: str) -> list:
+    """The JSON of each ``<tool_response>`` block of a tool turn, in order; around the blocks only whitespace."""
+    pieces = RESPONSE.split(text)  # text, block, text, block, ..., text
+    if any(tag in piece for piece in pieces[0::2] for tag in ("<tool_response>", "</tool_response>")):
+        raise Unmappable("a <tool_response> tag without its pair")
+    if len(pieces) == 1:
+        raise Unmappable("a tool turn without a <tool_response> block")
+    if any(piece.strip() for piece in pieces[0::2]):
+        raise Unmappable("text outside the <tool_response> blocks")
+    found = []
+    for body in pieces[1::2]:
+        try:
+            found.append(json.loads(body))
+        except json.JSONDecodeError:
+            raise Unmappable("a <tool_response> block that is not JSON") from None
+    return found
+
+
+def set_name(config: str) -> str:
+    return "hermes-" + config.replace("_", "-")
+
+
+def origin(config: str, row: dict, index: int, turn: int, request: dict) -> dict:
+    """Where a case came from: the file, the row by its index and its id, and the turn the case ends at.
+
+    ``written`` lists the text bellwether wrote into the case rather than took from the row: ``WRITTEN`` when the
+    request holds a call, whose id, and the ``tool_call_id`` that names it, the dataset does not have.
+    """
+    filename, sha256 = CONFIGS[config]
+    found = {"dataset": "hermes", "source": SOURCE, "sha256": sha256, "file": filename}
+    found = {**found, "row": index, "row_id": row["id"], "turn": turn, "license": LICENSE}
+    if any("tool_calls" in message for message in request["messages"]):
+        found["written"] = [WRITTEN]
+    return found
+
+
+def row_cases(row: dict, index: int, config: str) -> tuple[list[dict], list[dict]]:
+    """The render and parse cases of one row.
+
+    The turns become OpenAI chat messages in order. A render case ends at each user turn or tool result an assistant
+    turn answers, and a parse case is each assistant turn, its request every message before it. Calls get the ids
+    ``call_<n>``, numbered across the row, and each tool result the id of the call it answers, by order. The ids leave
+    the row out, so two rows that open with the same turns give the same cases there.
+    """
+    tools = _tools(row["tools"])
+    declared = {tool["function"]["name"] for tool in tools}
+    turns = row["conversations"]
+    messages: list[dict] = []
+    render: list[dict] = []
+    parse: list[dict] = []
+    calls: list[dict] = []  # the calls of the last assistant turn, until a tool turn answers them
+    made = 0
+    for turn, entry in enumerate(turns):
+        source, text = entry["from"], entry["value"]
+        if source == "tool":
+            results = responses(text)
+            if len(results) > len(calls):
+                raise Unmappable("a response without a call")
+            if len(results) < len(calls):
+                raise Unmappable("a call without a response")
+            for call, result in zip(calls, results, strict=True):
+                content = json.dumps(result, ensure_ascii=False)
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
+            calls = []
+            if turn + 1 < len(turns) and turns[turn + 1]["from"] == "gpt":
+                render.append(_line(config, row, index, turn, _request(messages, tools)))
+            continue
+        if calls:
+            raise Unmappable("a call without a response")
+        if source == "system":
+            content = system_message(text, row["tools"] if tools else None)
+            if content:
+                messages.append({"role": "system", "content": content})
+        elif source == "human":
+            messages.append({"role": "user", "content": text})
+            if turn + 1 < len(turns) and turns[turn + 1]["from"] == "gpt":
+                render.append(_line(config, row, index, turn, _request(messages, tools)))
+        elif source == "gpt":
+            content, found = split_calls(text)
+            expected = []
+            for call in found:
+                if call["name"] not in declared:
+                    raise Unmappable(f"a call to {call['name']}, which the row's tools do not declare")
+                arguments = json.dumps(call["arguments"], ensure_ascii=False)
+                expected.append({"type": "function", "function": {"name": call["name"], "arguments": arguments}})
+            message: dict = {"content": content}
+            if expected:
+                message["tool_calls"] = expected
+            parse.append(_line(config, row, index, turn, _request(messages, tools), message))
+            # The history gives each call an id for the tool message that answers it to name; a parser makes up its
+            # own, so the expected message holds none.
+            calls = [{"id": f"call_{made + n}", **call} for n, call in enumerate(expected)]
+            made += len(calls)
+            messages.append({"role": "assistant", "content": content, **({"tool_calls": calls} if calls else {})})
+        else:
+            raise Unmappable(f"a turn from {source!r}")
+    return render, parse
+
+
+def _tools(field: str) -> list[dict]:
+    """The row's ``tools`` field as the request's tools, each ``{"type": "function", "function": {"name", ...}}``.
+
+    Each name is declared once: a call to a name declared twice could be held to either definition.
+    """
+    tools = json.loads(field) or []
+    for tool in tools:
+        if not (
+            isinstance(tool, dict)
+            and tool.get("type") == "function"
+            and isinstance(tool.get("function"), dict)
+            and isinstance(tool["function"].get("name"), str)
+        ):
+            raise Unmappable("a tool that is not an OpenAI function tool")
+    names = [tool["function"]["name"] for tool in tools]
+    if len(set(names)) < len(names):
+        raise Unmappable("two tools under one name")
+    return tools
+
+
+def _request(messages: list[dict], tools: list[dict]) -> dict:
+    """The messages, and the row's tools when it has any. ``add_generation_prompt`` is left to its default, true, as
+    every other imported set leaves it, so a request another importer also writes is the same JSON."""
+    request: dict = {"messages": list(messages)}
+    if tools:
+        request["tools"] = tools
+    return request
+
+
+def _line(config: str, row: dict, index: int, turn: int, request: dict, message: dict | None = None) -> dict:
+    line = {"name": f"{set_name(config)}-{index}-{turn}", "request": request}
+    if message is not None:
+        line["message"] = message
+    topic = " / ".join(part for part in (row.get("category"), row.get("subcategory")) if part)
+    line["notes"] = f"Hermes {config} row {index} turn {turn}: {topic}"
+    line["origin"] = origin(config, row, index, turn, request)
+    return line
+
+
+def build_sets(
+    rows: dict[str, list[dict]], skipped: list[tuple[str, str]] | None = None
+) -> dict[tuple[str, str], list[dict]]:
+    """Corpus lines per ``(kind, set name)`` from every row of each config.
+
+    A row that cannot be mapped gives no case, and is appended to ``skipped`` as ``("<config> row <index>", reason)``.
+    A set no row fills is not made. The import then leaves out the cases that repeat an earlier one
+    (``corpus_sets.leave_out_repeats``): rows that open with the same turns give the cases of those turns once. So
+    func_calling's rows, which begin as func_calling_singleturn's rows of the same index (the first three turns are
+    equal in 1883 of 1893 rows), give the cases that follow that opening.
+    """
+    sets: dict[tuple[str, str], list[dict]] = {}
+    for config, found in rows.items():
+        cases: dict[str, list[dict]] = {"render": [], "parse": []}
+        for index, found_row in enumerate(found):
+            try:
+                row_render, row_parse = row_cases(found_row, index, config)
+            except Unmappable as err:
+                if skipped is not None:
+                    skipped.append((f"{config} row {index}", str(err)))
+                continue
+            cases["render"] += row_render
+            cases["parse"] += row_parse
+        for kind, lines in cases.items():
+            if lines:
+                sets[(kind, set_name(config))] = lines
+    return sets
+
+
+def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
+    """Write every set and the License copy, and remove ``hermes-*`` set files no config writes any more."""
+    return corpus_sets.write(sets, corpus_dir, "hermes-", {LICENSE_COPY: license_text})
+
+
+def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
+    """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
+    return corpus_sets.check(sets, corpus_dir, "hermes-", "Hermes config", {LICENSE_COPY: license_text})
+
+
+def check_license_text(text: bytes) -> None:
+    """Refuse a License text whose heading is not the Apache License 2.0's, so a pin moved to another text cannot pass
+    on its new hash alone."""
+    if text.split()[:4] != [b"Apache", b"License", b"Version", b"2.0,"]:
+        source = f"{LICENSE_OWNER}/{LICENSE_REPO}@{LICENSE_COMMIT} {LICENSE_PATH}"
+        raise ValueError(f"{source}: not the Apache License 2.0; review it before importing")
+
+
+def run(args: argparse.Namespace) -> int:
+    hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, cache=args.cache)
+    pin = (LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256)
+    license_text = github.fetch(*pin, cache=args.cache).read_bytes()
+    check_license_text(license_text)
+    rows = {
+        config: read_rows(hf.fetch(REPO, REVISION, filename, sha256, cache=args.cache))
+        for config, (filename, sha256) in CONFIGS.items()
+    }
+    skipped: list[tuple[str, str]] = []
+    sets = build_sets(rows, skipped=skipped)
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    empty = [f"{kind}/{name}" for (kind, name), lines in kept.items() if not lines]
+    if empty:
+        raise ValueError(f"every case of {', '.join(empty)} repeats an earlier one; an import writes no empty set")
+    if args.check:
+        problems = check_sets(kept, args.corpus, license_text)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        if not problems:
+            print(f"{args.corpus}: the Hermes sets equal a fresh import of {SOURCE}")
+        return 1 if problems else 0
+    corpus_sets.report("Hermes", sets, kept, repeats, args.corpus)
+    corpus_sets.report_skipped(skipped)
+    write_sets(kept, args.corpus, license_text)
+    return 0

@@ -36,6 +36,7 @@ jobs:
       - run: uv run bellwether import gsm8k --check
       - run: uv run bellwether import mgsm --check
       - run: uv run bellwether import shapes --check
+      - run: uv run bellwether import hermes --check
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/registries
