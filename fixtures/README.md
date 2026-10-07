@@ -17,7 +17,9 @@ LFS; hand-written sets stay plain `<set>.jsonl`. `.lfsconfig` keeps a clone from
 one with `git lfs pull --include 'fixtures/<slug>/<kind>/<set>.jsonl.zst' --exclude ''`, or write every set as plain
 JSON Lines into one tree with `bellwether unpack` (`--out fixtures-plain` by default, `--model` to pick one), which
 is the root consumers point at. Each model's `sets.toml`, written by `record`, lists every set with its form, cases,
-rejected cases, plain size and plain-content sha256, so it can be counted and checked without fetching the set.
+rejected cases, plain size and plain-content sha256, so it can be counted and checked without fetching the set. A run
+reads it again at its end and replaces only its own kind's tables, under a lock on `sets.toml.lock` beside it (ignored
+by git), so a render run and a parse run of one model can overlap.
 
 Every line validates against `src/bellwether/schemas/case.schema.json`. Fixtures are recorded by
 `bellwether record`, never edited by hand; a re-record is a pull request whose diff is the review.

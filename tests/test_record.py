@@ -1,3 +1,4 @@
+import fcntl
 import hashlib
 import json
 import os
@@ -966,6 +967,95 @@ def test_record_set_updates_only_its_own_table_and_counts_rejections(tmp_path, t
     tables = sets_tables(tmp_path)["render"]
     assert tables["extra"] == before
     assert (tables["common"]["cases"], tables["common"]["rejected"]) == (1, 1)
+
+
+@pytest.mark.parametrize("last", ["parse", "render"])
+def test_record_runs_of_the_two_kinds_at_once_keep_each_others_tables(tmp_path, tiny_model, monkeypatch, last):
+    # The other kind's run records from start to end while this run writes its set file, after this run started and
+    # before it writes sets.toml. A run that wrote back the tables it read at its start would drop the other kind's.
+    other = "render" if last == "parse" else "parse"
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+    write_jsonl(
+        tmp_path / "corpus" / "parse" / "common.jsonl",
+        [{"name": "a", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}],
+    )
+    statuses = []
+
+    def write_while_the_other_kind_records(path, cases):
+        write_fixture_file(path, cases)
+        if path.parent.name == last:
+            statuses.append(record(tmp_path, tiny_model, kind=other)[0])
+
+    monkeypatch.setattr("bellwether.record.write_fixture_file", write_while_the_other_kind_records)
+    statuses.append(record(tmp_path, tiny_model, kind=last)[0])
+
+    assert statuses == [0, 0]
+    assert sorted(set_tables.read(tmp_path / "fixtures" / "tiny-chat" / "sets.toml")) == [
+        ("parse", "common"),
+        ("render", "common"),
+    ]
+
+
+def test_record_drops_only_its_own_kinds_table_of_a_set_it_no_longer_writes(tmp_path, tiny_model):
+    names = ("common", "extra", "tools")
+    for kind, message in (("render", {}), ("parse", {"message": {"content": "Hello"}})):
+        cases = {name: [{"name": f"{name}-0", "request": {"messages": [user(name)]}, **message}] for name in names}
+        assert record(tmp_path, tiny_model, *cases.items(), kind=kind)[0] == 0
+    (tmp_path / "corpus" / "render" / "tools.jsonl").unlink()  # the corpus no longer has the set
+    write_jsonl(tmp_path / "corpus" / "render" / "extra.jsonl", [{"name": "extra-0", "request": {"prompt": "x"}}])
+
+    status, _ = record(tmp_path, tiny_model)  # extra-0 no longer renders, so the run writes no extra set
+
+    assert status == 1
+    assert sorted(set_tables.read(tmp_path / "fixtures" / "tiny-chat" / "sets.toml")) == [
+        ("parse", "common"),
+        ("parse", "extra"),
+        ("parse", "tools"),
+        ("render", "common"),
+    ]
+
+
+def test_record_reads_and_writes_sets_toml_under_the_lock_beside_it(tmp_path, tiny_model, monkeypatch):
+    # An exclusive flock on sets.toml.lock: while a run holds it, no other open of that file can take it.
+    lock = tmp_path / "fixtures" / "tiny-chat" / "sets.toml.lock"
+    seen: list[tuple[str, bool]] = []
+
+    def held() -> bool:
+        with open(lock, "a") as other:
+            try:
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            return False
+
+    real_read, real_write = set_tables.read, set_tables.write
+
+    def read(path):
+        seen.append(("read", held()))
+        return real_read(path)
+
+    def write(path, tables):
+        seen.append(("write", held()))
+        real_write(path, tables)
+
+    monkeypatch.setattr(set_tables, "read", read)
+    monkeypatch.setattr(set_tables, "write", write)
+    status, _ = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+
+    assert status == 0
+    assert seen == [("read", True), ("write", True)]
+
+
+def test_sets_toml_is_replaced_whole_never_rewritten_in_place(tmp_path):
+    # A reader, or a run cut off mid-write, would otherwise find half a table.
+    path = tmp_path / "sets.toml"
+    set_tables.write(path, {("render", "common"): set_tables.entry("plain", "a\n", 1, 0)})
+    inode = path.stat().st_ino
+
+    set_tables.write(path, {("render", "common"): set_tables.entry("plain", "b\n", 1, 0)})
+
+    assert path.stat().st_ino != inode, "sets.toml was rewritten in place"
+    assert [p.name for p in tmp_path.iterdir()] == ["sets.toml"]
 
 
 # What Git LFS 3.7.1 leaves in place of a file it has not fetched; this one stands for the 13 bytes "compressed-x\n".
