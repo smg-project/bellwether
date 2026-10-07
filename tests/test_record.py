@@ -657,6 +657,35 @@ def test_a_value_of_its_declared_type_is_not_checked(tagged_model, declared, val
     assert f"<parameter=unit>\n{json.dumps(value)}\n</parameter>" in out.text
 
 
+@pytest.mark.parametrize(
+    ("declared", "value", "reading"),
+    [
+        ({"type": ["string", "null"]}, "null", "null"),
+        ({"type": ["string", "integer"]}, "5", "5"),
+        ({"type": ["string", "boolean"]}, "true", "true"),
+    ],
+    ids=["null", "integer", "boolean"],
+)
+def test_a_string_that_reads_as_another_type_its_union_admits_fails_the_case(tagged_model, declared, value, reading):
+    # A tagged template writes a string as it is and other values as JSON, so the string "null" and null are the same
+    # text; vLLM's parser tries every other declared type before a string, so a reader hands back the other value.
+    reason = f"vLLM's parser tries {reading} before a string, so it hands back {reading}"
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(tagged_model, {"unit": declared}, {"unit": value})
+
+
+def test_the_text_none_under_a_nullable_string_is_recorded(tagged_model):
+    # vLLM reads only the text null as null, so the string "None" comes back as the string.
+    out = call_weather(tagged_model, {"unit": {"type": ["string", "null"]}}, {"unit": "None"})
+    assert "<parameter=unit>\nNone\n</parameter>" in out.text
+
+
+def test_a_non_string_under_a_union_with_a_string_is_recorded(tagged_model):
+    # The other way round a reader gets the value back: it tries the integer before the string.
+    out = call_weather(tagged_model, {"unit": {"type": ["string", "integer"]}}, {"unit": 5})
+    assert "<parameter=unit>\n5\n</parameter>" in out.text
+
+
 @pytest.mark.parametrize(("model", "text"), [("tagged_model", "false"), ("items_model", "False")])
 def test_a_boolean_under_a_declared_string_fails_the_case(request, model, text):
     # Qwen3.5 to 3.8 write a boolean as JSON, `false`; Qwen3-Coder writes it with Jinja's `string`, `False`. Either

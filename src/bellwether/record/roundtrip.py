@@ -534,6 +534,15 @@ def json_types(value: object) -> set[str]:
 PYTHON_LITERALS = {"True": True, "False": False, "None": None}
 
 
+def json_readings(value: str) -> list:
+    """The value a string's text reads as JSON, when that is not a string; none otherwise."""
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return []
+    return [] if isinstance(parsed, str) else [parsed]
+
+
 def same_text_candidates(value: object, types: list[str] | None) -> list:
     """Values of another type that a template may write as it writes ``value``, whose declared ``types`` may be None.
 
@@ -545,7 +554,13 @@ def same_text_candidates(value: object, types: list[str] | None) -> list:
     if value is None and types is not None and set(types) != {"string"}:
         return ["None"]
     if types is not None and json_types(value) & set(types):
-        return []
+        # The declared types admit the value. A string whose text is JSON of another type the union admits is the
+        # exception: a template writes the string "null" as it writes null, and vLLM's parser tries every other declared
+        # type before a string, so a reader hands back null. The text None is not one: vLLM reads only null as null.
+        others = set(types) - {"string"}
+        if not isinstance(value, str) or not others:
+            return []
+        return [reading for reading in json_readings(value) if json_types(reading) & others]
     if not isinstance(value, str):
         # transformers' tojson writes non-ASCII text as it is; json.dumps's default escapes it.
         return list(dict.fromkeys([json.dumps(value), json.dumps(value, ensure_ascii=False), str(value)]))
@@ -567,6 +582,12 @@ def type_not_carried(function: str, name: str, value: object, candidate: object,
     if types is None:
         return f"{said}, and the tools declare no type for {name}, so no reader can tell the two apart in the output"
     kinds = " or ".join(kind if kind == "null" else f"{'an' if kind[:1] in 'aeiou' else 'a'} {kind}" for kind in types)
+    if isinstance(value, str) and json_types(value) & set(types):
+        reading = json.dumps(candidate)
+        return (
+            f"{said}, and the tool declares {name} {kinds}; vLLM's parser tries {reading} before a string, so it "
+            f"hands back {reading}"
+        )
     if value is None and set(types) != {"string"}:
         return (
             f"{said}, and vLLM reads the text None as the string 'None' under {kinds}, "
