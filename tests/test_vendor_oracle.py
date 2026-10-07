@@ -125,3 +125,53 @@ def test_incremental_pieces_give_back_the_text_and_hold_a_split_character_until_
     pieces = vendor.incremental_pieces(Bytes(), ids)
     assert pieces == ["a", "", "é", " ", "b"]
     assert "".join(pieces) == text
+
+
+def record(tmp_path, checkpoint, kind: str, lines: list[dict]) -> tuple[int, pathlib.Path]:
+    """``bellwether record --oracle vendor`` over one corpus set, with a manifest listing the checkpoint's inputs."""
+    from bellwether.cli import main
+    from bellwether.inputs import oracle_inputs
+
+    fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
+    manifest = fixtures / "vendor-chat" / "manifest.toml"
+    if not manifest.exists():
+        manifest.parent.mkdir(parents=True)
+        inputs = oracle_inputs(str(checkpoint), "local")
+        text = [f'model = "{checkpoint}"', 'revision = "local"', "", "[authority]", 'render = ["vendor-code"]']
+        text += ["", "[inputs]", *(f'"{name}" = "{digest}"' for name, digest in inputs.items())]
+        manifest.write_text("\n".join(text) + "\n")
+    (corpus / kind).mkdir(parents=True, exist_ok=True)
+    (corpus / kind / "common.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines))
+    argv = ["record", "--model", str(checkpoint), "--kind", kind, "--oracle", "vendor"]
+    return main([*argv, "--fixtures", str(fixtures), "--corpus", str(corpus)]), fixtures / "vendor-chat" / kind
+
+
+def test_record_with_the_vendor_oracle_outside_the_sandbox_names_the_command_and_runs_nothing(
+    tmp_path, vendor_checkpoint, monkeypatch, capsys
+):
+    monkeypatch.delenv(vendor.SANDBOX_ENV, raising=False)
+    status, out = record(tmp_path, vendor_checkpoint, "render", [{"name": "a", "request": REQUEST}])
+    assert status == 1
+    assert "bellwether sandbox-record" in capsys.readouterr().err
+    assert not out.exists() and not (vendor_checkpoint / "imported").exists()
+
+
+def test_record_with_the_vendor_oracle_in_the_sandbox_writes_vendor_code_references(
+    tmp_path, vendor_checkpoint, monkeypatch
+):
+    monkeypatch.setenv(vendor.SANDBOX_ENV, "1")
+    monkeypatch.setenv(vendor.IMAGE_ENV, "bellwether-vendor@sha256:" + "0" * 64)
+    status, out = record(tmp_path, vendor_checkpoint, "render", [{"name": "a", "request": REQUEST}])
+    assert status == 0
+    [line] = [json.loads(text) for text in (out / "common.jsonl").read_text().splitlines()]
+    assert line["reference"]["source"] == "vendor-code"
+    assert line["reference"]["text"].startswith("<|im_start|>user\ncafé")
+    assert line["reference"]["provenance"]["oracle"] == "vendor-code"
+    assert line["reference"]["provenance"]["sandbox_image"].startswith("bellwether-vendor@sha256:")
+    message = {"content": "Paris é."}
+    status, out = record(tmp_path, vendor_checkpoint, "parse", [{"name": "b", "request": REQUEST, "message": message}])
+    assert status == 0
+    [line] = [json.loads(text) for text in (out / "common.jsonl").read_text().splitlines()]
+    assert line["reference"]["source"] == "roundtrip:vendor-code"
+    assert "".join(line["output_pieces"]) == line["reference"]["text"] == "Paris é."
+    assert "" in line["output_pieces"]  # the first byte of é waits for the second

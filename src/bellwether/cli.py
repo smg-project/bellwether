@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     record = sub.add_parser("record", help="run the corpus through one oracle and write fixtures")
     record.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
     record.add_argument("--kind", required=True, choices=["render", "parse", "tokenize", "detokenize"])
-    record.add_argument("--oracle", required=True, choices=["reference", "vllm", "sglang"])
+    record.add_argument("--oracle", required=True, choices=["reference", "vendor", "vllm", "sglang"])
     record.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     record.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     record.add_argument(

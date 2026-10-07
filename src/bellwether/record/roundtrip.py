@@ -449,6 +449,24 @@ class Cut:
     after: str = ""
 
 
+def with_offsets(tokenizer, text: str) -> list[tuple[int, tuple[int, int]]]:
+    """Each token of ``text`` with the characters it spans: the fast tokenizer's offset mapping, or, for a vendor's
+    slow tokenizer, which has none, the piece its incremental decode gives each token, in order. A token that ends
+    inside a character spans nothing, and the one that completes it spans the whole character."""
+    if getattr(tokenizer, "backend_tokenizer", None) is not None:
+        encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        return list(zip(encoded["input_ids"], encoded["offset_mapping"], strict=True))
+    ids = [int(i) for i in tokenizer.encode(text, add_special_tokens=False)]
+    pieces = vendor.incremental_pieces(tokenizer, ids)
+    if "".join(pieces) != text:
+        raise ValueError("the tokenizer's ids do not decode back to the text, so no token has a place in it")
+    spans, at = [], 0
+    for piece in pieces:
+        spans.append((at, at + len(piece)))
+        at += len(piece)
+    return list(zip(ids, spans, strict=True))
+
+
 def stop_in_turn(tokenizer, turn: str, stop_ids: set[int]) -> Cut | None:
     """Where the first stop id in the rendered ``turn`` ends the output; None when the turn holds none.
 
@@ -456,8 +474,7 @@ def stop_in_turn(tokenizer, turn: str, stop_ids: set[int]) -> Cut | None:
     when that is whitespace (Phi-4-mini writes ``<|end|><|endoftext|>``), since anything else is part of the turn the
     template renders after generation stops.
     """
-    encoded = tokenizer(turn, add_special_tokens=False, return_offsets_mapping=True)
-    tokens = list(zip(encoded["input_ids"], encoded["offset_mapping"], strict=True))
+    tokens = with_offsets(tokenizer, turn)
     for index, (token, (start, end)) in enumerate(tokens):
         if token not in stop_ids:
             continue
@@ -485,8 +502,7 @@ def stop_at_next_message(tokenizer, prompt: str, rendered: str, continued: str, 
             "so what follows the turn is unknown"
         )
     turn, tail = rendered[len(prompt) :], continued[len(prompt) :]
-    encoded = tokenizer(tail, add_special_tokens=False, return_offsets_mapping=True)
-    for token, (start, end) in zip(encoded["input_ids"], encoded["offset_mapping"], strict=True):
+    for token, (start, end) in with_offsets(tokenizer, tail):
         if end <= len(turn):  # the turn's own, a zero-width token at its end (trim_offsets) among them
             continue
         name = tokenizer.convert_ids_to_tokens(token)
