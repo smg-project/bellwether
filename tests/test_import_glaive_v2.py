@@ -330,7 +330,7 @@ def origin(row: int, turn: int, written: bool = False) -> dict:
     return {**found, "written": ["tool call ids"]} if written else found
 
 
-def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_render_case():
+def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_or_tool_result_a_render_case():
     render, parse = glaive_v2.cases_for(25475, MESSAGES_25475, [DETECT_LANGUAGE])
     notes = "glaive-function-calling-v2 row 25475 turn {}".format
     assert render == [
@@ -345,6 +345,13 @@ def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_rende
             "request": {"messages": MESSAGES_25475[:3], "tools": [DETECT_LANGUAGE]},
             "notes": notes(2),
             "origin": origin(25475, 2),
+        },
+        # The prompt a model goes on from once the function has answered: the request up to the tool result.
+        {
+            "name": "glaive-v2-25475-4",
+            "request": {"messages": MESSAGES_25475[:5], "tools": [DETECT_LANGUAGE]},
+            "notes": notes(4),
+            "origin": origin(25475, 4, written=True),
         },
     ]
     assert parse == [
@@ -370,7 +377,7 @@ def test_each_assistant_turn_is_a_parse_case_and_each_answered_user_turn_a_rende
             "origin": origin(25475, 5, written=True),
         },
     ]
-    assert [list(line) for line in render] == [["name", "request", "notes", "origin"]] * 2
+    assert [list(line) for line in render] == [["name", "request", "notes", "origin"]] * 3
     assert [list(line) for line in parse] == [["name", "request", "message", "notes", "origin"]] * 3
     assert list(render[0]["origin"]) == ["dataset", "source", "sha256", "file", "row", "turn", "license"]
     assert list(parse[2]["origin"]) == ["dataset", "source", "sha256", "file", "row", "turn", "license", "written"]
@@ -409,7 +416,9 @@ def test_a_case_whose_request_holds_a_call_says_its_ids_are_written_and_expects_
     render, parse = glaive_v2.cases_for(1, *glaive_v2.messages_for({"system": NEWS_SYSTEM, "chat": chat}))
     assert [(line["name"], "written" in line["origin"]) for line in render] == [
         ("glaive-v2-1-0", False),
+        ("glaive-v2-1-2", True),
         ("glaive-v2-1-4", True),
+        ("glaive-v2-1-6", True),
     ]
     assert [(line["name"], line["origin"].get("written")) for line in parse] == [
         ("glaive-v2-1-1", None),
@@ -422,6 +431,19 @@ def test_a_case_whose_request_holds_a_call_says_its_ids_are_written_and_expects_
     history = parse[3]["request"]["messages"]
     assert [m["tool_calls"][0]["id"] for m in history if "tool_calls" in m] == ["call_0", "call_1"]
     assert [m["tool_call_id"] for m in history if m["role"] == "tool"] == ["call_0", "call_1"]
+
+
+def test_a_tool_result_no_assistant_turn_answers_is_no_render_case():
+    # A function response the user answers, or one that ends the chat, is not a prompt the assistant goes on from.
+    call = {"role": "assistant", "content": "", "tool_calls": [CALL_25475]}
+    result = {"role": "tool", "tool_call_id": "call_0", "content": '{"language": "French"}'}
+    user = {"role": "user", "content": "Thanks."}
+    answered_by_user = [MESSAGES_25475[0], call, result, user, {"role": "assistant", "content": "Welcome."}]
+    render, _ = glaive_v2.cases_for(7, answered_by_user, [DETECT_LANGUAGE])
+    assert [line["name"] for line in render] == ["glaive-v2-7-0", "glaive-v2-7-3"]
+    render, parse = glaive_v2.cases_for(7, [MESSAGES_25475[0], call, result], [DETECT_LANGUAGE])
+    assert [line["name"] for line in render] == ["glaive-v2-7-0"]
+    assert [line["name"] for line in parse] == ["glaive-v2-7-1"]
 
 
 def test_a_row_without_functions_sends_no_tools_and_counts_turns_after_its_system_message():
@@ -450,6 +472,15 @@ def test_a_user_turn_no_assistant_answers_is_no_render_case():
 
 
 NO_FUNCTIONS = "SYSTEM: You are a helpful assistant, with no access to external functions.\n\n"
+
+
+def test_an_assistant_turn_right_after_another_has_the_first_in_its_request():
+    # Row 111754's shape: two assistant turns answer one user turn, and the second's request holds the first.
+    chat = "USER: g?\n\nASSISTANT: g. <|endoftext|>\n\nASSISTANT: h. <|endoftext|>"
+    messages, tools = glaive_v2.messages_for({"system": NO_FUNCTIONS, "chat": chat})
+    render, parse = glaive_v2.cases_for(3, messages, tools)
+    assert [line["request"]["messages"] for line in render] == [messages[:2]]
+    assert [line["request"]["messages"] for line in parse] == [messages[:2], messages[:3]]
 
 
 def test_an_empty_turn_is_kept_as_written():

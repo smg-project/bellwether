@@ -18,14 +18,14 @@ license. A row becomes OpenAI chat messages:
   such id, so bellwether writes it and ``origin`` marks the cases that hold one (``WRITTEN``). The ids leave the row
   out, so a chat that recurs in another row gives the same cases there.
 
-Each assistant turn is a parse case, and each user turn an assistant answers a render case; a turn with no text is kept
-as written, a message whose content is "". Every row is taken. A row these rules cannot map has no case, and the import
-names it with its reason; a case that repeats an earlier one is left out (``corpus_sets.leave_out_repeats``), and the
-import names it with the case it repeats. The sets take more than ``corpus_sets.LIMIT`` as plain JSON Lines, so
-``corpus_sets.write`` stores every one of them compressed in Git LFS. The dataset ships no LICENSE file, so the import
-writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this module imports only
-what it shares with the other importers: the readers of pinned Hugging Face and GitHub files (``hf``, ``github``) and
-the set writer (``corpus_sets``).
+Each assistant turn is a parse case, and each user turn or tool result an assistant turn answers a render case, the
+prompt a model goes on from; a turn with no text is kept as written, a message whose content is "". Every row is taken.
+A row these rules cannot map has no case, and the import names it with its reason; a case that repeats an earlier one is
+left out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The sets take more than
+``corpus_sets.LIMIT`` as plain JSON Lines, so ``corpus_sets.write`` stores every one of them compressed in Git LFS. The
+dataset ships no LICENSE file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond
+the standard library, this module imports only what it shares with the other importers: the readers of pinned Hugging
+Face and GitHub files (``hf``, ``github``) and the set writer (``corpus_sets``).
 """
 
 from __future__ import annotations
@@ -223,9 +223,9 @@ def cases_for(index: int, messages: list[dict], tools: list[dict]) -> tuple[list
     """Row ``index``'s render and parse cases, from its messages (``messages_for``).
 
     Each assistant turn is a parse case: its request is every message before it, its message is the turn as a parser
-    returns it (``expected``). Each user turn an assistant turn answers is a render case: the request up to and
-    including it. A case is named, and its origin located, by the turn's index in the chat, the system message not
-    counted.
+    returns it (``expected``). Each user turn or tool result an assistant turn answers is a render case: the request up
+    to and including it, the prompt a model goes on from. A case is named, and its origin located, by the turn's index
+    in the chat, the system message not counted.
     """
     first = 1 if messages and messages[0]["role"] == "system" else 0
     render, parse = [], []
@@ -237,7 +237,7 @@ def cases_for(index: int, messages: list[dict], tools: list[dict]) -> tuple[list
             request = _request(messages[:position], tools)
             line = {"name": name, "request": request, "message": expected(message)}
             parse.append({**line, "notes": notes, "origin": origin(index, turn, request)})
-        elif message["role"] == "user" and _role(messages, position + 1) == "assistant":
+        elif message["role"] in ("user", "tool") and _role(messages, position + 1) == "assistant":
             request = _request(messages[: position + 1], tools)
             render.append({"name": name, "request": request, "notes": notes, "origin": origin(index, turn, request)})
     return render, parse
@@ -272,8 +272,8 @@ def build_sets(
 
     A row that cannot be mapped is appended to ``skipped`` with its reason. A set holds whole rows, in index order, and
     at most ``set_size`` cases of either kind; the render set and the parse set of one number hold the same rows. A row
-    has no more render cases than parse cases, since each render case's user turn is answered by an assistant turn, a
-    parse case, so the parse cases decide when a set is full.
+    has no more render cases than parse cases, since the turn each render case ends at is answered by an assistant turn,
+    a parse case, so the parse cases decide when a set is full.
     """
     groups: list[tuple[list[dict], list[dict]]] = [([], [])]
     for index, row in enumerate(rows):
