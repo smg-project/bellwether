@@ -251,3 +251,22 @@ def test_readme_cuts_a_full_commit_id_to_eight_characters_and_writes_a_gigabyte_
     )
     assert _short("pypi:bfcl-eval==2026.3.23") == "pypi:bfcl-eval==2026.3.23"
     assert (_size(37_040_000), _size(1_243_300_000)) == ("37.0 MB", "1.24 GB")
+
+
+@pytest.mark.parametrize(
+    ("line", "why"),
+    [
+        ("[1, 2]", ": line 1 is not a JSON object"),
+        ('"text"', ": line 1 is not a JSON object"),
+        ("{not json", ":1: not JSON"),
+    ],
+)
+def test_readme_names_a_corpus_line_that_is_not_a_json_object(tmp_path, capsys, line, why):
+    from bellwether.count import README_BEGIN, README_END
+
+    fixtures, corpus = holdings(tmp_path)
+    (corpus / "parse" / "bfcl-x.jsonl").write_text(line + "\n")
+    readme = tmp_path / "README.md"
+    readme.write_text(README.format(begin=README_BEGIN, end=README_END))
+    assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus), "--readme", str(readme)]) == 1
+    assert f"{corpus / 'parse' / 'bfcl-x.jsonl'}{why}" in capsys.readouterr().err

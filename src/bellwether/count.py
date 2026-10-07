@@ -46,6 +46,8 @@ def set_sources(corpus: Path) -> dict[tuple[str, str], str]:
             for path in sorted(p for p in (corpus / kind).rglob("*") if p.is_file() and storage.stem(p) is not None):
                 with storage.open_text(path) as lines:
                     _, first = next(jsonl.load(lines, path), (None, None))
+                if first is not None and not isinstance(first, dict):
+                    raise ValueError(f"{path}: line 1 is not a JSON object")
                 origin = first.get("origin") if first else None
                 if isinstance(origin, dict):
                     found[(kind, storage.stem(path))] = origin["dataset"]
@@ -126,10 +128,16 @@ def corpus_rows(corpus: Path) -> list[dict]:
             cases = plain = 0
             dataset, froms, licenses = HAND_WRITTEN, set(), set()
             with storage.open_text(path) as lines:
-                for line in lines:
+                for number, line in enumerate(lines, 1):
                     cases += 1
                     plain += len(line.encode("utf-8"))
-                    origin = json.loads(line).get("origin")
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as err:
+                        raise ValueError(f"{path}:{number}: not JSON: {err}") from err
+                    if not isinstance(record, dict):
+                        raise ValueError(f"{path}: line {number} is not a JSON object")
+                    origin = record.get("origin")
                     if isinstance(origin, dict):
                         dataset = origin["dataset"]
                         # A line built from others' parts (shapes pairs a BFCL row with a GSM8K one) names theirs.
