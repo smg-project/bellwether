@@ -181,11 +181,11 @@ carry the language and the exemplar's key (`mgsm-exemplars-ja-1`), and `origin.r
 
 The import changes MGSM's text in one way only: it drops the exemplars' two labels and any whitespace before their final
 sentence. It keeps the rest as written, whitespace at the edges of a question included, and writes no text of its own:
-every string in a case's request and message is MGSM's. Some of MGSM's Bengali text is not in Unicode's NFC form: 238
-of the 250 Bengali questions, and the solutions of exemplars `bn-2` to `bn-8`, write U+09DF BENGALI LETTER YYA or
-U+09DC BENGALI LETTER RRA as one code point, which NFC writes as two. A tokenizer that normalizes to NFC, as Qwen3-8B's
-does, encodes the NFC text, so `bellwether record --kind parse` rejects those seven exemplars for such a model ("the
-output text does not survive a tokenize-detokenize round trip"), and issue #57 tracks it.
+every string in a case's request and message is MGSM's. Some of MGSM's Bengali text is not in Unicode's NFC form: 238 of
+the 250 Bengali questions, and the solutions of exemplars `bn-2` to `bn-8`, write U+09DF BENGALI LETTER YYA or U+09DC
+BENGALI LETTER RRA as one code point, which NFC writes as two. A tokenizer that normalizes to NFC, as Qwen3-8B's does,
+encodes the NFC text; `bellwether record --kind parse` then builds those seven exemplars' output ids without the
+tokenizer's Unicode normalization, so the ids decode back to MGSM's text as written (#57).
 
 MGSM is CC-BY-4.0, which asks that a copy credit its creators, say what was changed, and give the license's text or
 its URI (section 3(a)(1)): the table gives the credit and the URI, and the paragraphs above say what the import changes.

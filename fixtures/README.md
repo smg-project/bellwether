@@ -126,7 +126,9 @@ every two-way split for outputs of at most 32 tokens; `random-<seed>` thirty see
 of one to eight tokens) and `reference` with `source: roundtrip`, the `message` (with `role`), the
 `finish_reason` (`tool_calls` when the message has calls, else `stop`), `end_of_turn`, the output
 `text` and the provenance. `output_ids` are the tokenizer's encoding of the output text on its own, not ids a model
-sampled in context; a replay feeds them, with their pieces, as the engine's output. A case whose
-template does not extend the generation prompt when the turn is appended, or whose tokens do not give
-back its text under the incremental decode, is reported and not recorded, and the run exits 1;
-recording it is left to the manifest's next authority, which nothing here invokes.
+sampled in context; a replay feeds them, with their pieces, as the engine's output. Where the
+tokenizer's own ids decode to other text, because its normalizer applies a Unicode normalization form
+(NFC, NFD, NFKC or NFKD), they are the encoding of the text as written, without those forms (#57).
+A case whose template does not extend the generation prompt when the turn is appended, or whose
+tokens do not give back its text under the incremental decode, is reported and not recorded, and the
+run exits 1; recording it is left to the manifest's next authority, which nothing here invokes.

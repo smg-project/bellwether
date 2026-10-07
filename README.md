@@ -151,6 +151,13 @@ naming the file and the command that fetches it,
 `hf download <model> generation_config.json --revision <sha>`, which leaves the hub cache's
 `.no_exist` marker when the repository has no such file.
 
+The output's token ids must decode back to its text. When the tokenizer's own ids do not, because its
+normalizer applies a Unicode normalization form (Qwen3-8B's NFC writes U+09DF, one code point in the
+text, as two), the ids are built from the text as written, by a copy of the tokenizer whose normalizer
+leaves out NFC, NFD, NFKC and NFKD and keeps every other step. The run prints how many cases of each
+set took that path (#57); `sets.toml` does not record it. A case whose ids do not give back its text
+either way is reported and not recorded.
+
 ## The list of models
 
 ```bash
