@@ -36,7 +36,7 @@ def test_registry_only_lists_every_generative_checkpoint_once_without_asking_the
     assert {row.status for row in rows} == {"unchecked", "no-checkpoint-named"}
     assert {(row.revision, row.created, row.downloads) for row in rows} == {(None, None, None)}
     assert models[:2] == ["deepseek-ai/DeepSeek-V4.1-Flash", "zai-org/GLM-5.3-Flash"]
-    # Without the Hub only Simo's named models have a tier; a row with no checkpoint is the rest.
+    # Without the Hub only the maintainer's named models have a tier; a row with no checkpoint is the rest.
     assert [row.tier for row in rows] == [1, 1] + [None] * 23 + [3] * 3
     assert models[2:25] == sorted(models[2:25])  # without downloads, the id orders the rows
 

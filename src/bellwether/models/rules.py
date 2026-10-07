@@ -51,7 +51,7 @@ NON_GENERATIVE_PIPELINES = frozenset(
 )
 
 CUTOFF = date(2025, 1, 1)  # older checkpoints are listed only when a registry names them
-# Simo's tier, in his order. An entry ending in "/" is an organization: all its current chat
+# The maintainer's tier, in the maintainer's order. An entry ending in "/" is an organization: all its current chat
 # checkpoints, in order of downloads.
 TIER1 = (
     "deepseek-ai/DeepSeek-V4.1-Flash",
@@ -89,7 +89,7 @@ def is_test_model(model_id: str) -> bool:
 
 
 def is_gpt_oss(model_id: str, architectures: Iterable[str] = ()) -> bool:
-    """gpt-oss is set aside (Simo); a checkpoint built on it says so in its name or its architecture."""
+    """gpt-oss is set aside (the maintainer); a checkpoint built on it says so in its name or its architecture."""
     return "gpt-oss" in model_id.lower() or "GptOssForCausalLM" in architectures
 
 
@@ -158,7 +158,7 @@ def tier_of(model_id: str, created: date | None, built: date, current_chat: bool
 
 
 def tier_without_hub(model_id: str) -> int | None:
-    """Without the Hub's answer only Simo's named models have a tier; the rest wait on what the Hub says.
+    """Without the Hub's answer only the maintainer's named models have a tier; the rest wait on what the Hub says.
 
     Whether a checkpoint is a current chat checkpoint, and when it was created, are the Hub's to tell.
     """
@@ -170,7 +170,7 @@ _TIER_ORDER = {1: 1, 2: 2, None: 3, 3: 4}
 
 
 def order_key(model_id: str, tier: int | None, downloads: int | None) -> tuple[int, int, int, str]:
-    """Tier, then Simo's order inside tier 1, then 30-day downloads, then the id so ties are stable."""
+    """Tier, then the maintainer's order inside tier 1, then 30-day downloads, then the id so ties are stable."""
     rank = _tier1_rank(model_id, current_chat=True) if tier == 1 else None
     return (_TIER_ORDER[tier], rank or 0, -(downloads or 0), model_id)
 

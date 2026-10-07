@@ -107,7 +107,7 @@ def registry_checkpoints(entries: Iterable[Entry]) -> dict[str, _Named]:
 
 
 def set_aside(entries: Iterable[Entry]) -> list[str]:
-    """The gpt-oss checkpoints the registries name, which Simo set aside: left out of the list, and said aloud."""
+    """The registries' gpt-oss checkpoints, which the maintainer set aside: left out of the list, and said aloud."""
     return sorted(
         {
             model
@@ -297,7 +297,7 @@ def _modality(architectures: set[str], multimodal: set[str]) -> str | None:
 
 
 def missing_from_tier1(rows: Iterable[Row]) -> list[str]:
-    """Simo's named models the list lacks; tier 1 ranks rows and adds none, so a missing one is said aloud."""
+    """The maintainer's named models the list lacks; tier 1 ranks rows and adds none, so a missing one is said aloud."""
     models = {row.model for row in rows}
     return [entry for entry in TIER1 if not entry.endswith("/") and entry not in models]
 
