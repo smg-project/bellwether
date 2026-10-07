@@ -314,7 +314,8 @@ def write(
     afterwards, one at a time from their plain files, if their total passes ``LIMIT``.
 
     Each file is written whole or not at all (``storage.write``), and nothing is removed until everything is written,
-    so a write cut short or refused leaves the old files. ``files`` are the import's other files, such as a dataset's
+    so a write cut short or refused removes no file: a set it had not reached keeps its old file, and a set it had
+    reached holds the new content. ``files`` are the import's other files, such as a dataset's
     license, as bytes by path under ``corpus_dir``; they are written as they are and do not count toward ``LIMIT``. The
     prefix is the importer's. ``summary``, when given, collects the counts ``report_summary`` prints.
     """
