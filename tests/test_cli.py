@@ -174,7 +174,22 @@ def lines_off_the_proposal() -> list:
             {**parse, "second_references": {"tool_chat_template_mistral.jinja": no_end_of_turn}},
             id="a round-trip entry with a result but no end of turn",
         ),
+        *(
+            pytest.param(
+                {**parse, "second_references": {"tool_chat_template_mistral.jinja": without(recorded, field)}},
+                id=f"a parse entry with a result but no {field}",
+            )
+            for field in ("text", "message", "finish_reason", "chunk_plans")
+        ),
+        pytest.param(
+            {**render, "second_references": {"tool_chat_template_apertus.jinja": without(entry, "text")}},
+            id="a render entry with a result but no text",
+        ),
     ]
+
+
+def without(entry: dict, field: str) -> dict:
+    return {key: value for key, value in entry.items() if key != field}
 
 
 @pytest.mark.parametrize("line", lines_off_the_proposal())
@@ -269,5 +284,7 @@ def lines_with_one_fault() -> list:
 @pytest.mark.parametrize(("line", "where", "keyword"), lines_with_one_fault())
 def test_case_schema_refuses_a_line_for_its_one_fault(line, where, keyword):
     validator = Draft202012Validator(json.loads(schema_path().read_text()))
-    errors = [("/".join(map(str, error.absolute_path)), error.validator) for error in validator.iter_errors(line)]
-    assert errors == [(where, keyword)]
+    # One fault, one place and one keyword: `required` reports each missing field, so an entry with no result is one
+    # fault however many result fields its kind requires.
+    errors = {("/".join(map(str, error.absolute_path)), error.validator) for error in validator.iter_errors(line)}
+    assert errors == {(where, keyword)}

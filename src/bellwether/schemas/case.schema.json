@@ -38,7 +38,7 @@
       }
     },
     {
-      "description": "a parse line's second reference comes from the round trip, and when it records the case it carries the token ids and pieces of its own output and the stop id that ends it",
+      "description": "a parse line's second reference comes from the round trip, and when it records the case it carries what the reference gives for its kind: the output's text, token ids, pieces and chunk plans, the message, the finish reason and the stop id that ends it",
       "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
       "then": {
         "properties": {
@@ -46,14 +46,14 @@
             "additionalProperties": {
               "properties": {"source": {"const": "roundtrip"}},
               "if": {"$ref": "#/$defs/records_the_case"},
-              "then": {"required": ["ids", "pieces", "end_of_turn"]}
+              "then": {"required": ["text", "ids", "pieces", "chunk_plans", "message", "finish_reason", "end_of_turn"]}
             }
           }
         }
       }
     },
     {
-      "description": "a render reference that records the case carries the prompt ids, and so does a render second reference, which comes from hf-template",
+      "description": "a render reference that records the case carries the prompt ids, and a render second reference, which comes from hf-template, carries the prompt ids and text",
       "if": {"properties": {"kind": {"const": "render"}}, "required": ["kind"]},
       "then": {
         "properties": {
@@ -62,7 +62,7 @@
             "additionalProperties": {
               "properties": {"source": {"const": "hf-template"}},
               "if": {"$ref": "#/$defs/records_the_case"},
-              "then": {"required": ["input_ids"]}
+              "then": {"required": ["input_ids", "text"]}
             }
           }
         }
