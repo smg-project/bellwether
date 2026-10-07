@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import hf, swehero
+from bellwether.importers import corpus_sets, hf, swehero
 from bellwether.record.corpus import read_cases
 
 TOOLS = [
@@ -253,7 +253,7 @@ RENDER, PARSE = ("render", "swehero-13"), ("parse", "swehero-13")
 
 
 def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
-    sets = swehero.build_sets([row()], TOOLS)
+    sets = swehero.build_sets(13, [row()], TOOLS)
     assert sorted(sets) == [PARSE, RENDER]
     render, parse = sets[RENDER], sets[PARSE]
     assert [line["name"] for line in render] == ["swehero-13-0-2", "swehero-13-0-4", "swehero-13-0-7"]
@@ -304,7 +304,7 @@ def test_a_row_gives_a_render_and_a_parse_case_for_each_chosen_turn():
 def test_origin_marks_the_tool_result_ids_bellwether_writes_where_a_request_holds_a_tool_message():
     # The data's tool messages carry no id: each one's tool_call_id is bellwether's, the id of the call it answers by
     # position. The calls' own ids are the data's. A request with no tool message holds nothing bellwether wrote.
-    sets = swehero.build_sets([row()], TOOLS)
+    sets = swehero.build_sets(13, [row()], TOOLS)
     for kind in (RENDER, PARSE):
         first, middle, last = sets[kind]
         assert [message["role"] for message in first["request"]["messages"]] == ["system", "user"]
@@ -315,7 +315,7 @@ def test_origin_marks_the_tool_result_ids_bellwether_writes_where_a_request_hold
 
 def test_a_turn_without_calls_is_a_parse_case_with_content_only():
     trajectory = [*TRAJECTORY[:7], item("assistant", "All done.")]
-    [*_, last] = swehero.build_sets([row(trajectory=trajectory)], TOOLS)[PARSE]
+    [*_, last] = swehero.build_sets(13, [row(trajectory=trajectory)], TOOLS)[PARSE]
     assert last["message"] == {"content": "All done."}
     assert last["notes"] == "SWE-Hero owner__repo-0: the assistant turn at message 7 of 8 (no call)"
 
@@ -331,22 +331,21 @@ EDGES = [
 
 
 def test_whitespace_at_the_edges_of_every_message_is_kept():
-    sets = swehero.build_sets([row(trajectory=EDGES)], TOOLS)
+    sets = swehero.build_sets(13, [row(trajectory=EDGES)], TOOLS)
     [*_, last] = sets[RENDER]
     assert [message["content"] for message in last["request"]["messages"]] == [item["content"] for item in EDGES[:4]]
     assert [line["message"]["content"] for line in sets[PARSE]] == ["Let me look.\n\n", "Done. \n\n"]
 
 
-def test_one_row_in_stride_is_sampled_and_every_unusable_row_is_named_with_its_reason(monkeypatch):
-    monkeypatch.setattr(swehero, "STRIDE", 2)
-    rows = [row(number) for number in range(5)]
+def test_every_row_gives_cases_and_every_unusable_row_is_named_with_its_reason():
+    rows = [row(number) for number in range(6)]
     rows[1]["trajectory"] = TRAJECTORY[:6]
     rows[2]["license"] = "GPL-3.0"
     rows[3]["license"] = None
     skipped: list = []
-    sets = swehero.build_sets(rows, TOOLS, skipped)
-    assert sorted({line["origin"]["row"] for line in sets[RENDER]}) == [0, 4]
-    names = [f"swehero-13-{number}-{turn}" for number in (0, 4) for turn in (2, 4, 7)]
+    sets = swehero.build_sets(13, rows, TOOLS, skipped)
+    assert sorted({line["origin"]["row"] for line in sets[RENDER]}) == [0, 4, 5]
+    names = [f"swehero-13-{number}-{turn}" for number in (0, 4, 5) for turn in (2, 4, 7)]
     assert [line["name"] for line in sets[RENDER]] == names
     assert [line["name"] for line in sets[PARSE]] == names
     assert skipped == [
@@ -356,27 +355,46 @@ def test_one_row_in_stride_is_sampled_and_every_unusable_row_is_named_with_its_r
     ]
 
 
-def test_rows_under_each_reviewed_repository_license_are_kept(monkeypatch):
-    monkeypatch.setattr(swehero, "STRIDE", 1)
+def test_rows_under_each_reviewed_repository_license_are_kept():
     licenses = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"]
     skipped: list = []
-    sets = swehero.build_sets([row(number, license) for number, license in enumerate(licenses)], TOOLS, skipped)
+    sets = swehero.build_sets(13, [row(number, license) for number, license in enumerate(licenses)], TOOLS, skipped)
     assert skipped == []
     assert sorted({(line["origin"]["row"], line["origin"]["repository_license"]) for line in sets[PARSE]}) == list(
         enumerate(licenses)
     )
 
 
-def test_a_sampled_row_that_gives_no_turn_is_named(monkeypatch):
-    monkeypatch.setattr(swehero, "STRIDE", 2)
+def test_a_row_that_gives_no_turn_is_named(monkeypatch):
     monkeypatch.setattr(swehero, "MAX_REQUEST_BYTES", 100)
     skipped: list = []
-    assert swehero.build_sets([row(), row(1), row(2, trajectory=TRAJECTORY[:2])], TOOLS, skipped) == {}
+    assert swehero.build_sets(13, [row(), row(1), row(2, trajectory=TRAJECTORY[:2])], TOOLS, skipped) == {}
     first = size(swehero.messages_for(TRAJECTORY), 2)
     assert skipped == [
         (f"shard 13 row 0: the first assistant turn's request has {first} bytes", swehero.NO_TURN),
+        (f"shard 13 row 1: the first assistant turn's request has {first} bytes", swehero.NO_TURN),
         ("shard 13 row 2: the trajectory has no assistant turn", swehero.NO_TURN),
     ]
+
+
+def test_the_import_reads_every_shard_of_the_training_split_each_pinned_by_its_sha256():
+    assert swehero.SHARD_FILES == [f"data/train-{shard:05d}-of-00014.parquet" for shard in range(14)]
+    assert list(swehero.FILES) == [hf.CARD, swehero.TOOLS_FILE, *swehero.SHARD_FILES]
+    assert all(re.fullmatch("[0-9a-f]{64}", sha256) for sha256 in swehero.FILES.values())
+    assert swehero.FILES["data/train-00013-of-00014.parquet"] == (
+        "936b195ed11b2b9be2e60cf9cb274dfc2f31d07745cbd6144658da988ce295a9"
+    )
+
+
+def test_each_shard_gives_its_own_sets_named_for_it_and_its_cases_name_the_file_they_come_from():
+    sets = swehero.build_sets(0, [row()], TOOLS)
+    assert sorted(sets) == [("parse", "swehero-0"), ("render", "swehero-0")]
+    [first, *_] = sets["render", "swehero-0"]
+    assert first["name"] == "swehero-0-0-2"
+    assert (first["origin"]["file"], first["origin"]["sha256"]) == (
+        "data/train-00000-of-00014.parquet",
+        "5149ba06dc7bcfe2fc01a20036e35cd535fde91840253c15bc070d95cf217be6",
+    )
 
 
 FUNCTION = pa.struct([("arguments", pa.string()), ("name", pa.string())])
@@ -407,7 +425,7 @@ def test_rows_are_read_from_the_shard_in_order_with_the_fields_the_import_uses(t
 
 
 def test_written_sets_read_back_and_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
-    sets, corpus = swehero.build_sets([row()], TOOLS), tmp_path / "corpus"
+    sets, corpus = swehero.build_sets(13, [row()], TOOLS), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "swehero-12"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
@@ -442,17 +460,17 @@ CARD = (
 )
 
 
-def serve(tmp_path, monkeypatch, rows: list[dict], card: str = CARD, tools: list = TOOLS) -> list[tuple]:
-    """Stand in for the Hub: the three files, written to ``tmp_path`` and pinned by their sha256 in place of the real
-    pins; returns the downloads asked for."""
-    files = {
-        hf.CARD: tmp_path / "README.md",
-        swehero.TOOLS_FILE: tmp_path / "tools.json",
-        swehero.SHARD_FILE: write_shard(tmp_path / "shard.parquet", rows),
-    }
+def serve(tmp_path, monkeypatch, *shards: list[dict], card: str = CARD, tools: list = TOOLS) -> list[tuple]:
+    """Stand in for the Hub: the card, tools.json and ``shards`` as the split's first shards, written to ``tmp_path``
+    and pinned by their sha256 in place of the real pins; returns the downloads asked for."""
+    shard_files = swehero.SHARD_FILES[: len(shards)]
+    files = {hf.CARD: tmp_path / "README.md", swehero.TOOLS_FILE: tmp_path / "tools.json"}
+    for number, (name, rows) in enumerate(zip(shard_files, shards, strict=True)):
+        files[name] = write_shard(tmp_path / f"shard-{number}.parquet", rows)
     files[hf.CARD].write_text(card)
     files[swehero.TOOLS_FILE].write_text(json.dumps(tools))
     pins = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()}
+    monkeypatch.setattr(swehero, "SHARD_FILES", shard_files)
     monkeypatch.setattr(swehero, "FILES", pins)
     downloads: list[tuple] = []
 
@@ -464,21 +482,24 @@ def serve(tmp_path, monkeypatch, rows: list[dict], card: str = CARD, tools: list
     return downloads
 
 
-def test_the_command_reads_the_pinned_files_under_its_cache_then_writes_and_checks(tmp_path, monkeypatch, capsys):
-    downloads = serve(tmp_path, monkeypatch, [row()])
+def test_the_command_reads_every_pinned_shard_under_its_cache_then_writes_and_checks(tmp_path, monkeypatch, capsys):
+    downloads = serve(tmp_path, monkeypatch, [row()], [row(0, trajectory=EDGES)])
     corpus = tmp_path / "corpus"
     argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
     assert main([*argv, "--check"]) == 1
     err = capsys.readouterr().err
-    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: missing" in err
-    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: missing" in err
+    for name in ("swehero-0", "swehero-1"):
+        assert f"{corpus / 'parse' / f'{name}.jsonl'}: missing" in err
+        assert f"{corpus / 'render' / f'{name}.jsonl'}: missing" in err
     assert main(argv) == 0
     assert main([*argv, "--check"]) == 0
     out = capsys.readouterr().out
-    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: 3 cases, 3 distinct messages\n" in out
-    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: 3 cases\n" in out
-    assert f"{corpus}: 6 cases in the 2 SWE-Hero sets, 0 left out as repeats, 3 distinct messages\n" in out
-    assert f"{corpus}: the SWE-Hero sets equal a fresh import" in out
+    assert f"{corpus / 'parse' / 'swehero-0.jsonl'}: 3 cases, 3 distinct messages\n" in out
+    assert f"{corpus / 'parse' / 'swehero-1.jsonl'}: 2 cases, 2 distinct messages\n" in out
+    assert f"{corpus / 'render' / 'swehero-0.jsonl'}: 3 cases\n" in out
+    assert f"{corpus / 'render' / 'swehero-1.jsonl'}: 2 cases\n" in out
+    assert f"{corpus}: 10 cases in the 4 SWE-Hero sets, 0 left out as repeats, 5 distinct messages\n" in out
+    assert f"{corpus}: the SWE-Hero sets equal a fresh import of {swehero.SOURCE}, every row of its 2 shards\n" in out
     at_the_pin = {
         "repo_type": "dataset",
         "revision": swehero.REVISION,
@@ -486,7 +507,7 @@ def test_the_command_reads_the_pinned_files_under_its_cache_then_writes_and_chec
         "force_download": False,
         "token": False,
     }
-    pinned = [(swehero.REPO, name, at_the_pin) for name in (hf.CARD, swehero.TOOLS_FILE, swehero.SHARD_FILE)]
+    pinned = [(swehero.REPO, name, at_the_pin) for name in (hf.CARD, swehero.TOOLS_FILE, *swehero.SHARD_FILES)]
     assert downloads == pinned * 3
 
 
@@ -510,30 +531,50 @@ def test_the_command_names_every_row_it_leaves_out_in_the_words_of_the_other_imp
     serve(tmp_path, monkeypatch, rows)
     assert main(["import", "swehero", "--corpus", str(tmp_path / "corpus"), "--cache", str(tmp_path / "cache")]) == 0
     out = capsys.readouterr().out
-    every = ", ".join(f"shard 13 row {number}: GPL-3.0" for number in range(51))
+    every = ", ".join(f"shard 0 row {number}: GPL-3.0" for number in range(51))
     assert f"no case for 51 row(s) ({every}): {swehero.LICENSE_NOT_ALLOWED}\n" in out
-    unpaired = "shard 13 row 51: message 4 makes 2 call(s) and 1 result(s) follow"
+    unpaired = "shard 0 row 51: message 4 makes 2 call(s) and 1 result(s) follow"
     assert f"no case for 1 row(s) ({unpaired}): {swehero.UNPAIRED}\n" in out
 
 
-def test_the_command_leaves_out_a_case_that_repeats_an_earlier_one_and_counts_distinct_messages(
+def test_the_command_leaves_out_a_case_that_repeats_an_earlier_one_across_shards_and_counts_distinct_messages(
     tmp_path, monkeypatch, capsys
 ):
     # Two trajectories of one task open with the same system prompt and issue, so the requests of their first turns
-    # are the same: the second render case repeats the first. Their parse cases differ, by the turn each expects; the
-    # later turns, whose requests differ, expect the same messages, which the report counts once.
-    monkeypatch.setattr(swehero, "STRIDE", 1)
+    # are the same: the second render case repeats the first, here from the next shard. Their parse cases differ, by
+    # the turn each expects; the later turns, whose requests differ, expect the same messages, counted once.
     other = [*TRAJECTORY[:2], item("assistant", "Let me read it.", call("call-a", "execute_bash", '{"command": "ls"}'))]
-    serve(tmp_path, monkeypatch, [row(0), row(1, trajectory=[*other, *TRAJECTORY[3:]])])
+    serve(tmp_path, monkeypatch, [row(0)], [row(0, trajectory=[*other, *TRAJECTORY[3:]])])
     corpus = tmp_path / "corpus"
     argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
     assert main(argv) == 0
     out = capsys.readouterr().out
-    assert "no case swehero-13-1-2: it repeats swehero-13-0-2\n" in out
-    assert f"{corpus / 'parse' / 'swehero-13.jsonl'}: 6 cases, 4 distinct messages\n" in out
-    assert f"{corpus / 'render' / 'swehero-13.jsonl'}: 5 cases, 1 left out as repeats\n" in out
-    assert f"{corpus}: 11 cases in the 2 SWE-Hero sets, 1 left out as repeats, 4 distinct messages\n" in out
-    render = [case.name for case in read_cases(corpus / "render" / "swehero-13.jsonl")]
-    assert render == ["swehero-13-0-2", "swehero-13-0-4", "swehero-13-0-7", "swehero-13-1-4", "swehero-13-1-7"]
-    assert len(read_cases(corpus / "parse" / "swehero-13.jsonl")) == 6
+    assert "no case swehero-1-0-2: it repeats swehero-0-0-2\n" in out
+    assert f"{corpus / 'parse' / 'swehero-1.jsonl'}: 3 cases, 3 distinct messages\n" in out
+    assert f"{corpus / 'render' / 'swehero-1.jsonl'}: 2 cases, 1 left out as repeats\n" in out
+    assert f"{corpus}: 11 cases in the 4 SWE-Hero sets, 1 left out as repeats, 4 distinct messages\n" in out
+    render = [case.name for case in read_cases(corpus / "render" / "swehero-1.jsonl")]
+    assert render == ["swehero-1-0-4", "swehero-1-0-7"]
+    assert main([*argv, "--check"]) == 0
+
+
+def test_past_the_limit_the_command_writes_every_set_compressed_and_checks_it(tmp_path, monkeypatch, capsys):
+    # The full import takes 15 GB as plain JSON Lines; here the limit is moved below two shards' worth instead.
+    serve(tmp_path, monkeypatch, [row()], [row(0, trajectory=EDGES)])
+    corpus = tmp_path / "corpus"
+    argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
+    assert main(argv) == 0
+    monkeypatch.setattr(corpus_sets, "LIMIT", 1000)
+    assert main([*argv, "--check"]) == 1
+    assert "a fresh import writes this set as swehero-0.jsonl.zst" in capsys.readouterr().err
+    assert main(argv) == 0
+    assert sorted(path.relative_to(corpus).as_posix() for path in corpus.rglob("*") if path.is_file()) == [
+        f"{kind}/swehero-{shard}.jsonl.zst" for kind in ("parse", "render") for shard in (0, 1)
+    ]
+    assert [case.name for case in read_cases(corpus / "parse" / "swehero-0.jsonl.zst")] == [
+        "swehero-0-0-2",
+        "swehero-0-0-4",
+        "swehero-0-0-7",
+    ]
+    assert f"{corpus / 'render' / 'swehero-1.jsonl.zst'}: 2 cases\n" in capsys.readouterr().out
     assert main([*argv, "--check"]) == 0
