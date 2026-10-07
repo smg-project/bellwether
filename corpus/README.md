@@ -66,6 +66,7 @@ together.
 | SWE-bench Verified | `swebench-verified` (render), `swebench-verified-call` and `swebench-verified-content` (parse): 482 cases each, one per row outside pylint, except 8 whose patch carries code under other terms (below) | `hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf655a3137b2e8a75af1501690ec009ec3`, `data/test-00000-of-00001.parquet`, sha256 `030cfd7f2a704c4c0226e7f104c725a3b41230b1d3517f9c915ad7ea5be3fa25` | each row's code: its repository's license at the row's base commit, read from the repository's license file there and copied to `corpus/licenses/` (below); none is established for the issue texts | SWE-bench, Jimenez et al. 2024, Princeton NLP: https://github.com/SWE-bench/SWE-bench; Verified, OpenAI |
 | SWE-bench test | `swebench-test`, `swebench-test-call` and `swebench-test-content`: 1697 cases each, one per test row outside pylint that is not a Verified row, except 50 whose patch carries code under other terms. All 500 Verified rows are test rows, equal in every column the import reads, so each goes where its Verified row goes: imported once, as Verified, or left out with it. The 225 rows of the `dev` split, from six other repositories (astroid's under the LGPL among them), are not imported: the benchmark is the test split, and those repositories' licenses are not in the table | `hf:datasets/SWE-bench/SWE-bench@c6fe717fd7a4c3ac1daa4055a4fd082c6a1d28a2`, `data/test-00000-of-00001.parquet`, sha256 `d4f5a245c75319fa8240c540674958c4d491e82edf274b144d43836bdcbc4567` | as above | as above |
 | SWE-bench, copyleft | the rows from pylint-dev/pylint, kept apart: `swebench-verified-copyleft`, `swebench-verified-call-copyleft` and `swebench-verified-content-copyleft` (10 cases each); `swebench-test-copyleft`, `swebench-test-call-copyleft` and `swebench-test-content-copyleft` (47 each) | the two files above | GPL-2.0-or-later, copied as above | as above |
+| glaive-function-calling-v2 | `glaive-v2-00` to `glaive-v2-70`, every row: 289494 render cases, one per user turn or tool result an assistant turn answers, and 306240 parse cases, one per assistant turn, with 183629 distinct messages among them, stored as zstd in Git LFS (1243 MB plain, 81.4 MB compressed). 725 rows of the file have no case, and 104913 cases that repeat an earlier one are left out (the import names both) | `hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac`, file `glaive-function-calling-v2.json`, sha256 `e9b5d671812b5ca2fbd7b625a37d5c99a19576c37252cdc806defe256aea6dad`; the License copy from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84` (`content/licenses/LICENSE-2.0.txt`), sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` | Apache-2.0, checked in the front matter of the dataset card (`README.md`, sha256 `39c78f1f56b86fcd159cadeb8feda8a9333db6ef5ca0ce6830731ac3c666838e`) on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt) to `corpus/licenses/glaive-v2-LICENSE`, which `--check` checks | Glaive AI: https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2 (synthetic chats; the card names no generator) |
 
 A BFCL request is what the weekly run sends in function-calling mode through `OpenAICompletionsHandler`. A parse
 case's message is one call per ground-truth entry, each parameter taking its first acceptable value that is not
@@ -118,8 +119,11 @@ writes the gorilla repository's root `LICENSE`, pinned by commit and sha256, to 
 is the one the wheel was built from: the wheel's 183 files under `bfcl_eval/` are that commit's, byte for byte, and
 BFCL's publish workflow names a build of `main` by its UTC date, with a serial after the day's first commit, so
 `2026.3.23` is the first commit of 2026-03-23, and its only one. `berkeley-function-call-leaderboard/` has no LICENSE
-of its own, and the repository has no NOTICE file. The copies sit outside the `render/` and `parse/` directories the
-recorder reads, and each carries its importer's prefix.
+of its own, and the repository has no NOTICE file. The glaive-v2 sets carry the dataset's chats and function
+definitions, and the dataset ships no LICENSE or NOTICE file, only `license: apache-2.0` in its card, so
+`bellwether import glaive-v2` writes the License as the Apache Software Foundation publishes it, pinned by commit and
+sha256, to `glaive-v2-LICENSE`. The copies sit outside the `render/` and `parse/` directories the recorder reads, and
+each carries its importer's prefix.
 
 A message shape is which parts an assistant message holds, in the order a model writes them: reasoning
 (`reasoning_content`), content and calls (`tool_calls`). A shapes case combines GSM8K's text with BFCL's calls, so that
@@ -297,22 +301,53 @@ copyright statements, and reviewing by hand those that are not the repository's 
 only names another copyright holder under the repository's own license, such as the Smithsonian Astrophysical
 Observatory in astropy's `io/ascii` or INRIA in scikit-learn, does not count.
 
-Set names starting with `bfcl-`, `gsm8k-`, `hermes-`, `mgsm-`, `shapes-` or `swebench-` belong to that importer:
-`bellwether import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write, `bellwether import
-gsm8k` any `gsm8k-*` one, `bellwether import hermes` any `hermes-*` one, `bellwether import mgsm` any `mgsm-*` one,
-`bellwether import shapes` any `shapes-*` one, and `bellwether import swebench` any `swebench-*` one. Name hand-written
-sets otherwise.
+A glaive-v2 case comes from one chat, whose functions sit in its system prompt. The functions become `tools`, and the
+system message keeps what is neither the lead-in sentence nor a function, which leaves none in rows with functions. A
+call turn becomes an assistant message with empty content and one call, whose single-quoted arguments are written as a
+BFCL call's are; a function response becomes a `tool` message answering that call; a prose turn keeps its text without
+the closing `<|endoftext|>`. A turn with no text is kept as written, a message whose content is `""`: the file has four,
+assistant turns in rows 11267 and 33683 and user turns in rows 84134 and 97124. A parse case expects the call without an
+id; in the history each call has the id `call_<n>`, the chat's calls numbered from 0, which the dataset does not have,
+so a case whose request holds a call has `"written": ["tool call ids"]` in its `origin`. The ids leave the row out, so a
+chat that recurs in another row gives the same requests and messages there. Each assistant turn is a parse case, whose
+request is every message before it, and each user turn or tool result an assistant turn answers is a render case, the
+request up to and including that turn, the prompt a model goes on from; both are named `glaive-v2-<row>-<turn>`, the
+turn counted in the chat from 0. Row 69130 holds a U+0085 next-line character, which the corpus keeps raw, as GSM8K's
+U+2028.
+
+A glaive-v2 row with no faithful OpenAI form gives no case, and the import names it with its reason: 725 rows of the
+file, 351 of them because they declare one function name twice, so that a call to that name could be held to either
+definition (338 of them with two different definitions). A case whose request (and, for a parse case, message) repeats
+an earlier glaive-v2 case is left out and named with the case it repeats; such cases come from chats that open with the
+same turns. Every glaive-v2 case is distinct, though not every expected message: chats that differ in their history can
+end in the same turn, and "You're welcome! If you have any other questions, feel free to ask." alone ends 7837 parse
+cases. The sets hold every row, cut into sets of at most 5000 cases of either kind, a set's render and parse files
+holding the same rows: 289494 render and 306240 parse cases with 183629 distinct messages, after 104913 repeats are left
+out. That is 1243 MB of plain JSON Lines, past the 50 MB an import's sets stay plain, so `corpus_sets.write` stores
+every set compressed in Git LFS, 81.4 MB in all.
+
+Set names starting with `bfcl-`, `glaive-v2-`, `gsm8k-`, `hermes-`, `mgsm-`, `shapes-` or `swebench-` belong to that
+importer: `bellwether import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it did not write,
+`bellwether import glaive-v2` any `glaive-v2-*` one, `bellwether import gsm8k` any `gsm8k-*` one,
+`bellwether import hermes` any `hermes-*` one, `bellwether import mgsm` any `mgsm-*` one,
+`bellwether import shapes` any `shapes-*` one, and `bellwether import swebench` any `swebench-*` one. Name
+hand-written sets otherwise.
 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` (`--cache`) and downloads them on a miss. It then
 needs PyPI to still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from
 PyPI does not, and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL
-import copies, the License the Hermes import copies and the license files the SWE-bench import copies are read from
-`raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that commit.
-`bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The Hermes and SWE-bench
-files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under `huggingface/`, so a
-cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their sha256 on every read,
-and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history or a deleted dataset
-would end.
+import copies, the License the Hermes and glaive-v2 imports copy and the license files the SWE-bench import copies are
+read from `raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that
+commit. `bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The Hermes and
+SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under
+`huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their
+sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history
+or a deleted dataset would end.
+
+The glaive-v2 file and card come through `hf.fetch`, which keeps them in the Hugging Face cache layout under the same
+`~/.cache/bellwether/datasets` (`huggingface/`) and downloads them on a miss; with `HF_HUB_OFFLINE=1` it reads the
+cache only. CI keeps that directory whole, the store Xet keeps a file's bytes in included, in its one cache of pinned
+files.
 
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.

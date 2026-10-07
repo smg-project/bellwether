@@ -30,4 +30,8 @@ def run(args: argparse.Namespace) -> int:
         from .swebench import run as run_swebench
 
         return run_swebench(args)
+    if args.dataset == "glaive-v2":
+        from .glaive_v2 import run as run_glaive_v2
+
+        return run_glaive_v2(args)
     raise ValueError(f"no importer for {args.dataset!r}")
