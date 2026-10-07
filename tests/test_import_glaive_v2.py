@@ -539,6 +539,33 @@ def test_a_set_holds_whole_rows_and_no_more_cases_of_either_kind_than_the_set_si
     assert glaive_v2.build_sets([BROKEN], set_size=3) == {}
 
 
+def test_the_sets_come_one_number_at_a_time_as_build_sets_holds_them():
+    two_answers = {
+        "system": NO_FUNCTIONS,
+        "chat": "USER: g?\n\nASSISTANT: g. <|endoftext|>\n\nASSISTANT: h. <|endoftext|>",
+    }
+    rows = [chat_row("a", "b"), BROKEN, two_answers, chat_row("c")]
+    held_skipped: list = []
+    streamed_skipped: list = []
+    held = glaive_v2.build_sets(rows, set_size=3, skipped=held_skipped)
+    streamed = list(glaive_v2.iter_sets(rows, set_size=3, skipped=streamed_skipped))
+    assert streamed == [(kind, name, lines) for (kind, name), lines in held.items()]
+    assert streamed_skipped == held_skipped == [(1, held_skipped[0][1])]
+
+
+def test_a_numbers_sets_come_before_the_rows_of_the_next_number_are_read():
+    read: list[int] = []
+
+    def rows():
+        for index, row in enumerate([chat_row("a", "b"), chat_row("c", "d"), chat_row("e")]):
+            read.append(index)
+            yield row
+
+    sets = glaive_v2.iter_sets(rows(), set_size=2)
+    assert next(sets)[:2] == ("render", "glaive-v2-00")
+    assert read == [0, 1]  # row 1 does not fit beside row 0; row 2 is not read yet
+
+
 # The opening of the Apache License 2.0 as the Apache Software Foundation publishes it.
 APACHE = b"\n                                 Apache License\n                           Version 2.0, January 2004\n"
 

@@ -43,6 +43,14 @@ names a set stored in the form the limit does not give it, and names a set Git L
 that fetches it. A clone fetches these sets (`.lfsconfig` leaves out only the fixture sets), and CI pulls them before
 the import checks. The files an import writes beside its sets, such as a license, stay plain and do not count.
 
+An import and its `--check` hold one set at a time, and never a set's content whole: a set is compressed, written and
+compared as its lines are encoded. An importer that cannot hold all its cases at once hands its sets to
+`corpus_sets.write` and `check` as it builds them, one set at a time (glaive-v2 does, one number at a time), and the
+rule for repeats below applies as they come, keeping a sha256 of each case. Its total is known only at the end, so its
+sets are written plain and compressed afterwards if they pass the limit, unless the importer declares their form
+(`form="zstd"` or `"plain"`), which `write` and `check` hold to the limit: a declaration the total contradicts is
+refused.
+
 A parse set named for the shape of its message adds the message's parts to its name in order, in the words `reasoning`,
 `content` and `calls`: `gsm8k-<split>-reasoning-content` holds reasoning, then content; `gsm8k-<split>-content` holds
 content alone.

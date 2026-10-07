@@ -2,7 +2,9 @@
 
 A set is plain (``<set>.jsonl``) or compressed (``<set>.jsonl.zst``); both hold the same lines, and every reader takes
 either. A file Git LFS has not fetched holds its pointer instead, and reading it names the command that fetches it. A
-set is written whole or not at all (``write_whole``), as the importers' pinned files are.
+set is written whole or not at all (``write_whole``), as the importers' pinned files are. ``write`` and ``holds`` take a
+set's content whole, or in ``Pieces`` read as they are asked for, so that a large set is written and compared without a
+copy of it whole.
 
 It is a top-level module, as ``jsonl`` is, so that both the recorder and the importers can import it: importing anything
 under ``bellwether.record`` runs its ``__init__``, which loads the oracles and their third-party dependencies, and the
@@ -14,14 +16,27 @@ from __future__ import annotations
 import io
 import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import TextIO
+from typing import Protocol, TextIO
 
 COMPRESSED_SUFFIX = ".jsonl.zst"
 # Level 19, one thread: the compressed bytes are a function of the content for a given zstandard version, which
 # uv.lock pins. sets.toml and the import checks compare plain content, so nothing depends on them.
 ZSTD_LEVEL = 19
+
+
+# How much of a set file holds reads and decompresses at a time.
+READ_SIZE = 1 << 20
+
+
+class Pieces(Protocol):
+    """A set's plain content in pieces, read again as often as it is asked for, and its size in bytes: what ``write``
+    and ``holds`` take in place of the content, so that no copy of it is made whole."""
+
+    def __iter__(self) -> Iterator[bytes]: ...
+
+    def __len__(self) -> int: ...
 
 
 def is_compressed(path: Path) -> bool:
@@ -91,6 +106,52 @@ def plain_bytes(path: Path) -> bytes:
     return data
 
 
+def _plain_pieces(path: Path) -> Iterator[bytes]:
+    """A set file's plain content, a piece at a time, whichever form it is stored in, refused as ``plain_bytes`` refuses
+    it: a Git LFS pointer, and a frame zstd cannot decompress or that ends before its last block, as one a write left
+    cut short does."""
+    if is_lfs_pointer(path):
+        raise _pointer_refused(path)
+    with path.open("rb") as handle:
+        if not is_compressed(path):
+            while piece := handle.read(READ_SIZE):
+                yield piece
+            return
+        import zstandard
+
+        frame = zstandard.ZstdDecompressor().decompressobj()
+        try:
+            while piece := handle.read(READ_SIZE):
+                if plain := frame.decompress(piece):
+                    yield plain
+            if not frame.eof:
+                raise zstandard.ZstdError("decompression error: did not decompress full frame")
+        except zstandard.ZstdError as err:
+            raise ValueError(f"{path} cannot be decompressed: {err}") from err
+
+
+def holds(path: Path, data: bytes | Pieces) -> bool:
+    """Whether the set file at ``path`` holds ``data`` as its plain content, whichever form it is stored in.
+
+    The file is read and decompressed a piece at a time and compared as it comes, to its end even once it differs, so
+    that a file zstd cannot read is always named, by ``plain_bytes``'s reason, as is a Git LFS pointer.
+    """
+    stored = _plain_pieces(path)
+    same, buffer = True, memoryview(b"")
+    for piece in [data] if isinstance(data, bytes | bytearray | memoryview) else data:
+        piece = memoryview(piece)
+        while piece:
+            if not buffer:
+                buffer = memoryview(next(stored, b""))
+                if not buffer:
+                    return False
+            taken = min(len(buffer), len(piece))
+            same = same and buffer[:taken] == piece[:taken]
+            buffer, piece = buffer[taken:], piece[taken:]
+    rest = len(buffer) + sum(len(piece) for piece in stored)
+    return same and rest == 0
+
+
 def plain_text(path: Path) -> str:
     """A set file's lines as text, whichever form it is stored in."""
     return plain_bytes(path).decode("utf-8")
@@ -112,23 +173,55 @@ def open_text(path: Path) -> TextIO:
     return io.TextIOWrapper(zstandard.ZstdDecompressor().stream_reader(path.open("rb")), encoding="utf-8", newline="\n")
 
 
-def write(path: Path, data: bytes) -> None:
+def write(path: Path, data: bytes | Pieces) -> None:
     """Write a set's plain content to ``path`` in the form the name says: as it is, or compressed for ``.jsonl.zst``.
 
     The file is replaced whole (``write_whole``), so a write cut short leaves the old one. A compressed file that
     already holds ``data`` keeps its bytes, so a compressor upgrade makes no new LFS object; one that cannot be read, a
-    Git LFS pointer or a frame zstd cannot decompress, is replaced.
+    Git LFS pointer or a frame zstd cannot decompress, is replaced. ``data`` in ``Pieces`` is compared, compressed and
+    written a piece at a time. Whole or in pieces, it is compressed by zstd's stream writer, told the size first, so the
+    bytes are a function of the content however it is given: zstd's one-shot compress gives content past its window
+    (8 MiB at level 19) other bytes.
     """
+    whole = isinstance(data, bytes | bytearray | memoryview)
     if is_compressed(path):
         try:
-            if path.is_file() and plain_bytes(path) == data:
+            if path.is_file() and (plain_bytes(path) == data if whole else holds(path, data)):
                 return
         except ValueError:
             pass  # a Git LFS pointer, or a frame zstd cannot decompress: replaced below
         import zstandard
 
-        data = zstandard.ZstdCompressor(level=ZSTD_LEVEL).compress(data)
-    write_whole(path, data)
+        if not whole:
+            _write_pieces(path, data, zstandard.ZstdCompressor(level=ZSTD_LEVEL))
+            return
+        compressed = io.BytesIO()
+        with zstandard.ZstdCompressor(level=ZSTD_LEVEL).stream_writer(compressed, size=len(data), closefd=False) as w:
+            w.write(data)
+        data = compressed.getvalue()
+    if whole:
+        write_whole(path, data)
+    else:
+        _write_pieces(path, data, None)
+
+
+def _write_pieces(path: Path, data: Pieces, compressor) -> None:
+    """``write_whole`` for content in pieces: written to ``<name>.partial`` as they come, compressed when a compressor
+    is given, which is told the size first so that the frame carries it, then renamed into place."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".partial")
+    try:
+        with partial.open("wb") as handle:
+            if compressor is None:
+                for piece in data:
+                    handle.write(piece)
+            else:
+                with compressor.stream_writer(handle, size=len(data), closefd=False) as writer:
+                    for piece in data:
+                        writer.write(piece)
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
 
 
 def write_whole(path: Path, data: bytes) -> Path:
