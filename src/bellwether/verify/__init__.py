@@ -21,7 +21,7 @@ from pathlib import Path
 
 import httpx
 
-from bellwether.manifest import Manifest, find_manifest, load_manifest
+from bellwether.manifest import Manifest, find_manifest, load_manifests
 
 from . import render, report
 from .cases import read_cases, render_sets
@@ -121,7 +121,7 @@ def select_manifests(fixtures: Path, models: list[str] | None) -> list[Manifest]
     try:
         if models:
             return [find_manifest(fixtures, model) for model in dict.fromkeys(models)]
-        manifests = [load_manifest(path) for path in sorted(fixtures.glob("*/manifest.toml"))]
+        manifests = load_manifests(fixtures)
     except (OSError, ValueError) as err:
         raise CannotVerify(str(err)) from None
     if not manifests:

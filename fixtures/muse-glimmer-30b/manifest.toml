@@ -1,0 +1,10 @@
+model    = "meta-models/Muse-Glimmer-30B"
+revision = "a4e59da52a7bc87ae7251dd5545c0dd437c44b68"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "cfc67e5f349f37690dfd31ed1f18bc4442a9dd32fe39a648f993cb4eb3cae678"
+"config.json"            = "f7a75293dd08bde240588dc373a31e82343742792792013ee05da45e9a201d82"
+"generation_config.json" = "fd838198e53b9f804c09b46fe882e5f2090518f263cd81652e095dd66bc92d60"
+"tokenizer.json"         = "c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d"
+"tokenizer_config.json"  = "781e6c74f571642c71202167b67d9255b28cc439bdda1582ff31346182f5a9c5"

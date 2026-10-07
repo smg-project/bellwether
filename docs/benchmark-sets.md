@@ -61,20 +61,29 @@ for now; embedding, reranking and classification models are out.
   tier, and a status. The status says what was recorded, what was rejected and why, or why nothing
   can be recorded yet (vendor code needed, gated, no chat template). A checkpoint that records
   nothing still has its row.
-- **Checkpoint groups.** Checkpoints whose oracle inputs are byte-identical render and parse
-  identically, so a group is recorded once and each checkpoint's row names its group.
+- **Checkpoint groups.** Checkpoints whose oracle inputs are equal render and parse identically,
+  so a group is recorded once and each checkpoint's row names its group. Equal means each file
+  byte-identical, or, for a JSON file an oracle reads only in part, equal in the part it reads.
   - **The oracle inputs** are every file the oracle reads for the model: the tokenizer files, the
-    chat template, the generation config (for the end of turn), and, for a vendor-code oracle, the
-    vendor's files. From `config.json` they take only the two fields that choose the tokenizer
-    class (`model_type`, `tokenizer_class`), and from the generation config only its token ids
-    (`eos_token_id`, `bos_token_id`, `pad_token_id`), so sampling defaults do not split a group.
+    chat templates (the named ones in `additional_chat_templates/` too), the generation config (for
+    the end of turn), and, for a vendor-code oracle, the vendor's files. From `config.json` they
+    take only the two fields that choose the tokenizer class (`model_type`, `tokenizer_class`), and
+    from the generation config only its token ids (`eos_token_id`, `bos_token_id`, `pad_token_id`),
+    so sampling defaults do not split a group. From `chat_template.json` they take only its
+    `chat_template` value, which vLLM reads through the processor; no oracle reads the file's
+    bytes. A checkpoint that ships no generation config has the
+    end of turn read those ids from `config.json`, through `GenerationConfig.from_model_config`
+    (`text_config` included), so there they count as part of `config.json`.
   - **Membership.** The manifest lists each input with its sha256, and membership is equality of
     those lists, checked when recording. As a check on the list itself, the weekly job also
     records one other member of each group and compares the results, so a file the list misses
     shows up.
-  - **The effect,** measured on 2026-10-06: the 64 current Qwen chat checkpoints fall into 38
-    groups. The six dense Qwen3 sizes share one; most other groups are pairs or threes, such as
-    Qwen3.5-4B and 9B, or the three large Qwen3.5 mixtures of experts.
+  - **The effect,** measured on 2026-10-06: the 64 current Qwen chat checkpoints fall into 35
+    groups. The six dense Qwen3 sizes share one, and the Qwen3-VL Instruct and Thinking sizes from
+    2B to 32B two of four; most other shared groups are pairs or threes, such as Qwen3.5-4B and 9B,
+    or the three large Qwen3.5 mixtures of experts. The 38 first measured here hashed
+    `chat_template.json` by its bytes, which split three Qwen3-VL pairs whose templates differ only
+    in that file's indentation and trailing whitespace.
 - **Order.**
   1. Simo's tier: DeepSeek-V4.1-Flash, MiniMax-M3, the latest GLM (GLM-5.3-Flash), every current
      Qwen chat checkpoint, and Hy4-preview.

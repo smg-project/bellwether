@@ -10,12 +10,14 @@ import subprocess
 import huggingface_hub.constants
 import pytest
 import zstandard
-from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
+from conftest import TEMPLATE
+from tokenizers import Tokenizer, decoders, normalizers, processors
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
-from bellwether.manifest import find_manifest, load_manifest, slug_for
+from bellwether.inputs import oracle_inputs
+from bellwether.manifest import find_manifest, load_manifest, load_manifests, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.corpus import load_corpus, read_cases
@@ -26,67 +28,37 @@ from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# A ChatML-shaped template with a thinking switch, enough to see every request field arrive.
-TEMPLATE = (
-    "{%- if tools %}{{ '<|im_start|>system\\n' + (tools | tojson) + '<|im_end|>\\n' }}{%- endif %}"
-    "{%- for m in messages %}"
-    "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' }}"
-    "{%- if m['reasoning_content'] %}{{ '<think>\\n' + m['reasoning_content'] + '\\n</think>\\n\\n' }}{%- endif %}"
-    "{{ m['content'] or '' }}"
-    "{%- for c in (m['tool_calls'] or []) %}"
-    "{{ '\\n<tool_call>\\n' + (c['function'] | tojson) + '\\n</tool_call>' }}{%- endfor %}"
-    "{{ '<|im_end|>\\n' }}"
-    "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + (m['content'] or '') + '<|im_end|>\\n' }}{%- endif %}"
-    "{%- endfor %}"
-    "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}"
-    "{%- if enable_thinking is defined and not enable_thinking %}{{ '<think>\\n\\n</think>\\n\\n' }}{%- endif %}"
-    "{%- endif %}"
-)
-
-
-@pytest.fixture(scope="session")
-def tiny_model(tmp_path_factory) -> pathlib.Path:
-    """A byte-level BPE tokenizer trained on a few sentences, saved the way a checkpoint ships one."""
-    directory = tmp_path_factory.mktemp("tiny-chat")
-    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
-    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-    tokenizer.decoder = decoders.ByteLevel()
-    trainer = trainers.BpeTrainer(
-        vocab_size=400,
-        special_tokens=["<unk>", "<|im_start|>", "<|im_end|>", "<think>", "</think>"],
-        initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
-    )
-    sentences = ["system user assistant What is the capital of France? Paris. The quick brown fox"] * 4
-    tokenizer.train_from_iterator(sentences, trainer)
-    tokenizer.save(str(directory / "tokenizer.json"))
-    config = {
-        "tokenizer_class": "PreTrainedTokenizerFast",
-        "chat_template": TEMPLATE,
-        "unk_token": "<unk>",
-        "eos_token": "<|im_end|>",
-    }
-    (directory / "tokenizer_config.json").write_text(json.dumps(config))
-    return directory
-
 
 def write_jsonl(path: pathlib.Path, lines: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(line) + "\n" for line in lines))
 
 
-def write_manifest(fixtures: pathlib.Path, slug: str, model: str) -> pathlib.Path:
+# A Hub id is pinned to a commit. The tiny model is a directory, which has no commits: its revision is "local".
+HUB_REVISION = "b968826d9c46dd6066d109eabc6255188de91218"
+
+
+def write_manifest(
+    fixtures: pathlib.Path,
+    slug: str,
+    model: str,
+    *,
+    revision: str | None = None,
+    inputs: dict[str, str] | None = None,
+    tier: int | str | None = None,
+    group: str | None = None,
+) -> pathlib.Path:
+    """A manifest as a person would write it; ``tier`` may be given as raw TOML text, to write a wrong type."""
     path = fixtures / slug / "manifest.toml"
     path.parent.mkdir(parents=True)
-    lines = [
-        f'model = "{model}"',
-        'revision = "local"',
-        "",
-        "[authority]",
-        'render = ["hf-template"]',
-        "",
-        "[smg]",
-        'tool_parser = "qwen"',
-    ]
+    if revision is None:
+        revision = "local" if pathlib.Path(model).is_absolute() else HUB_REVISION
+    lines = [f'model = "{model}"', f'revision = "{revision}"']
+    lines += [f"tier = {tier}"] if tier is not None else []
+    lines += [f'group = "{group}"'] if group is not None else []
+    lines += ["", "[authority]", 'render = ["hf-template"]', "", "[smg]", 'tool_parser = "qwen"']
+    if inputs is not None:
+        lines += ["", "[inputs]", *(f'"{name}" = "{digest}"' for name, digest in inputs.items())]
     path.write_text("\n".join(lines) + "\n")
     return path
 
@@ -98,9 +70,53 @@ def user(text: str) -> dict:
 def test_manifest_reads_model_revision_authority_and_names(tmp_path):
     path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat")
     manifest = load_manifest(path)
-    assert (manifest.slug, manifest.model, manifest.revision) == ("tiny-chat", "acme/Tiny-Chat", "local")
+    assert (manifest.slug, manifest.model, manifest.revision) == ("tiny-chat", "acme/Tiny-Chat", HUB_REVISION)
     assert manifest.authority == {"render": ["hf-template"]}
     assert manifest.smg == {"tool_parser": "qwen"}
+
+
+@pytest.mark.parametrize("revision", ["main", "v1.0", "b968826d", HUB_REVISION.upper(), "local"])
+def test_manifest_refuses_a_revision_that_is_not_a_commit_hash(tmp_path, revision):
+    path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat", revision=revision)
+    with pytest.raises(ValueError, match=re.escape(f"{path}: revision {revision!r} is not a commit")):
+        load_manifest(path)
+
+
+def test_manifest_takes_a_commit_hash_and_local_only_for_a_checkpoint_directory(tmp_path, tiny_model):
+    hub = write_manifest(tmp_path / "hub", "tiny-chat", "acme/Tiny-Chat", revision=HUB_REVISION)
+    assert load_manifest(hub).revision == HUB_REVISION
+    local = write_manifest(tmp_path / "local", "tiny-chat", str(tiny_model), revision="local")
+    assert load_manifest(local).revision == "local"
+
+
+def test_manifest_reads_the_oracle_inputs_group_and_tier(tmp_path):
+    inputs = {"tokenizer.json": "a" * 64, "tokenizer_config.json": "b" * 64}
+    path = write_manifest(tmp_path, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, tier=2, group="tiny-chat")
+    manifest = load_manifest(path)
+    assert (manifest.inputs, manifest.group, manifest.tier) == (inputs, "tiny-chat", 2)
+
+
+def test_a_manifest_from_before_groups_loads_without_inputs_group_or_tier(tmp_path):
+    manifest = load_manifest(write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat"))
+    assert (manifest.inputs, manifest.group, manifest.tier) == ({}, None, None)
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"tier": 4}, "`tier` must be 1, 2 or 3"),
+        ({"tier": '"1"'}, "`tier` must be 1, 2 or 3"),
+        ({"tier": "true"}, "`tier` must be 1, 2 or 3"),
+        ({"group": "Tiny Chat"}, "`group` must be the slug of its group's primary"),
+        ({"group": "tiny-chat"}, "`group` names this manifest's own directory; a group's primary has no `group`"),
+        ({"inputs": {"tokenizer.json": "abc"}}, "[inputs] must give each file's sha256"),
+        ({"inputs": {"tokenizer.json": "A" * 64}}, "[inputs] must give each file's sha256"),
+    ],
+)
+def test_manifest_rejects_a_malformed_tier_group_or_inputs(tmp_path, fields, message):
+    path = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat", **fields)
+    with pytest.raises(ValueError, match=re.escape(f"{path}: {message}")):
+        load_manifest(path)
 
 
 def test_manifest_rejects_an_unknown_kind_in_the_authority_order(tmp_path):
@@ -115,6 +131,18 @@ def test_find_manifest_matches_the_model_id_exactly(tmp_path):
     assert find_manifest(tmp_path, "acme/Tiny-Chat").slug == "tiny-chat"
     with pytest.raises(FileNotFoundError, match="manifests exist for: acme/Tiny-Chat"):
         find_manifest(tmp_path, "acme/tiny-chat")
+
+
+def test_every_command_reads_the_manifests_through_one_loader_that_refuses_two_of_one_model(tmp_path):
+    # record and unpack find a manifest by model, and count and manifests read them all; two manifests of one model
+    # would leave which one counts to the order of their directories.
+    first = write_manifest(tmp_path, "tiny-chat", "acme/Tiny-Chat")
+    second = write_manifest(tmp_path, "tiny-chat-copy", "acme/Tiny-Chat")
+    message = f"{first} and {second} are both manifests of acme/Tiny-Chat"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        load_manifests(tmp_path)
+    with pytest.raises(ValueError, match=re.escape(message)):
+        find_manifest(tmp_path, "acme/Tiny-Chat")
 
 
 def test_slug_is_the_lowercase_last_path_segment():
@@ -242,7 +270,7 @@ def record(
 ) -> tuple[int, pathlib.Path]:
     fixtures, corpus = tmp_path / "fixtures", tmp_path / "corpus"
     if not (fixtures / "tiny-chat").exists():
-        write_manifest(fixtures, "tiny-chat", str(tiny_model))
+        write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=oracle_inputs(str(tiny_model), "local"))
     for name, lines in corpus_sets:
         write_jsonl(corpus / kind / f"{name}.jsonl", lines)
     argv = ["record", "--model", str(tiny_model), "--kind", kind, "--oracle", "reference"]
@@ -1650,6 +1678,139 @@ def test_tool_calls_in_the_history_also_reach_the_template_as_objects(items_mode
     assert request["messages"][1]["tool_calls"][0]["function"]["arguments"] == '{"city": "Paris"}'
 
 
+def test_record_records_a_checkpoint_whose_oracle_inputs_are_the_ones_its_manifest_lists(tmp_path, tiny_model):
+    path = write_manifest(
+        tmp_path / "fixtures", "tiny-chat", str(tiny_model), inputs=oracle_inputs(str(tiny_model), "local")
+    )
+    assert "tokenizer_config.json" in load_manifest(path).inputs
+    status, out_dir = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    assert status == 0
+    assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/render/a"]
+
+
+def test_record_refuses_a_checkpoint_whose_oracle_input_changed_and_names_the_file(tmp_path, tiny_model, capsys):
+    model = tmp_path / "tiny-chat"
+    shutil.copytree(tiny_model, model)
+    listed = oracle_inputs(str(model), "local")
+    path = write_manifest(tmp_path / "fixtures", "tiny-chat", str(model), inputs=listed)
+    config = json.loads((model / "tokenizer_config.json").read_text())
+    config["chat_template"] = "{{ messages[0]['content'] }}"
+    (model / "tokenizer_config.json").write_text(json.dumps(config))
+    found = oracle_inputs(str(model), "local")["tokenizer_config.json"]
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, model)) == 1
+
+    err = capsys.readouterr().err
+    listing = f"tokenizer_config.json (listed {listed['tokenizer_config.json'][:12]}, found {found[:12]})"
+    assert f"its oracle inputs at local differ from {path}: {listing};" in err
+    assert not (tmp_path / "fixtures" / "tiny-chat" / "render").exists()
+
+
+def test_record_refuses_another_member_of_a_group_and_names_its_primary(tmp_path, tiny_model, capsys):
+    fixtures = tmp_path / "fixtures"
+    inputs = oracle_inputs(str(tiny_model), "local")
+    write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=inputs)
+    write_manifest(fixtures, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, group="tiny-chat")
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, "acme/Tiny-Chat-Mini")) == 1
+
+    err = capsys.readouterr().err
+    assert "acme/Tiny-Chat-Mini is a member of checkpoint group tiny-chat but not its primary" in err
+    assert f"record the group instead: bellwether record --model {tiny_model}" in err
+    assert not (fixtures / "tiny-chat-mini" / "render").exists() and not (fixtures / "tiny-chat" / "render").exists()
+
+
+def test_record_refuses_a_manifest_that_lists_no_oracle_inputs(tmp_path, tiny_model, capsys):
+    path = write_manifest(tmp_path / "fixtures", "tiny-chat", str(tiny_model))
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"{path} lists no oracle inputs; `bellwether manifests` writes them" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("refused", ["another member", "no inputs listed"])
+def test_record_refuses_before_it_reads_the_corpus(tmp_path, tiny_model, monkeypatch, refused, capsys):
+    def read_corpus(*args):
+        raise AssertionError("record read the corpus before it refused")
+
+    monkeypatch.setattr("bellwether.record.load_corpus", read_corpus)
+    fixtures = tmp_path / "fixtures"
+    if refused == "another member":
+        inputs = oracle_inputs(str(tiny_model), "local")
+        write_manifest(fixtures, "tiny-chat", "acme/Tiny-Chat", inputs=inputs)
+        write_manifest(fixtures, "tiny-chat-mini", str(tiny_model), inputs=inputs, group="tiny-chat")
+    else:
+        write_manifest(fixtures, "tiny-chat", str(tiny_model))
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert "bellwether record: " in capsys.readouterr().err
+
+
+def test_record_refuses_a_checkpoint_whose_oracle_inputs_it_cannot_read(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path / "hub"))
+    monkeypatch.setattr("huggingface_hub.constants.HF_HUB_OFFLINE", True)
+    write_manifest(tmp_path / "fixtures", "tiny-chat", "acme/Tiny-Chat", inputs={"tokenizer.json": "a" * 64})
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, "acme/Tiny-Chat")) == 1
+
+    assert f"cannot read the oracle inputs of acme/Tiny-Chat at {HUB_REVISION}: " in capsys.readouterr().err
+    assert not (tmp_path / "fixtures" / "tiny-chat" / "render").exists()
+
+
+def test_record_refuses_two_manifests_that_name_each_other_as_their_group(tmp_path, tiny_model, capsys):
+    # A hand-edited group must not send the operator from one checkpoint to the other and back.
+    fixtures = tmp_path / "fixtures"
+    inputs = oracle_inputs(str(tiny_model), "local")
+    first = write_manifest(fixtures, "tiny-chat", str(tiny_model), inputs=inputs, group="tiny-chat-mini")
+    second = write_manifest(fixtures, "tiny-chat-mini", "acme/Tiny-Chat-Mini", inputs=inputs, group="tiny-chat")
+    write_jsonl(tmp_path / "corpus" / "render" / "common.jsonl", [{"name": "a", "request": {"messages": [user("A")]}}])
+
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+
+    err = capsys.readouterr().err
+    assert f"{first}: group tiny-chat-mini names {second}, which names a group of its own, tiny-chat" in err
+    assert "record the group instead" not in err
+
+
+def test_record_refuses_a_group_that_names_no_manifest(tmp_path, tiny_model, capsys):
+    path = write_manifest(
+        tmp_path / "fixtures",
+        "tiny-chat",
+        str(tiny_model),
+        inputs=oracle_inputs(str(tiny_model), "local"),
+        group="gone",
+    )
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"{path}: group gone names no manifest" in capsys.readouterr().err
+
+
+def test_record_names_a_malformed_manifest_of_the_group_instead_of_a_traceback(tmp_path, tiny_model, capsys):
+    # The group's primary sorts before its other member here, and its `authority` is a number where a table belongs.
+    fixtures = tmp_path / "fixtures"
+    primary = write_manifest(fixtures, "tiny-chat", "acme/Tiny-Chat")
+    primary.write_text(f'model = "acme/Tiny-Chat"\nrevision = "{HUB_REVISION}"\nauthority = 1\n')
+    write_manifest(fixtures, "tiny-chat-mini", str(tiny_model), group="tiny-chat")
+
+    assert main(record_argv(tmp_path, tiny_model)) == 1
+    assert f"bellwether record: {primary}: [authority] must be a table of kinds" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("authority = 1", "[authority] must be a table of kinds"),
+        ('smg = "qwen"', "[smg] must be a table of parser names"),
+        ("engines = []", "[engines] must be a table of engines"),
+    ],
+)
+def test_manifest_rejects_a_value_where_a_table_belongs(tmp_path, line, message):
+    path = tmp_path / "tiny-chat" / "manifest.toml"
+    path.parent.mkdir()
+    path.write_text(f'model = "acme/Tiny-Chat"\nrevision = "{HUB_REVISION}"\n{line}\n')
+    with pytest.raises(ValueError, match=re.escape(f"{path}: {message}")):
+        load_manifest(path)
+
+
 def render_cases(*names: str) -> dict[str, dict]:
     cases = {}
     for name in names:
@@ -1876,6 +2037,20 @@ def test_every_sets_toml_table_has_its_set(path):
     for kind, name in set_tables.read(path):
         files = [path.parent / kind / f"{name}.jsonl", path.parent / kind / f"{name}.jsonl.zst"]
         assert sum(f.is_file() for f in files) == 1, f"{path}: [{kind}.{name}] needs exactly one set file"
+
+
+@pytest.mark.parametrize("path", sorted(ROOT.glob("fixtures/*/manifest.toml")), ids=lambda p: str(p.relative_to(ROOT)))
+def test_committed_manifests_list_inputs_and_tier_and_another_member_names_a_primary_with_equal_inputs(path):
+    manifest = load_manifest(path)
+    assert manifest.inputs, f"{path}: no [inputs]; `bellwether manifests` writes them"
+    assert manifest.tier is not None, f"{path}: no tier; `bellwether manifests` writes it"
+    if manifest.group is not None:
+        primary = load_manifest(ROOT / "fixtures" / manifest.group / "manifest.toml")
+        assert primary.group is None, f"{path}: its group's manifest names a group of its own"
+        assert primary.inputs == manifest.inputs, f"{path}: its oracle inputs differ from its group's"
+        assert [p.name for p in path.parent.iterdir()] == ["manifest.toml"], (
+            f"{path}: a member other than the primary holds no fixtures"
+        )
 
 
 def git(cwd: pathlib.Path, *args: str) -> None:

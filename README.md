@@ -73,7 +73,11 @@ catches up.
 | disputed | a case whose two sources of truth disagree; it carries the disagreement's fingerprint, and no parity is counted against it |
 | verdict | the classification of one case after comparing SMG with reference and witnesses |
 | waiver | a reviewed, expiring record explaining an `engine_defect`, with an upstream link |
-| manifest | per-model file: revision, authority order, SMG and engine parser names |
+| manifest | per-checkpoint file: revision, tier, oracle inputs, group, authority order, SMG and engine parser names |
+| oracle inputs | every file the oracle reads for a checkpoint, each with its sha256 |
+| checkpoint group | checkpoints with equal oracle inputs, recorded once under the slug of its primary |
+| member | any checkpoint of a checkpoint group, its primary included; the other members' manifests name the group |
+| primary | the member a checkpoint group is recorded by, under its own slug, once for all its members |
 | chunk plan | how an output token stream is cut into engine chunks for a streaming replay |
 | capture | the mock worker's record of each request SMG sends it, one JSON line per request |
 | known difference | a case where SMG is known to differ from the reference, listed for `verify --known` with the outcome SMG gives on it, the reason and the issue |
@@ -114,11 +118,32 @@ types. Names that differ across systems for one format are merged through
 one implementation behind several rows as alias candidates, so the table is kept honest by what
 the code says rather than by memory.
 
+## Checkpoint groups and manifests
+
+```bash
+HF_HUB_OFFLINE=1 uv run bellwether manifests
+```
+
+Reads the list of checkpoints committed beside the manifests, `fixtures/models.tsv` (`--models` names another file):
+one `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier` row per checkpoint, with the Hub's downloads over the last 30
+days and the day they were read. It computes each one's oracle inputs (the tokenizer files, the chat templates, and the
+few fields of `config.json`, `generation_config.json` and `chat_template.json` that the oracles read) at the pinned
+revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and writes every checkpoint's
+`fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the recorded one if there is one,
+else its most-downloaded member's. The others' manifests name the group and hold no fixtures. It prints each group with
+its members and their tiers. Run again over the same list, it writes the same files, so a change to the list is
+reviewed as a diff of the list and the manifests. `fixtures/README.md` describes both. `models.jsonl` (below) is
+another list: what the engines' registries name, with no revision or downloads until the Hub is read.
+
 ## Recording render fixtures
 
 ```bash
 uv run bellwether record --model Qwen/Qwen3-8B --kind render --oracle reference
 ```
+
+`record` checks the manifest before it reads the corpus: it refuses any member of a group but its primary, naming the
+primary to record instead, and a checkpoint whose oracle inputs at the pinned revision cannot be read or are not the
+ones its manifest lists, naming the files that differ.
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
 case under `corpus/render/` through the checkpoint's own chat template at the pinned revision

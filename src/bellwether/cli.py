@@ -1,4 +1,5 @@
-"""Command line entry point: ``bellwether gaps | models | record | import | count | unpack | verify | report``.
+"""Command line entry point:
+``bellwether gaps | models | manifests | record | import | count | unpack | verify | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -16,6 +17,7 @@ from pathlib import Path
 from bellwether import __version__
 from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
+from bellwether.groups import run as manifests_run
 from bellwether.importers import pinned
 from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
@@ -75,6 +77,18 @@ def build_parser() -> argparse.ArgumentParser:
     models.add_argument("--cache", type=Path, default=Path.home() / ".cache" / "bellwether" / "registries")
     models.set_defaults(func=models_run)
 
+    manifests = sub.add_parser(
+        "manifests", help="group checkpoints by their oracle inputs and write each checkpoint's manifest"
+    )
+    manifests.add_argument(
+        "--models",
+        type=Path,
+        help="the list of checkpoints, rows of model<TAB>revision<TAB>downloads<TAB>day<TAB>tier "
+        "(default: models.tsv in the fixture root)",
+    )
+    manifests.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    manifests.set_defaults(func=manifests_run)
+
     record = sub.add_parser("record", help="run the corpus through one oracle and write fixtures")
     record.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
     record.add_argument("--kind", required=True, choices=["render", "parse", "tokenize", "detokenize"])
@@ -110,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     importer.set_defaults(func=import_run)
 
-    count = sub.add_parser("count", help="cases per model, kind and source")
+    count = sub.add_parser("count", help="cases per checkpoint, kind and source, with each checkpoint's group and tier")
     count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     count.add_argument("--format", choices=["markdown", "json"], default="markdown")
