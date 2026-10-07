@@ -47,7 +47,10 @@ Two sources of truth, equal in authority (Simo, 2026-10-06):
 When they agree, the case is settled. When they disagree, the case is `disputed`, the disagreement
 is an issue, and nothing in bellwether is configured to make them agree. A line's `reference` is
 Hugging Face's result and vLLM's is a `witness`. SGLang and engine runs on a GPU are witnesses too,
-as evidence without authority. `docs/benchmark-sets.md` has the rules.
+as evidence without authority. Where vLLM's docs name one of its example tool templates for a
+checkpoint, a second reference rendered with that template sits beside the first; a difference
+between the two is an issue, not a dispute, since they answer for two setups.
+`docs/benchmark-sets.md` has the rules.
 
 Every undisputed case gets a verdict: `match`, `engine_defect` (SMG agrees with the sources of
 truth, a witnessing engine does not), `engines_split`, `policy` (malformed output, documented
@@ -65,6 +68,7 @@ catches up.
 | case | one request or one engine output, with everything needed to reproduce it |
 | fixture | a case plus the recorded reference result and each witness's result |
 | reference | Hugging Face's result: the checkpoint's own material at its pinned revision; one of the two sources of truth |
+| second reference | the reference's oracle run with a tool chat template from vLLM's `examples/` that vLLM's docs name for the checkpoint, in place of its own template; recorded beside the reference, one per such template |
 | witness | an engine's result; vLLM's, at the pinned release, is the other source of truth, and the rest are evidence, not authority |
 | disputed | a case whose two sources of truth disagree; it carries the disagreement's fingerprint, and no parity is counted against it |
 | verdict | the classification of one case after comparing SMG with reference and witnesses |

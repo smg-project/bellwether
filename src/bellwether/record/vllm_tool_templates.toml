@@ -1,0 +1,234 @@
+# vLLM's example tool chat templates and the checkpoints vLLM's docs name each one for (bellwether #59).
+#
+# Read by hand from vLLM's docs at the commit below: the pages its docs build makes, every docs/**/*.md
+# and one page per example under examples/<category>/ (docs/mkdocs/gen_files/generate_examples.py). Two
+# pages name an examples/tool_chat_template_*.jinja file for a checkpoint, and every entry cites the lines
+# that do. A checkpoint is written as the page writes it, `*` included, and matched without regard to
+# case, as the Hub resolves ids: it redirects Salesforce/Llama-xLAM-2-8B-fc-r to ...-8b-fc-r. A template
+# no page names for a checkpoint has no entry, whatever its file name says. Each file is pinned by the
+# sha256 of its bytes at the commit, checked against GitHub's blob id when it was read.
+#
+# docs/benchmark-sets.md, "Second references from vLLM's example tool templates", has the rules. Nothing
+# reads this file yet; the recorder will, checking every sha256 here before any use. Re-read the pages at
+# each new vLLM pin; the diff of this file is the review.
+
+schema_version = 1
+
+[vllm]
+repo = "vllm-project/vllm"
+ref = "v0.31.0"
+commit = "db9527a46873454610df6dbedf79a36d6bf1a7f6"
+
+[pages]  # path at the commit -> sha256 of its bytes
+"docs/features/tool_calling.md" = "e8256a3ef40db8707ebc2cbfb2738dceabfff64b6d69d8d41d6e17594d036417"
+"examples/tool_calling/openai_chat_completion_client_with_tools.py" = "0df23c1075a62b0e5cbc0da1e2b1d89898ff460a42cc0f35f2323978b2f2afd0"
+
+# One [[template]] per template a page names, with one [[template.named_for]] per statement that names it:
+# the checkpoints, the page and lines, and the flags the same lines give for vLLM's side.
+
+[[template]]
+path = "examples/tool_chat_template_apertus.jinja"
+sha256 = "ae354cfceb686cdb11bfd6bcdbdccd1e91aeb757a067210a17fb524952b20dd2"
+
+[[template.named_for]]
+checkpoints = ["swiss-ai/Apertus-8B-Instruct-2509", "swiss-ai/Apertus-70B-Instruct-2509"]
+page = "docs/features/tool_calling.md"
+lines = [487, 491, 492, 494]
+tool_parser = "apertus"
+
+[[template]]
+path = "examples/tool_chat_template_deepseekr1.jinja"
+sha256 = "fe055ac311d9124c659636da3104f3dd39a19f36b8c2cc11b9bc0affb4e052f5"
+
+[[template.named_for]]
+checkpoints = ["deepseek-ai/DeepSeek-R1-0528"]
+page = "docs/features/tool_calling.md"
+lines = [349, 351]
+tool_parser = "deepseek_v3"
+note = "R1-0528 only; the page names no template for deepseek-ai/DeepSeek-R1"
+
+[[template]]
+path = "examples/tool_chat_template_deepseekv3.jinja"
+sha256 = "76233095fd644a6238e4dfff3192e4ac4494be9f184f2ea8e9526f46a2c5b44b"
+
+[[template.named_for]]
+checkpoints = ["deepseek-ai/DeepSeek-V3-0324"]
+page = "docs/features/tool_calling.md"
+lines = [348, 351]
+tool_parser = "deepseek_v3"
+note = "V3-0324 only; the page names no template for deepseek-ai/DeepSeek-V3"
+
+[[template]]
+path = "examples/tool_chat_template_deepseekv31.jinja"
+sha256 = "8b99b81c2f0d3ab06c63a6e615429167869ca2713bd5c05d8a001176d4d262be"
+
+[[template.named_for]]
+checkpoints = ["deepseek-ai/DeepSeek-V3.1"]
+page = "docs/features/tool_calling.md"
+lines = [357, 359]
+tool_parser = "deepseek_v31"
+
+[[template]]
+path = "examples/tool_chat_template_functiongemma.jinja"
+sha256 = "9d60691c7f5e3fe6d76215f16957a97fe72151b73dd8a1a2555e9dde2b398407"
+
+[[template.named_for]]
+checkpoints = ["google/functiongemma-270m-it"]
+page = "docs/features/tool_calling.md"
+lines = [435, 445]
+tool_parser = "functiongemma"
+
+[[template]]
+path = "examples/tool_chat_template_granite.jinja"
+sha256 = "4ae5bbdb151158527de4d1a64bd9091c05f9dbafe763506b8d686275383fc00e"
+
+[[template.named_for]]
+checkpoints = ["ibm-granite/granite-3.0-8b-instruct"]
+page = "docs/features/tool_calling.md"
+lines = [274, 276, 278]
+tool_parser = "granite"
+
+[[template]]
+path = "examples/tool_chat_template_granite_20b_fc.jinja"
+sha256 = "4bb42dac7699af82a14ad29cd55101c767b4225722ee9a206bcc0315c1da5b5d"
+
+[[template.named_for]]
+checkpoints = ["ibm-granite/granite-20b-functioncalling"]
+page = "docs/features/tool_calling.md"
+lines = [286, 288, 290]
+tool_parser = "granite-20b-fc"
+
+[[template]]
+path = "examples/tool_chat_template_hermes.jinja"
+sha256 = "9d08161b0665b9d3459943bb57c7a680f42e77cdbc97d4f87b9426b03c8bab89"
+
+[[template.named_for]]
+checkpoints = ["NousResearch/Hermes-2-Pro-Llama-3-8B"]
+page = "examples/tool_calling/openai_chat_completion_client_with_tools.py"
+lines = [15, 16, 17]
+tool_parser = "hermes"
+note = "the tool calling page names no template for Hermes models (lines 167 to 188)"
+
+[[template]]
+path = "examples/tool_chat_template_internlm2_tool.jinja"
+sha256 = "e00f16381b76d36b914c5da339c7835da4a7602271e269b0990dd9ccee442b0f"
+
+[[template.named_for]]
+checkpoints = ["internlm/internlm2_5-7b-chat"]
+page = "docs/features/tool_calling.md"
+lines = [296, 303]
+tool_parser = "internlm"
+note = "line 297's other internlm2.5 models name no checkpoint; line 301 names internlm2-chat-7b only as unstable"
+
+[[template]]
+path = "examples/tool_chat_template_llama3.1_json.jinja"
+sha256 = "8aedd05f7ab549b897b929c89da9b62e537f4f4197f33736e9d2f10fea53b1bf"
+
+[[template.named_for]]
+checkpoints = ["meta-llama/Llama-3.1-8B-Instruct", "meta-llama/Llama-3.1-*"]
+page = "docs/features/tool_calling.md"
+lines = [10, 12, 13, 237, 251, 253, 258]
+tool_parser = "llama3_json"
+note = "lines 251 to 256 give one JSON template per family: this one is 'the official chat template for the Llama 3.1 models'"
+
+[[template]]
+path = "examples/tool_chat_template_llama3.2_json.jinja"
+sha256 = "c22af47e53f444258ba6565bfa6c472c3d74f207105ae49bd1ae9b600e90a3be"
+
+[[template.named_for]]
+checkpoints = ["meta-llama/Llama-3.2-*"]
+page = "docs/features/tool_calling.md"
+lines = [238, 251, 255, 258]
+tool_parser = "llama3_json"
+note = "lines 251 to 256 give one JSON template per family: this one extends the Llama 3.1 template with images"
+
+[[template]]
+path = "examples/tool_chat_template_llama3.2_pythonic.jinja"
+sha256 = "a4958a09420919b8c591d33dad1f818af8ab5e48a7273dc79448a5ee8771c3f5"
+
+[[template.named_for]]
+checkpoints = ["meta-llama/Llama-3.2-1B-Instruct", "meta-llama/Llama-3.2-3B-Instruct"]
+page = "docs/features/tool_calling.md"
+lines = [513, 514, 520]
+tool_parser = "pythonic"
+
+[[template]]
+path = "examples/tool_chat_template_llama4_pythonic.jinja"
+sha256 = "3fe950790d033a6ee07a563fb6ad7c34e40f860b8ff99333b0b0aed6204ba258"
+
+[[template.named_for]]
+checkpoints = ["meta-llama/Llama-4-*"]
+page = "docs/features/tool_calling.md"
+lines = [239, 260, 262, 264]
+tool_parser = "llama4_pythonic"
+
+[[template.named_for]]
+checkpoints = ["meta-llama/Llama-4-Scout-17B-16E-Instruct", "meta-llama/Llama-4-Maverick-17B-128E-Instruct"]
+page = "docs/features/tool_calling.md"
+lines = [517, 518, 520]
+tool_parser = "pythonic"
+
+[[template]]
+path = "examples/tool_chat_template_mistral.jinja"
+sha256 = "0121272d0fe4c38287001bb921fbb4a733a2f386fd49ae3a8dc48be7b1a3aa22"
+
+[[template.named_for]]
+checkpoints = ["mistralai/Mistral-7B-Instruct-v0.3"]
+page = "docs/features/tool_calling.md"
+lines = [190, 194, 200, 204, 229]
+tool_parser = "mistral"
+tokenizer_mode = "hf"
+config_format = "hf"
+load_format = "hf"
+note = "line 200: for the Transformers tokenization backend only, whose flags line 229 gives; vLLM's default for this checkpoint is mistral-common, which reads no template"
+
+[[template.named_for]]
+checkpoints = ["mistralai/Mistral-7B-Instruct-v0.3"]
+page = "examples/tool_calling/openai_chat_completion_client_with_tools.py"
+lines = [6, 7, 10, 11, 12]
+tool_parser = "mistral"
+
+[[template]]
+path = "examples/tool_chat_template_mistral_parallel.jinja"
+sha256 = "0b4dd7ac0ba2c78c0d70a94b03bb2357c5dd1988ae223c382475d5775b73045a"
+
+[[template.named_for]]
+checkpoints = ["mistralai/Mistral-7B-Instruct-v0.3"]
+page = "docs/features/tool_calling.md"
+lines = [194, 200, 206, 217]
+tool_parser = "mistral"
+tokenizer_mode = "hf"
+config_format = "hf"
+load_format = "hf"
+note = "line 229 gives the same flags for every Mistral AI model in the Transformers format, naming no checkpoint"
+
+[[template]]
+path = "examples/tool_chat_template_toolace.jinja"
+sha256 = "b9ded9033e0fe5445320864c25e09b2e56a2e98f08b305591a2fcd0c2d1d7a9c"
+
+[[template.named_for]]
+checkpoints = ["Team-ACE/ToolACE-8B", "fixie-ai/ultravox-v0_4-ToolACE-8B"]
+page = "docs/features/tool_calling.md"
+lines = [515, 516, 520]
+tool_parser = "pythonic"
+
+[[template]]
+path = "examples/tool_chat_template_xlam_llama.jinja"
+sha256 = "777a5f5ca9ed21c53f304755725fae008da2a1ad7712fb0698310e23cc1c71c9"
+
+[[template.named_for]]
+checkpoints = ["Salesforce/Llama-xLAM-2-8B-fc-r", "Salesforce/Llama-xLAM-2-70B-fc-r"]
+page = "docs/features/tool_calling.md"
+lines = [327, 332]
+tool_parser = "xlam"
+
+[[template]]
+path = "examples/tool_chat_template_xlam_qwen.jinja"
+sha256 = "1d41a6a1069756ec894eff8eef5cacf89a2338107d376af6903d4c334a9f24b6"
+
+[[template.named_for]]
+checkpoints = ["Salesforce/xLAM-1B-fc-r", "Salesforce/xLAM-3B-fc-r", "Salesforce/Qwen-xLAM-32B-fc-r"]
+page = "docs/features/tool_calling.md"
+lines = [328, 333]
+tool_parser = "xlam"
+note = "on 2026-10-06 the Hub redirects the first to Salesforce/xLAM-1b-fc-r; the other two are not public repositories"

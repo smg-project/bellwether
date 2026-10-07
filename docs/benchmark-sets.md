@@ -274,12 +274,188 @@ The probe's open kinds:
   GLM-4.7-Flash, MiniMax-M2, Step3, Trinity; DeepSeek-R1, #14);
 - Mistral wants call ids of nine letters or digits;
 - K2-Horizon wants a thinking field;
-- Hunyuan-A13B renders no tool calls;
+- Hunyuan-A13B renders no tool calls, which is counted as not applicable instead ("Not
+  applicable", below);
 - five templates drop the tool list from the prompt (DeepSeek R1, V3, V3.1, Hunyuan-A13B,
-  Phi-4-mini), which needs another reference than the round trip.
+  Phi-4-mini), which needs another reference than the round trip; for V3-0324 and V3.1, vLLM's
+  docs give one (the next section).
 
 Chunk plans stay as they are, the full set for every case. They are a function of the output
 length, so they add no information that could go stale, and compressed they cost little.
+
+## Second references from vLLM's example tool templates
+
+Simo's decision on #59 (2026-10-06): where vLLM's docs name one of its example tool templates
+(`examples/tool_chat_template_*.jinja`) for a checkpoint, bellwether records a second reference
+with that template, at vLLM's pinned commit, beside the checkpoint's own template, and a
+disagreement between the two is an issue. A user who follows vLLM's docs for tool calling starts
+the server with that template, so its prompt is the one that user's requests get. The first
+reference stays the checkpoint's own files.
+
+- **What it is.** The case through the first reference's oracle, with the checkpoint's tokenizer at
+  its pinned revision, but with the example template in place of the checkpoint's own: transformers'
+  `apply_chat_template` given the template's text as `chat_template`. It is a reference, not a
+  witness: no engine runs, and the only file taken from vLLM is the template.
+- **When it applies.** Only where a page of vLLM's docs names a template for the checkpoint. The
+  pages are those vLLM's docs build makes at the pin: every `docs/**/*.md`, and one page per example
+  under `examples/<category>/` (`docs/mkdocs/gen_files/generate_examples.py`). Two of them name
+  example tool templates, `docs/features/tool_calling.md` and the page made from
+  `examples/tool_calling/openai_chat_completion_client_with_tools.py`; together they name 18.
+  - A page names a checkpoint by its id or by an id pattern (`meta-llama/Llama-3.2-*`). Prose that
+    names a family without an id ("additional Mistral function-calling models") names no
+    checkpoint, since choosing its members would be bellwether's judgment, which the two-sources
+    rule leaves out.
+  - Ids are matched without regard to case, as the Hub resolves them: the page's
+    `Salesforce/Llama-xLAM-2-8B-fc-r` is the Hub's `Salesforce/Llama-xLAM-2-8b-fc-r`.
+  - A checkpoint gets one second reference per template its pages name. Mistral-7B-Instruct-v0.3
+    gets two (`mistral` and `mistral_parallel`), and so does Llama-3.2-1B-Instruct (`llama3.2_json`
+    through `meta-llama/Llama-3.2-*`, and `llama3.2_pythonic` by its id).
+  - A template no page names makes no second reference, whatever its file name says.
+    `tool_chat_template_hunyuan_a13b.jinja` and `tool_chat_template_phi4_mini.jinja` are two of
+    them: no page names either, and for Hunyuan-A13B the tool calling page says the chat template is
+    already included in the Hugging Face files (line 382). Question 8 asks whether that should
+    change.
+- **The mapping.** `src/bellwether/record/vllm_tool_templates.toml`, read by hand from the two pages
+  at db9527a4. Each template carries its sha256 at the commit, and each statement that names it
+  carries the checkpoints, the page and lines, and the flags the same lines give for vLLM's side:
+  the tool parser, and for Mistral the Transformers tokenizer mode. The pages are pinned by sha256
+  too. Each vLLM pin bump reads them again, and the table's diff is the review.
+- **Which checkpoints, today.** Crossed with `models.jsonl` and the 106 manifests of #54, eight
+  checkpoints get second references:
+
+  | Checkpoint | Templates | Listed in |
+  |---|---|---|
+  | `swiss-ai/Apertus-8B-Instruct-2509` | `apertus` | manifest, `models.jsonl` |
+  | `deepseek-ai/DeepSeek-V3-0324` | `deepseekv3` | manifest |
+  | `deepseek-ai/DeepSeek-V3.1` | `deepseekv31` | manifest |
+  | `Salesforce/Llama-xLAM-2-8b-fc-r` | `xlam_llama` | manifest |
+  | `mistralai/Mistral-7B-Instruct-v0.3` | `mistral`, `mistral_parallel` | manifest |
+  | `meta-llama/Llama-3.2-1B-Instruct` | `llama3.2_json`, `llama3.2_pythonic` | `models.jsonl` |
+  | `meta-llama/Llama-3.2-11B-Vision-Instruct` | `llama3.2_json` | `models.jsonl` |
+  | `meta-llama/Llama-4-Scout-17B-16E-Instruct` | `llama4_pythonic` | `models.jsonl` |
+
+  The three Llama checkpoints are gated on the Hub, so they wait for a login, as their first
+  references do. The pages name 16 checkpoints bellwether has neither a row nor a manifest for:
+  Apertus-70B-Instruct-2509, DeepSeek-R1-0528, functiongemma-270m-it, granite-3.0-8b-instruct,
+  granite-20b-functioncalling, Hermes-2-Pro-Llama-3-8B, internlm2_5-7b-chat,
+  Llama-3.1-8B-Instruct (and no member of `Llama-3.1-*`), Llama-3.2-3B-Instruct,
+  Llama-4-Maverick-17B-128E-Instruct, ToolACE-8B, ultravox-v0_4-ToolACE-8B,
+  Llama-xLAM-2-70B-fc-r, and the three Qwen-based xLAM ids, two of which are not public
+  repositories. DeepSeek-R1 is not among the eight: the page names R1-0528, not R1, so R1 keeps
+  its first reference alone (#27). Adding R1-0528 to the list is how it would be covered.
+- **How it is recorded.** For the cases a tool template is for, in every set:
+  - render cases whose request carries `tools`: the prompt ids and text the example template gives;
+  - parse cases whose request carries `tools` or whose message has tool calls: the round trip with
+    the example template, which gives its own output text, ids, pieces, chunk plans and end of turn
+    for the same message. The stop ids are the checkpoint's, but which of them the template writes
+    where the turn ends, and whether in the turn or opening the next message, is the template's, so
+    a second reference from the round trip carries its own `end_of_turn`, as the first does (#43).
+
+  Cases without tools keep their first reference alone, since the pages offer these templates for
+  tool calling. Each second reference carries its own provenance: the vLLM commit, the template's
+  path and sha256, and the oracle versions.
+  - **Groups.** A checkpoint's example templates are oracle inputs like its own files: its manifest
+    lists each with its sha256, so two checkpoints share a group only when the pages name the same
+    templates for both.
+  - **The date.** Four of the named templates write the day's date into the prompt through
+    transformers' `strftime_now`: `apertus`, and the three Llama 3 ones unless the request sets
+    `date_string`. So does Apertus-8B-Instruct-2509's own template when a request has no system
+    message. A prompt that changes with the day can be neither a fixture nor compared across two
+    runs, so the recorder renders every reference at one fixed date, written in provenance, and
+    vLLM's side gets the same date. How vLLM's side is given it is settled with step 5's recording.
+- **Where it lives.** In the case's own line, beside `reference`, as `second_references`, keyed by
+  the template's file name, so one line holds every result for its case and the two references are
+  compared line by line. A case the checkpoint's own template refuses, or that is not applicable to
+  it, still gets a line when a second reference records it; the first reference then holds its
+  reason instead of a result. "Proposed case-schema change" below says how.
+- **Disagreements.** The first reference and each second reference are compared case by case, and
+  each kind of difference is an issue with its fingerprint,
+  `vllm-example:<template>:<what differs>:<group>`, the template named without
+  `tool_chat_template_` and `.jinja`. What differs is `prompt-ids`, `rejected` (one takes the case,
+  the other refuses it), `not-applicable` or `output-text`. The recorder prints each new fingerprint
+  with its cases and a draft issue, and opens nothing itself, as it does for vLLM's witnesses.
+  A difference does not make the case `disputed`. The two references answer different questions,
+  what the checkpoint's own files give and what vLLM's documented setup gives, so neither unsettles
+  the other; `disputed` stays the two sources of truth disagreeing on one template.
+- **vLLM's side.** When vLLM's witnesses land (step 5), each second reference gets its own: the
+  render server started with `--chat-template` pointing at the pinned template file, the tool parser
+  its statement gives, and for Mistral the Transformers format's `--tokenizer_mode hf
+  --config_format hf --load_format hf`. It is compared with the second reference by the two-sources
+  rule, and a disagreement's fingerprint names the template too, `vllm:<what
+  differs>:<group>:<template>`.
+- **Consumers and `verify`.** Nothing changes by default. smg's tests, Symphony's fixture test and
+  `verify` compare with `reference`, because SMG renders with the checkpoint's own template unless
+  it is started with another.
+  - A line kept only for its second references has no result in `reference`; a consumer skips it
+    and counts it apart, as neither a pass nor a failure.
+  - `verify --second-reference <template file>` compares with that second reference instead, for an
+    SMG started with `--chat-template` at the same file, and its report names the template and its
+    sha256. That is the setup of a user who follows vLLM's docs.
+  - A parse line's second reference carries the output the template writes, so Symphony can replay
+    it with the parser vLLM's docs give for that template. Whether it does is Symphony's call, asked
+    in a `for:symphony` issue once the lines exist.
+
+### Not applicable
+
+A checkpoint whose own template renders no tool calls has nothing to say about a parse case with
+tool calls, so those cases are counted as not applicable, not as refusals (#59's first proposal,
+decided with the second).
+
+- **Detection,** once per group and template, before the cases: a probe with one user message, one
+  tool, and an assistant turn that calls it, rendered as it is, with the call renamed, and with one
+  more argument, the two changes the round trip already makes per case. When neither change alters
+  the rendered turn, the template renders no tool calls. A template that fails on the probe is not
+  judged by it; its cases are recorded or refused one by one, as today.
+- **Effect:** the template's parse cases with tool calls are not recorded with it. `sets.toml`
+  counts them per set as `not_applicable`, beside `rejected`; `record` prints one line per group and
+  template with the count and the reason, and they do not make it exit 1. The per-model table shows
+  the count with its reason.
+- **What stays a refusal:** a template that renders calls but loses one in a case, such as only the
+  first of several. That is a defect with its own issue, and the per-case check reports it as
+  today. Render cases are unaffected.
+- **At the pin,** none of #59's eight groups gets a second reference: six have no tool-call format
+  anywhere, and the pages name no template for Hunyuan-A13B or Phi-4-mini. All eight count their
+  tool-call parse cases as not applicable, 15,551 each in #59's scale run and 124,408 in all,
+  instead of refusing them.
+
+### Proposed case-schema change
+
+A case-schema change waits for Simo's approval, and witnesses are still question 4, so this is a
+proposal (question 7). It is a separate commit, so the rest of this design can land without it.
+
+- **`second_references`** on render and parse lines: an object keyed by the example template's file
+  name. Each entry has `source` (`hf-template` for render and `roundtrip` for parse, the first
+  reference's oracles with another template), the result fields the first reference uses for its
+  kind (`input_ids` and `text`; for parse `message`, `finish_reason`, `text`, the output's own
+  `ids`, `pieces` and `chunk_plans`, and from the round trip `end_of_turn`), and `provenance` with
+  `vllm_commit` and the template's `chat_template_sha256`.
+- **`rejected` and `not_applicable`** on `reference` and on each entry: the reason it records no
+  result, at most one of the two. A first reference with one is written only beside
+  `second_references`, and such a parse line carries no top-level `output_ids`, `output_pieces` or
+  `chunk_plans`, since those are the first reference's output. #43's rule that a round-trip parse
+  reference carries `end_of_turn` binds when the reference records the case.
+- **Why an entry beside `reference`, not a witness:** a witness is an engine's result and this is
+  the reference oracle's, and what a witness entry holds is still open (question 4), so a second
+  reference filed as a witness would wait for it. Separate set files per template were the other
+  choice. They would leave every existing line as it is, but store each request twice, need a second
+  id for each case, and compare the two references across files.
+
+### Delivery of second references
+
+Each step is its own pull request.
+
+1. This design and the mapping; the case-schema change once Simo approves it.
+2. Not applicable in `record`: the probe, `not_applicable` in `sets.toml` and `count`, and #59's
+   eight groups recorded again.
+3. Consumers skip a line whose first reference records no result: `verify`, smg's consumer test,
+   and Symphony's fixture test through a `for:symphony` issue. This lands before any such line is
+   written.
+4. `record` reads the mapping, fetches the pages and templates at the pin and checks their sha256
+   as `models` does its registry files, lists each checkpoint's example templates among its oracle
+   inputs, records the second references, and prints the fingerprints and draft issues. The fixed
+   date comes with it.
+5. `verify --second-reference`, for an SMG started with an example template.
+6. vLLM's side of each second reference, with step 5 of Delivery.
 
 ## Fixture ids and the tree consumers read
 
@@ -397,6 +573,8 @@ Each step is its own pull request.
    custom code, gated models, and a reference for templates that drop the tool list.
 10. The next sources, one importer per source in the order of Sources; #19's `tool_choice` cases
     are built from the BFCL import.
+11. Second references from vLLM's example tool templates, and not applicable, in the steps of
+    "Delivery of second references".
 
 ## Questions for Simo
 
@@ -416,3 +594,13 @@ Each step is its own pull request.
    put the incremental decoder over 181 million. The reference must be Hugging Face's own
    incremental decode of those ids: joining the decoded pieces does not give back `reference.text`
    for a tokenizer whose normalizer changes the text before encoding.
+7. Second references in the case schema: `second_references`, and `rejected` and
+   `not_applicable` on a reference ("Proposed case-schema change"). It needs nothing from question
+   4: a second reference is not a witness.
+8. Templates vLLM ships that no page of its docs names, `tool_chat_template_hunyuan_a13b.jinja` and
+   `tool_chat_template_phi4_mini.jinja` among them, the two that started #59. Under the rule as
+   decided they make no second reference, and Hunyuan-A13B's line in the tool calling page says its
+   chat template is already included in its Hugging Face files. Counting a file name would make
+   bellwether choose the checkpoints of the family it names, and counting vLLM's tool-use tests,
+   which start Hermes-3-Llama-3.1-8B with `hermes` and Llama-4-Scout with `llama4_json`, would take
+   what the docs do not say. Should either count?
