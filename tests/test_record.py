@@ -682,6 +682,77 @@ def test_a_template_that_renders_the_reasoning_and_the_content_records_the_case(
     assert out.text == "<think>97 has no divisor up to 9.</think>Yes, 97 is prime."
 
 
+def weather_call_with(arguments: str) -> dict:
+    return {"type": "function", "function": {"name": "get_weather", "arguments": arguments}}
+
+
+# MiniMax M3's shape: each argument an element, and an argument whose value is null left out, at every depth.
+SKIPS_NULLS = (
+    "{%- macro xml(value) %}{%- if value is mapping %}"
+    "{%- for k, v in value.items() if v is not none %}{{ '<' + k + '>' }}{{ xml(v) }}{{ '</' + k + '>' }}{%- endfor %}"
+    "{%- else %}{{ value | string }}{%- endif %}{%- endmacro %}"
+)
+
+
+def skips_nulls_template() -> str:
+    call = "{{ '<tool_call>' + c['function']['name'] }}{{ xml(c['function']['arguments']) }}{{ '</tool_call>' }}"
+    return SKIPS_NULLS + assistant_template(call)
+
+
+def test_a_template_that_writes_nothing_for_a_null_argument_fails_the_case(tiny_model, tmp_path_factory):
+    # MiniMax M3 leaves a null argument out: the output holds nothing a parser could return it from.
+    model = tiny_variant(tiny_model, tmp_path_factory, "skips-nulls-chat", skips_nulls_template())
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "the template writes nothing for argument unit of call 0 (get_weather), whose value is null: removing it "
+            "leaves the rendered turn as it was"
+        ),
+    ):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]},
+            {"content": "", "tool_calls": [weather_call_with('{"city": "Paris", "unit": null}')]},
+        )
+
+
+def test_a_template_that_writes_nothing_for_a_nested_null_fails_the_case(tiny_model, tmp_path_factory):
+    model = tiny_variant(tiny_model, tmp_path_factory, "skips-nested-nulls-chat", skips_nulls_template())
+    with pytest.raises(
+        ValueError,
+        match=re.escape("the template writes nothing for argument options.unit of call 0 (get_weather), whose value"),
+    ):
+        RoundtripOracle(str(model), "local").render_output(
+            {"messages": [user("Weather?")]},
+            {
+                "content": "",
+                "tool_calls": [weather_call_with('{"city": "Paris", "options": {"days": 3, "unit": null}}')],
+            },
+        )
+
+
+def test_a_template_that_skips_nulls_records_a_case_without_one(tiny_model, tmp_path_factory):
+    model = tiny_variant(tiny_model, tmp_path_factory, "skips-nulls-plain-chat", skips_nulls_template())
+    out = RoundtripOracle(str(model), "local").render_output(
+        {"messages": [user("Weather?")]},
+        {"content": "", "tool_calls": [weather_call_with('{"city": "Paris", "options": {"days": 3}}')]},
+    )
+    assert out.text == "<tool_call>get_weather<city>Paris</city><options><days>3</days></options></tool_call>"
+
+
+def test_a_template_that_writes_a_null_argument_records_the_case(tiny_model, tmp_path_factory):
+    call = (
+        "{{ '<tool_call>' + c['function']['name'] }}"
+        "{%- for k, v in c['function']['arguments'].items() %}{{ ' ' + k + '=' + v | tojson }}{%- endfor %}"
+        "{{ '</tool_call>' }}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "writes-nulls-chat", assistant_template(call))
+    out = RoundtripOracle(str(model), "local").render_output(
+        {"messages": [user("Weather?")]},
+        {"content": "", "tool_calls": [weather_call_with('{"city": "Paris", "unit": null}')]},
+    )
+    assert out.text == '<tool_call>get_weather city="Paris" unit=null</tool_call>'
+
+
 # Qwen3.5 to 3.8's shape: each argument is a tag, a string written as it is and any other value as JSON, so a null
 # and the string "null" give the same text.
 TAGGED_CALL = (
