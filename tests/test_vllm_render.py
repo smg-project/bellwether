@@ -17,6 +17,9 @@ import time
 
 import pytest
 
+# Every test here talks to a fake render server it runs on 127.0.0.1, or to a closed port there.
+pytestmark = pytest.mark.loopback
+
 # fixtures/qwen3-8b/render/common.jsonl, case text-user-only: the request and the ids its template renders.
 CHAT_REQUEST = {"messages": [{"role": "user", "content": "What is the capital of France?"}]}
 PROMPT_IDS = [151644, 872, 198, 3838, 374, 279, 6722, 315, 9625, 30, 151645, 198, 151644, 77091, 198]
