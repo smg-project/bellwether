@@ -4,7 +4,7 @@
 > amount of data. Then smg uses it in many places. Tokenizer, detokenization, gRPC router, and
 > symphony.
 >
-> Simo, 2026-10-06
+> The maintainer, 2026-10-06
 
 Bellwether holds expected values for several consumers in smg: the tokenizer crate (encoding and
 incremental decoding), the gRPC router's request path, and Symphony's parsers.
@@ -37,7 +37,7 @@ result is measured against.
 
 ## Who is right
 
-Two sources of truth, equal in authority (Simo, 2026-10-06):
+Two sources of truth, equal in authority (the maintainer, 2026-10-06):
 
 - **Hugging Face:** the checkpoint's own material at a pinned revision. That is the vendor's shipped
   encoder when there is one, else the chat template and tokenizer. For parsing it is the round trip:
@@ -97,6 +97,42 @@ the other kinds exist and exit with status 2 until their milestone lands:
 | M4 | parse and detokenize fixtures with chunk plans, the round-trip oracle (Qwen3-8B done; DeepSeek-R1 needs a decision, issue #14), waivers |
 | M5 | CI in both repositories; weekly record against engine nightlies; reports to `smg-project/artifacts` |
 | M6 | coverage work from the gaps list |
+
+## What bellwether holds
+
+`uv run bellwether count --readme README.md` writes the two tables below from `fixtures/` and `corpus/`, and CI runs it with `--check`, so they say what main holds.
+
+<!-- bellwether count --readme writes everything from here to the end marker: edit none of it by hand -->
+
+### Models
+
+Each checkpoint group is recorded once, by its primary, for every checkpoint that shares its tokenizer and template; the counts are each group's `sets.toml`.
+
+| Group | Model | Checkpoints | Tier | Render cases | Parse cases | Refused | Sources |
+|---|---|---:|---:|---:|---:|---:|---|
+| [deepseek-r1](fixtures/deepseek-r1/sets.toml) | deepseek-ai/DeepSeek-R1 @ 56d4cbbb | 1 | 3 | 23 | 0 | 1 | hand-written |
+| [qwen3-8b](fixtures/qwen3-8b/sets.toml) | Qwen/Qwen3-8B @ b968826d | 6 | 1 | 24 | 16 | 0 | hand-written |
+| all | | 7 | | 47 | 16 | 1 | |
+
+75 more groups (99 checkpoints) have a manifest and nothing recorded yet.
+
+### Corpus
+
+The cases every group is recorded over, by the source they were imported from.
+
+| Source | From | Licenses | Render sets | Render cases | Parse sets | Parse cases | Plain | Stored |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| bfcl | pypi:bfcl-eval==2026.3.23 | Apache-2.0 | 17 | 4119 | 14 | 2735 | 37.0 MB | 37.0 MB, plain |
+| glaive-v2 | hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645 | Apache-2.0 | 71 | 289494 | 71 | 306240 | 1.24 GB | 81.4 MB, zstd in Git LFS |
+| gsm8k | github:openai/grade-school-math@3101c7d5 | MIT | 2 | 8792 | 4 | 17584 | 22.6 MB | 22.6 MB, plain |
+| hand-written | written in this repository | | 1 | 24 | 1 | 16 | 0.0 MB | 0.0 MB, plain |
+| hermes | hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d2 | Apache-2.0 | 3 | 20769 | 3 | 20773 | 99.6 MB | 5.8 MB, zstd in Git LFS |
+| mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
+| shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
+| swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
+| all | | | 108 | 327934 | 119 | 360658 | 1.47 GB | 214.8 MB |
+
+<!-- end of what bellwether count --readme writes -->
 
 ## Quick start
 
@@ -236,7 +272,7 @@ one per registry entry that names none, ordered by tier and then within the tier
 |---|---|
 | `model` | the Hugging Face id, as the Hub spells it; for a registry entry that names no checkpoint, the entry's name (vLLM's architecture, SGLang's model family) |
 | `revision` | the Hub's sha when the list was built; for a checkpoint vLLM's registry pins (`refs/pr/17` for ERNIE-4.5-VL, a commit for HyperCLOVAX-SEED-Think-32B), the sha of that revision, and without the Hub the revision as vLLM writes it |
-| `tier` | 1: Simo's models, in his order; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads. `null` where the Hub decides the tier and was not asked (`--registry-only`) or gave no answer; those rows come after tier 2, by id |
+| `tier` | 1: the maintainer's priority models, in the order given; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads. `null` where the Hub decides the tier and was not asked (`--registry-only`) or gave no answer; those rows come after tier 2, by id |
 | `status` | `pending`, or why nothing can be recorded yet: `no-checkpoint-named` (the registry entry names no checkpoint), `gated` (also when a config answers 401 or 403), `needs-vendor-code` (vLLM loads it with `trust_remote_code`, so the oracle would need the vendor's code; known without the Hub too), `no-chat-template`, `processor-chat-template` (the template is only in the processor's files, `chat_template.json` or the `chat_template` in `processor_config.json`, which `AutoProcessor` and vLLM read but the oracle's `AutoTokenizer` does not; the oracle reading processor templates is the follow-up), `not-on-hub`; when a config could not be read, `invalid-tokenizer-config` or `invalid-processor-config` (not a JSON object), or `hub-error-` and the HTTP status or the error (`hub-error-503`, `hub-error-read-timeout`); `unchecked` without the Hub |
 | `created`, `downloads` | the Hub's creation date and downloads over the last 30 days |
 | `modality` | `multimodal` when one of its architectures is multimodal in either engine's code (vLLM's multimodal table, an SGLang multimodal processor), else `text`; its architectures are those vLLM lists it under and, with the Hub, those its config names. `null` when none is known: an id only SGLang's docs give, without the Hub |

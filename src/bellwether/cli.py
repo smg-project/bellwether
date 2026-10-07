@@ -128,6 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     count.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     count.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    count.add_argument(
+        "--readme",
+        type=Path,
+        help="write the models and corpus tables into this file, between the markers it holds, instead of printing",
+    )
+    count.add_argument("--check", action="store_true", help="with --readme: compare the file's tables, write nothing")
     count.set_defaults(func=count_run)
 
     unpack = sub.add_parser("unpack", help="write every fixture set as plain JSON Lines into one tree, for consumers")
