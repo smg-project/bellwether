@@ -23,6 +23,7 @@ from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
 from bellwether.models import run as models_run
 from bellwether.record import run as record_run
+from bellwether.sandbox import run as sandbox_run
 from bellwether.unpack import run as unpack_run
 from bellwether.verify import run as verify_run
 
@@ -103,6 +104,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="record only this corpus set (repeat for more); other sets' fixture files are left as they are",
     )
     record.set_defaults(func=record_run)
+
+    sandboxed = sub.add_parser(
+        "sandbox-record",
+        help="record a checkpoint whose tokenizer is the vendor's code, in a network-less container (needs Docker)",
+    )
+    sandboxed.add_argument("--model", required=True, help="Hugging Face model id, e.g. moonshotai/Kimi-K3")
+    sandboxed.add_argument("--kind", required=True, choices=["render", "parse"])
+    sandboxed.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    sandboxed.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    sandboxed.set_defaults(func=sandbox_run)
 
     importer = sub.add_parser("import", help="write corpus sets from a public dataset at a pinned revision")
     importer.add_argument(

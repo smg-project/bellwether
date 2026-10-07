@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3", "ruff>=0.6"]
+# What vendor tokenizers import, installed in the vendor-code oracle's sandbox image only (docker/vendor).
+vendor = ["tiktoken>=0.9"]
 # Engine oracles (vLLM, SGLang) are deliberately not extras: they must never share one
 # environment. `bellwether record --oracle vllm|sglang` runs inside the engine's official image.
 
