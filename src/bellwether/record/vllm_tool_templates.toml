@@ -175,10 +175,12 @@ sha256 = "0121272d0fe4c38287001bb921fbb4a733a2f386fd49ae3a8dc48be7b1a3aa22"
 [[template.named_for]]
 checkpoints = ["mistralai/Mistral-7B-Instruct-v0.3"]
 page = "docs/features/tool_calling.md"
-lines = [190, 194, 200, 204]
+lines = [190, 194, 200, 204, 229]
 tool_parser = "mistral"
 tokenizer_mode = "hf"
-note = "line 200: for the Transformers tokenization backend only; vLLM's default for this checkpoint is mistral-common, which reads no template"
+config_format = "hf"
+load_format = "hf"
+note = "line 200: for the Transformers tokenization backend only, whose flags line 229 gives; vLLM's default for this checkpoint is mistral-common, which reads no template"
 
 [[template.named_for]]
 checkpoints = ["mistralai/Mistral-7B-Instruct-v0.3"]
@@ -196,6 +198,8 @@ page = "docs/features/tool_calling.md"
 lines = [194, 200, 206, 217]
 tool_parser = "mistral"
 tokenizer_mode = "hf"
+config_format = "hf"
+load_format = "hf"
 note = "line 229 gives the same flags for every Mistral AI model in the Transformers format, naming no checkpoint"
 
 [[template]]

@@ -378,10 +378,11 @@ reference stays the checkpoint's own files.
   what the checkpoint's own files give and what vLLM's documented setup gives, so neither unsettles
   the other; `disputed` stays the two sources of truth disagreeing on one template.
 - **vLLM's side.** When vLLM's witnesses land (step 5), each second reference gets its own: the
-  render server started with `--chat-template` pointing at the pinned template file, the tool
-  parser its statement gives, and for Mistral `--tokenizer_mode hf`. It is compared with the second
-  reference by the two-sources rule, and a disagreement's fingerprint names the template too,
-  `vllm:<what differs>:<group>:<template>`.
+  render server started with `--chat-template` pointing at the pinned template file, the tool parser
+  its statement gives, and for Mistral the Transformers format's `--tokenizer_mode hf
+  --config_format hf --load_format hf`. It is compared with the second reference by the two-sources
+  rule, and a disagreement's fingerprint names the template too, `vllm:<what
+  differs>:<group>:<template>`.
 - **Consumers and `verify`.** Nothing changes by default. smg's tests, Symphony's fixture test and
   `verify` compare with `reference`, because SMG renders with the checkpoint's own template unless
   it is started with another.
