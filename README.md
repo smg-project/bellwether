@@ -148,7 +148,8 @@ The cases every group is recorded over, by the source they were imported from.
 | mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
 | shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
 | swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
-| all | | | 108 | 327934 | 119 | 360658 | 1.47 GB | 214.8 MB |
+| swehero | hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119 | CC-BY-4.0 | 14 | 79627 | 14 | 101568 | 14.84 GB | 882.8 MB, zstd in Git LFS |
+| all | | | 122 | 407561 | 133 | 462226 | 16.31 GB | 1.10 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
