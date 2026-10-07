@@ -902,6 +902,7 @@ def closed_port() -> int:
         "manifest without a revision",
         "manifest not TOML",
         "manifest not readable",
+        "group names no manifest",
         "a named model without render cases",
         "bad known file",
         "no gateway",
@@ -953,6 +954,10 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         # --model finds a manifest by reading each one in turn, so the error must name the file it stopped at.
         (fixtures / "m3" / "manifest.toml").write_text('model = "org/M3\n')
         extra, message = ["--model", "org/M3"], str(fixtures / "m3" / "manifest.toml")
+    elif problem == "group names no manifest":
+        manifest = f'model = "org/M3"\nrevision = "{revision_of("m3")}"\ngroup = "gone"\n'
+        (fixtures / "m3" / "manifest.toml").write_text(manifest)
+        message = "group gone names no manifest"
     elif problem == "manifest not readable":
         (fixtures / "m4" / "manifest.toml").mkdir(parents=True)
         message = str(fixtures / "m4" / "manifest.toml")
