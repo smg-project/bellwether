@@ -143,8 +143,9 @@ appended (DeepSeek-R1 never renders `<think>`) cannot be this oracle for that ca
 reported and not recorded, and the run exits 1. Recording it is left to the manifest's next authority,
 the engine witnesses, which nothing here invokes. `fixtures/README.md` has the rules.
 
-The stop ids come from the checkpoint's `generation_config.json`, so `record --kind parse` needs that
-file cached at the manifest's revision, or known to be absent: offline, transformers would take a
+The stop ids are the eos ids of the checkpoint's `generation_config.json` (of its `config.json` when it
+ships none) together with the tokenizer's eos, so `record --kind parse` needs `generation_config.json`
+cached at the manifest's revision, or known to be absent: offline, transformers would take a
 file that is merely not cached for one the repository does not ship. The run stops with an error
 naming the file and the command that fetches it,
 `hf download <model> generation_config.json --revision <sha>`, which leaves the hub cache's
