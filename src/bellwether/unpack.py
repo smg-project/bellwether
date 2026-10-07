@@ -71,14 +71,15 @@ def fetch(paths: list[Path]) -> None:
 def unpack(fixtures: Path, out: Path, model: str | None = None) -> list[Path]:
     """Write each selected model's tree under ``out``, replacing what an earlier unpack left there, so a set the
     fixtures no longer have does not stay behind for a consumer that reads every ``*.jsonl``. Unpacking every model
-    also removes the tree of a model the fixtures no longer have. Only what an earlier unpack wrote is removed: a
-    model's directory there that holds anything else stops the run before anything is deleted."""
+    also removes the tree of a model the fixtures no longer have. Only what an earlier unpack wrote is removed, a
+    directory whose ``manifest.toml`` loads as a bellwether manifest: a model's directory there that holds anything
+    else stops the run before anything is deleted, and any other directory is left as it is."""
     manifests = selected(fixtures, model)
     refuse_out_over_fixtures(out, manifests)
     refuse_what_unpack_did_not_write(out, manifests)
     if model is None and out.is_dir():
         slugs = {manifest.slug for manifest in manifests}
-        for stale in sorted(p for p in out.iterdir() if p.name not in slugs and (p / "manifest.toml").is_file()):
+        for stale in sorted(p for p in out.iterdir() if p.name not in slugs and loads_as_manifest(p / "manifest.toml")):
             shutil.rmtree(stale)  # a model the fixtures no longer have
     written: list[Path] = []
     for manifest in manifests:
@@ -106,8 +107,17 @@ def refuse_out_over_fixtures(out: Path, manifests: list[Manifest]) -> None:
 
 
 def unpacked(directory: Path) -> bool:
-    """A directory an earlier unpack wrote: it holds a model's ``manifest.toml``, or nothing at all."""
-    return (directory / "manifest.toml").is_file() or not any(directory.iterdir())
+    """A directory an earlier unpack wrote: it holds a model's manifest, or nothing at all."""
+    return loads_as_manifest(directory / "manifest.toml") or not any(directory.iterdir())
+
+
+def loads_as_manifest(path: Path) -> bool:
+    """Whether ``path`` loads as a bellwether manifest: another project's file of that name is not one."""
+    try:
+        load_manifest(path)
+    except Exception:  # whatever stops it loading, unpack did not write it, so nothing removes it
+        return False
+    return True
 
 
 def refuse_what_unpack_did_not_write(out: Path, manifests: list[Manifest]) -> None:
