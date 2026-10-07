@@ -41,6 +41,7 @@ jobs:
       - run: uv run bellwether import swebench --check
       - run: uv run bellwether import glaive-v2 --check
       - run: uv run bellwether import swehero --check
+      - run: uv run bellwether import tau2 --check
       - name: The README's tables are what fixtures/ and corpus/ hold
         run: uv run bellwether count --readme README.md --check
       - uses: actions/cache@v6

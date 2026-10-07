@@ -38,4 +38,8 @@ def run(args: argparse.Namespace) -> int:
         from .swehero import run as run_swehero
 
         return run_swehero(args)
+    if args.dataset == "tau2":
+        from .tau2 import run as run_tau2
+
+        return run_tau2(args)
     raise ValueError(f"no importer for {args.dataset!r}")
