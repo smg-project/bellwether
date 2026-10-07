@@ -481,13 +481,13 @@ def names(sets: dict) -> dict:
     return {key: [line["name"] for line in lines] for key, lines in sets.items()}
 
 
-def test_the_sample_is_every_kth_row_and_refused_rows_are_counted_across_the_whole_file():
-    rows = [chat_row("a", "b"), BROKEN, chat_row("c"), chat_row("d"), BROKEN, chat_row("e"), chat_row("f")]
+def test_every_row_is_taken_and_a_row_that_cannot_be_mapped_gives_no_case():
+    rows = [chat_row("a", "b"), BROKEN, chat_row("c"), chat_row("d"), BROKEN]
     skipped: list[tuple[int, str]] = []
-    sets = glaive_v2.build_sets(rows, step=3, set_size=100, skipped=skipped)
+    sets = glaive_v2.build_sets(rows, set_size=100, skipped=skipped)
     assert names(sets) == {
-        ("render", "glaive-v2-00"): ["glaive-v2-0-0", "glaive-v2-0-2", "glaive-v2-3-0", "glaive-v2-6-0"],
-        ("parse", "glaive-v2-00"): ["glaive-v2-0-1", "glaive-v2-0-3", "glaive-v2-3-1", "glaive-v2-6-1"],
+        ("render", "glaive-v2-00"): ["glaive-v2-0-0", "glaive-v2-0-2", "glaive-v2-2-0", "glaive-v2-3-0"],
+        ("parse", "glaive-v2-00"): ["glaive-v2-0-1", "glaive-v2-0-3", "glaive-v2-2-1", "glaive-v2-3-1"],
     }
     assert skipped == [(1, glaive_v2.STRAY_END), (4, glaive_v2.STRAY_END)]
 
@@ -498,14 +498,14 @@ def test_a_set_holds_whole_rows_and_no_more_cases_of_either_kind_than_the_set_si
         "system": NO_FUNCTIONS,
         "chat": "USER: g?\n\nASSISTANT: g. <|endoftext|>\n\nASSISTANT: h. <|endoftext|>",
     }
-    sets = glaive_v2.build_sets([chat_row("a", "b"), two_answers, chat_row("c")], step=1, set_size=3)
+    sets = glaive_v2.build_sets([chat_row("a", "b"), two_answers, chat_row("c")], set_size=3)
     assert names(sets) == {
         ("render", "glaive-v2-00"): ["glaive-v2-0-0", "glaive-v2-0-2"],
         ("parse", "glaive-v2-00"): ["glaive-v2-0-1", "glaive-v2-0-3"],
         ("render", "glaive-v2-01"): ["glaive-v2-1-0", "glaive-v2-2-0"],
         ("parse", "glaive-v2-01"): ["glaive-v2-1-1", "glaive-v2-1-2", "glaive-v2-2-1"],
     }
-    assert glaive_v2.build_sets([BROKEN], step=1, set_size=3) == {}
+    assert glaive_v2.build_sets([BROKEN], set_size=3) == {}
 
 
 # The opening of the Apache License 2.0 as the Apache Software Foundation publishes it.
@@ -513,7 +513,7 @@ APACHE = b"\n                                 Apache License\n                  
 
 
 def test_written_sets_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
-    sets, corpus = glaive_v2.build_sets([ROW_25475], step=1, set_size=10), tmp_path / "corpus"
+    sets, corpus = glaive_v2.build_sets([ROW_25475], set_size=10), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
     for name in ("common", "bfcl-simple-python", "glaive-v2-07"):
         (corpus / "render" / f"{name}.jsonl").write_text("{}\n")
@@ -539,7 +539,7 @@ def test_written_sets_check_clean_and_a_changed_missing_or_stale_file_is_reporte
     assert glaive_v2.check_sets(sets, corpus, APACHE) == [
         f"{corpus / 'parse' / 'glaive-v2-00.jsonl'}: differs from a fresh import",
         f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: missing",
-        f"{corpus / 'render' / 'glaive-v2-09.jsonl'}: no slice of the glaive-v2 sample writes it",
+        f"{corpus / 'render' / 'glaive-v2-09.jsonl'}: no slice of the glaive-v2 rows writes it",
     ]
 
 
@@ -602,7 +602,6 @@ def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD, license_tex
 
 def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     served = serve(monkeypatch, tmp_path, [chat_row("a"), BROKEN, chat_row("b"), chat_row("c")])
-    monkeypatch.setattr(glaive_v2, "STEP", 2)
     corpus, cache = tmp_path / "corpus", tmp_path / "cache"
     argv = ["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(cache)]
     assert main([*argv, "--check"]) == 1
@@ -610,12 +609,14 @@ def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
     assert main([*argv, "--check"]) == 0
     assert served.hub == asked(cache) * 3
     out = capsys.readouterr().out
-    assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 2 cases" in out
+    assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 3 cases" in out
     source = "hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b6456019f5d8bcb991ef0dd67d8ff23221ac"
     assert out.splitlines()[-1] == f"{corpus}: the glaive-v2 sets equal a fresh import of {source}"
+    # Every row the rules map gives its cases.
     assert [line["name"] for line in map(json.loads, (corpus / "parse" / "glaive-v2-00.jsonl").open())] == [
         "glaive-v2-0-1",
         "glaive-v2-2-1",
+        "glaive-v2-3-1",
     ]
 
 
@@ -624,7 +625,6 @@ def test_the_command_names_every_row_it_refuses_and_every_case_it_leaves_out_as_
     # Rows 1 to 52 hold <|endoftext|> in a user turn and row 53 ends without one; row 54 holds row 0's chat, so its
     # cases repeat row 0's.
     serve(monkeypatch, tmp_path, [chat_row("a"), *[BROKEN] * 52, unended, chat_row("a"), chat_row("b")])
-    monkeypatch.setattr(glaive_v2, "STEP", 2)
     corpus = tmp_path / "corpus"
     argv = ["import", "glaive-v2", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
     assert main(argv) == 0
@@ -633,17 +633,15 @@ def test_the_command_names_every_row_it_refuses_and_every_case_it_leaves_out_as_
     every = ", ".join(str(row) for row in range(1, 53))
     assert f"no case for 52 row(s) ({every}): {glaive_v2.STRAY_END}" in out
     assert f"no case for 1 row(s) (53): {glaive_v2.ASSISTANT_END}" in out
-    sampled = ", ".join(str(row) for row in range(2, 53, 2))
-    sample = "sample: every row whose index is a multiple of 2, 28 of 56 rows"
-    assert f"{sample}; 26 of the rows left out are in it ({sampled})" in out
     # A case that repeats an earlier one is left out and named with it, and the counts are of the cases kept.
     assert "no case glaive-v2-54-0: it repeats glaive-v2-0-0" in out
     assert "no case glaive-v2-54-1: it repeats glaive-v2-0-1" in out
-    assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 1 cases, 1 left out as repeats" in out
-    assert f"{corpus / 'parse' / 'glaive-v2-00.jsonl'}: 1 cases, 1 left out as repeats, 1 distinct messages" in out
-    assert f"{corpus}: 2 cases in the 2 glaive-v2 sets, 2 left out as repeats, 1 distinct messages" in out
+    assert f"{corpus / 'render' / 'glaive-v2-00.jsonl'}: 2 cases, 1 left out as repeats" in out
+    assert f"{corpus / 'parse' / 'glaive-v2-00.jsonl'}: 2 cases, 1 left out as repeats, 2 distinct messages" in out
+    assert f"{corpus}: 4 cases in the 2 glaive-v2 sets, 2 left out as repeats, 2 distinct messages" in out
     assert [line["name"] for line in map(json.loads, (corpus / "parse" / "glaive-v2-00.jsonl").open())] == [
-        "glaive-v2-0-1"
+        "glaive-v2-0-1",
+        "glaive-v2-55-1",
     ]
     assert main([*argv, "--check"]) == 0
 

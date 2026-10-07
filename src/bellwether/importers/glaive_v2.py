@@ -19,12 +19,13 @@ license. A row becomes OpenAI chat messages:
   out, so a chat that recurs in another row gives the same cases there.
 
 Each assistant turn is a parse case, and each user turn an assistant answers a render case; a turn with no text is kept
-as written, a message whose content is "". For now the corpus holds a sample, every ``STEP``-th row by index. A row
-these rules cannot map has no case, and the import names it with its reason; a case that repeats an earlier one is left
-out (``corpus_sets.leave_out_repeats``), and the import names it with the case it repeats. The dataset ships no LICENSE
-file, so the import writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this
-module imports only what it shares with the other importers: the readers of pinned Hugging Face and GitHub files
-(``hf``, ``github``) and the set writer (``corpus_sets``).
+as written, a message whose content is "". Every row is taken. A row these rules cannot map has no case, and the import
+names it with its reason; a case that repeats an earlier one is left out (``corpus_sets.leave_out_repeats``), and the
+import names it with the case it repeats. The sets take more than ``corpus_sets.LIMIT`` as plain JSON Lines, so
+``corpus_sets.write`` stores every one of them compressed in Git LFS. The dataset ships no LICENSE file, so the import
+writes the Apache License 2.0 beside the sets (``LICENSE_COPY``). Beyond the standard library, this module imports only
+what it shares with the other importers: the readers of pinned Hugging Face and GitHub files (``hf``, ``github``) and
+the set writer (``corpus_sets``).
 """
 
 from __future__ import annotations
@@ -55,11 +56,6 @@ LICENSE_SHA256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d
 # Where the import writes that copy, under the corpus root.
 LICENSE_COPY = "licenses/glaive-v2-LICENSE"
 DATASET = "glaive-v2"
-# The rows taken: every STEP-th row by index. This sample is for now: every row makes 1,135 MB of plain JSON Lines once
-# repeats are left out, past corpus_sets.LIMIT, the 50 MB an import's sets may take and stay plain, and every 31st row
-# makes 39.2 MB. Past the limit corpus_sets.write stores every set compressed in Git LFS, and every row is taken once
-# those sets land.
-STEP = 31
 SET_SIZE = 5000  # cases per set file, of either kind, at most
 
 SYSTEM = "SYSTEM: "
@@ -270,15 +266,14 @@ def set_name(number: int) -> str:
 
 
 def build_sets(
-    rows: list[dict], *, step: int, set_size: int, skipped: list[tuple[int, str]] | None = None
+    rows: list[dict], *, set_size: int, skipped: list[tuple[int, str]] | None = None
 ) -> dict[tuple[str, str], list[dict]]:
-    """Corpus lines per ``(kind, set name)`` from every ``step``-th row, by index.
+    """Corpus lines per ``(kind, set name)`` from every row, by index.
 
-    Every row of the file is mapped, so that a row that cannot be is appended to ``skipped`` with its reason whether
-    or not the sample takes it. A set holds whole rows, in index order, and at most ``set_size`` cases of either kind;
-    the render set and the parse set of one number hold the same rows. A row has no more render cases than parse
-    cases, since each render case's user turn is answered by an assistant turn, a parse case, so the parse cases
-    decide when a set is full.
+    A row that cannot be mapped is appended to ``skipped`` with its reason. A set holds whole rows, in index order, and
+    at most ``set_size`` cases of either kind; the render set and the parse set of one number hold the same rows. A row
+    has no more render cases than parse cases, since each render case's user turn is answered by an assistant turn, a
+    parse case, so the parse cases decide when a set is full.
     """
     groups: list[tuple[list[dict], list[dict]]] = [([], [])]
     for index, row in enumerate(rows):
@@ -287,8 +282,6 @@ def build_sets(
         except Unmappable as err:
             if skipped is not None:
                 skipped.append((index, str(err)))
-            continue
-        if index % step:
             continue
         row_render, row_parse = cases_for(index, messages, tools)
         render, parse = groups[-1]
@@ -306,14 +299,14 @@ def build_sets(
 
 
 def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[Path]:
-    """Write every set and the License copy, and remove ``glaive-v2-*`` set files the sample no longer writes."""
+    """Write every set and the License copy, and remove ``glaive-v2-*`` set files the import no longer writes."""
     return corpus_sets.write(sets, corpus_dir, f"{DATASET}-", {LICENSE_COPY: license_text})
 
 
 def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, license_text: bytes) -> list[str]:
     """One line per set file, or the License copy, that differs from a fresh import; empty when none does."""
     files = {LICENSE_COPY: license_text}
-    return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "slice of the glaive-v2 sample", files)
+    return corpus_sets.check(sets, corpus_dir, f"{DATASET}-", "slice of the glaive-v2 rows", files)
 
 
 def check_license_text(text: bytes) -> None:
@@ -331,7 +324,7 @@ def run(args: argparse.Namespace) -> int:
     check_license_text(license_text)
     rows = json.loads(hf.fetch(REPO, REVISION, DATA, DATA_SHA256, cache=args.cache).read_bytes())
     skipped: list[tuple[int, str]] = []
-    sets = build_sets(rows, step=STEP, set_size=SET_SIZE, skipped=skipped)
+    sets = build_sets(rows, set_size=SET_SIZE, skipped=skipped)
     kept, repeats = corpus_sets.leave_out_repeats(sets)
     if args.check:
         problems = check_sets(kept, args.corpus, license_text)
@@ -342,10 +335,5 @@ def run(args: argparse.Namespace) -> int:
         return 1 if problems else 0
     corpus_sets.report(DATASET, sets, kept, repeats, args.corpus)
     corpus_sets.report_skipped([(str(index), why) for index, why in skipped])
-    sampled = [str(index) for index, _ in skipped if index % STEP == 0]
-    print(
-        f"sample: every row whose index is a multiple of {STEP}, {len(range(0, len(rows), STEP))} of {len(rows)} rows;"
-        f" {len(sampled)} of the rows left out are in it ({', '.join(sampled)})"
-    )
     write_sets(kept, args.corpus, license_text)
     return 0
