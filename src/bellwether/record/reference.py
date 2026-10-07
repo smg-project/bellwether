@@ -15,6 +15,14 @@ prompt in the reference, so they are kept in the request and ignored here.
 With ``vendor_code``, the tokenizer is the class the checkpoint names in ``auto_map``, loaded with
 ``trust_remote_code``: the vendor-code oracle, which refuses outside the sandbox (``vendor``). Without it, a checkpoint
 whose tokenizer is the vendor's code cannot be loaded, and nothing of the vendor's is run.
+
+The template is the tokenizer's, or, when the tokenizer ships none, the ``chat_template`` of
+``chat_template.json``, the processor's file, as transformers' processor and vLLM read it (Qwen3-Omni
+ships its template only there). The tokenizer is ``AutoTokenizer``'s, except when the model config is
+the vendor's class: ``AutoTokenizer`` builds the config first, which needs that code, and bellwether
+never runs it outside the sandbox. Then the class ``tokenizer_config.json`` names is loaded as ``AutoTokenizer``
+would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Neither applies with ``vendor_code``: the vendor's class
+loads as the checkpoint names it, and renders with its own template or none (Kimi-K3's).
 """
 
 from __future__ import annotations
@@ -39,16 +47,19 @@ class HfTemplateOracle:
     def __init__(self, model: str, revision: str, vendor_code: bool = False) -> None:
         if vendor_code:
             vendor.require_sandbox(model)
-        from transformers import AutoTokenizer
-
         kwargs: dict = {} if Path(model).is_dir() else {"revision": revision}
         if vendor_code:
             kwargs["trust_remote_code"] = True
         self.vendor_code = vendor_code
-        self.tokenizer = AutoTokenizer.from_pretrained(model, **kwargs)
+        self.tokenizer = load_tokenizer(model, revision, kwargs)
         template = self.tokenizer.chat_template
         if template is None and not vendor_code:
-            raise ValueError(f"{model} at {revision} ships no chat template; the hf-template oracle cannot render it")
+            template = processor_template(model, revision)
+            if template is None:
+                raise ValueError(
+                    f"{model} at {revision} ships no chat template; the hf-template oracle cannot render it"
+                )
+            self.tokenizer.chat_template = template
         if template is not None and not isinstance(template, str):
             template = json.dumps(template, sort_keys=True)
         # A vendor's class may render its chat format itself (Kimi-K3's does), with no template to hash; its code is
@@ -85,3 +96,59 @@ class HfTemplateOracle:
         if self.vendor_code:
             found |= vendor.packages()
         return found
+
+
+def load_tokenizer(model: str, revision: str, kwargs: dict):
+    """The checkpoint's tokenizer: ``AutoTokenizer``'s, or, when the model config is the vendor's class
+    (``auto_map``'s ``AutoConfig``) and the vendor's code may not run, the class ``tokenizer_config.json`` names, as
+    ``AutoTokenizer`` would choose it. A tokenizer that is the vendor's class itself is ``AutoTokenizer``'s to refuse,
+    or, with ``trust_remote_code`` in the sandbox, to load."""
+    from transformers import AutoTokenizer
+    from transformers.models.auto.tokenization_auto import tokenizer_class_from_name
+
+    if not kwargs.get("trust_remote_code") and vendor_config(model, revision):
+        path = checkpoint_file(model, revision, "tokenizer_config.json")
+        config = json.loads(path.read_text()) if path is not None else {}
+        named = config.get("tokenizer_class")
+        if "auto_map" not in config and isinstance(named, str):
+            tokenizer_class = tokenizer_class_from_name(named)
+            if tokenizer_class is not None:
+                return tokenizer_class.from_pretrained(model, **kwargs)
+    return AutoTokenizer.from_pretrained(model, **kwargs)
+
+
+def vendor_config(model: str, revision: str) -> bool:
+    """Whether the checkpoint's model config is the vendor's class, named by ``auto_map`` in ``config.json``."""
+    path = checkpoint_file(model, revision, "config.json")
+    auto_map = json.loads(path.read_text()).get("auto_map") if path is not None else None
+    return isinstance(auto_map, dict) and "AutoConfig" in auto_map
+
+
+def processor_template(model: str, revision: str) -> str | None:
+    """The ``chat_template`` of ``chat_template.json``, the processor's template file, if the checkpoint ships one."""
+    path = checkpoint_file(model, revision, "chat_template.json")
+    template = json.loads(path.read_text()).get("chat_template") if path is not None else None
+    return template if isinstance(template, str) else None
+
+
+def checkpoint_file(model: str, revision: str, filename: str) -> Path | None:
+    """``filename`` of the checkpoint at ``revision``, or None when the checkpoint is known not to ship it.
+
+    A local directory answers by what is on disk. For a hub id the hub cache must answer: the file, or the
+    ``.no_exist`` marker that a download which got a 404 leaves. A file that is merely not cached is an error, because
+    offline transformers would take it for one the repository does not ship and silently fall back.
+    """
+    if Path(model).is_dir():
+        path = Path(model) / filename
+        return path if path.is_file() else None
+    from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
+
+    cached = try_to_load_from_cache(model, filename, revision=revision)
+    if cached is _CACHED_NO_EXIST:
+        return None
+    if cached is None:
+        raise FileNotFoundError(
+            f"{filename} of {model} at {revision} is neither cached nor known to be absent; fetch it with "
+            f"`hf download {model} {filename} --revision {revision}` (a 404 marks it absent)"
+        )
+    return Path(cached)

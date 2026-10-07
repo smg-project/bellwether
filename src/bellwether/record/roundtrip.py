@@ -73,14 +73,13 @@ import json
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 
 from tokenizers import Tokenizer, normalizers
 from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
 from . import vendor
-from .reference import HfTemplateOracle
+from .reference import HfTemplateOracle, checkpoint_file
 
 SOURCE = "roundtrip"
 GENERATION_CONFIG = "generation_config.json"
@@ -413,29 +412,6 @@ def model_config(values: dict):
     if isinstance(model_type, str) and model_type in CONFIG_MAPPING:
         return CONFIG_MAPPING[model_type].from_dict(values)
     return values
-
-
-def checkpoint_file(model: str, revision: str, filename: str) -> Path | None:
-    """``filename`` of the checkpoint at ``revision``, or None when the checkpoint is known not to ship it.
-
-    A local directory answers by what is on disk. For a hub id the hub cache must answer: the file, or the
-    ``.no_exist`` marker that a download which got a 404 leaves. A file that is merely not cached is an error, because
-    offline transformers would take it for one the repository does not ship and silently fall back.
-    """
-    if Path(model).is_dir():
-        path = Path(model) / filename
-        return path if path.is_file() else None
-    from huggingface_hub import _CACHED_NO_EXIST, try_to_load_from_cache
-
-    cached = try_to_load_from_cache(model, filename, revision=revision)
-    if cached is _CACHED_NO_EXIST:
-        return None
-    if cached is None:
-        raise FileNotFoundError(
-            f"{filename} of {model} at {revision} is neither cached nor known to be absent; fetch it with "
-            f"`hf download {model} {filename} --revision {revision}` (a 404 marks it absent)"
-        )
-    return Path(cached)
 
 
 @dataclass
