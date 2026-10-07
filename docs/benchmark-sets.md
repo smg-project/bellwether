@@ -532,9 +532,33 @@ hashes, and through the per-model table.
 ## Running vendor code
 
 Some models need code from their own repositories: vendor encoders, custom tokenizers or configs.
-The vendor-code oracle runs that code, pinned to the manifest's revision, inside a container that
-holds only bellwether and the repository's files, in a step that does not hold the Hugging Face
-token. The files are downloaded first, by a step that does.
+Kimi-K3's tokenizer is its own class, `tokenization_kimi.TikTokenTokenizer`, which
+`tokenizer_config.json` names in `auto_map`. The class renders the chat format itself, with no Jinja
+template. The vendor-code oracle runs that code, pinned to the manifest's revision, and runs it only
+inside a sandbox: `bellwether sandbox-record` (`src/bellwether/sandbox.py`).
+
+1. **Download, then check, on the host.** The checkpoint's files are read into the Hugging Face
+   cache at the manifest's revision, with the token if there is one. A vendor tokenizer's oracle
+   inputs include every Python file at the repository's root and its vocabulary files (`.model`,
+   `.tiktoken`, `.vocab`, `.bpe`). Each file must have the sha256 the manifest lists, and no input
+   the manifest does not list may appear, or nothing runs.
+2. **A context of only those files.** The run image's build context holds the listed files in the
+   cache's layout, the corpus of the one kind recorded, and the group's fixtures. Nothing else is
+   in it.
+3. **Two images.** The base image (`docker/vendor/Dockerfile`) is `python:3.12-slim`, pinned by
+   digest, with bellwether itself and the packages `uv.lock` pins for it and its `vendor` extra
+   (`tiktoken`), installed by hash. The run image adds the context, and is removed after the run.
+4. **The run.** `bellwether record --oracle vendor` runs:
+   - as a user without privileges, with no capabilities and no new privileges;
+   - with no network and a read-only root, writing only to `/work` (a volume) and `/tmp`;
+   - within 2 CPUs, 6 GB of memory, 512 processes and four hours;
+   - with no credential: the token never enters the container, and the hub is offline.
+5. **Back out.** The group's fixtures are copied back to the host. The container, the volume and
+   the run image are removed whatever the outcome.
+
+Outside the sandbox, `record --oracle vendor` refuses before any vendor code is imported, and no
+other oracle loads a vendor class. Each reference names its source: `vendor-code` for render,
+`roundtrip:vendor-code` for parse. Its provenance names the base image's id.
 
 ## Counting
 

@@ -241,6 +241,23 @@ leaves out NFC, NFD, NFKC and NFKD and keeps every other step. The run prints ho
 set took that path (#57); `sets.toml` does not record it. A case whose ids do not give back its text
 either way is reported and not recorded.
 
+## Recording with the vendor's code
+
+```bash
+uv run bellwether sandbox-record --model moonshotai/Kimi-K3 --kind render
+uv run bellwether sandbox-record --model moonshotai/Kimi-K3 --kind parse
+```
+
+Some checkpoints ship their tokenizer as their own Python class, like Kimi-K3's
+`tokenization_kimi.TikTokenTokenizer`. Such a checkpoint is recorded by the vendor-code oracle, which
+runs that class only inside a container:
+- with no network and a read-only root;
+- as a user without privileges;
+- holding only the files the manifest lists, each checked against its sha256 before anything runs.
+
+It needs a Docker engine. `record --oracle vendor` refuses outside the container and names this
+command. `docs/benchmark-sets.md`, "Running vendor code", has the steps.
+
 ## The list of models
 
 ```bash
@@ -376,6 +393,7 @@ they are recorded.
 src/bellwether/      package: cli.py, one subpackage per command, schemas/case.schema.json (the fixture line format)
 corpus/              request corpora, one JSON Lines file per set (see corpus/README.md)
 fixtures/            per-model manifests and recorded cases (see fixtures/README.md)
+docker/vendor/       the vendor-code oracle's base image (bellwether sandbox-record)
 waivers/             engine_defects.toml
 tests/
 ```
