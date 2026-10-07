@@ -21,7 +21,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -56,6 +56,9 @@ LICENSE = "CC-BY-4.0"
 CARD_LICENSE = "cc-by-4.0"  # the license in the reviewed card's YAML front matter
 REPOSITORY_LICENSES = ("MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause")  # the card's filter, checked per row
 MAX_REQUEST_BYTES = 128_000  # a request's bytes in its corpus line
+# Every row of the 14 shards takes 15 GB as plain JSON Lines, past corpus_sets.LIMIT: the import streams its sets one
+# shard at a time (iter_sets), so it declares their form rather than let corpus_sets write them plain first.
+FORM = "zstd"
 FUNCTION_KEYS = {"name", "description", "parameters", "strict"}  # OpenAI's function definition
 FUNCTION_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
@@ -296,14 +299,24 @@ def build_sets(
     return {("render", set_name(shard)): render, ("parse", set_name(shard)): parse} if render else {}
 
 
-def write_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[Path]:
+def iter_sets(
+    fetch: Callable[[str], Path], tools: list[dict], skipped: list[tuple[str, str]]
+) -> Iterator[tuple[str, str, list[dict]]]:
+    """Each shard's render and parse sets, ``(kind, set name, lines)``, one shard at a time: a shard is fetched and read
+    only once the sets before it have been taken, so only one shard's cases are held."""
+    for shard, name in enumerate(SHARD_FILES):
+        for (kind, set_name), lines in build_sets(shard, read_rows(fetch(name)), tools, skipped).items():
+            yield kind, set_name, lines
+
+
+def write_sets(sets: corpus_sets.Sets, corpus_dir: Path, summary: corpus_sets.Summary | None = None) -> list[Path]:
     """Write every set, and remove ``swehero-*`` files no shard writes any more."""
-    return corpus_sets.write(sets, corpus_dir, "swehero-")
+    return corpus_sets.write(sets, corpus_dir, "swehero-", form=FORM, summary=summary)
 
 
-def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path) -> list[str]:
+def check_sets(sets: corpus_sets.Sets, corpus_dir: Path) -> list[str]:
     """One line per set file that differs from a fresh import; empty when the corpus is what the import writes."""
-    return corpus_sets.check(sets, corpus_dir, "swehero-", "SWE-Hero shard")
+    return corpus_sets.check(sets, corpus_dir, "swehero-", "SWE-Hero shard", form=FORM)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -314,19 +327,17 @@ def run(args: argparse.Namespace) -> int:
     hf.check_card_license(REPO, REVISION, FILES[hf.CARD], CARD_LICENSE, cache=args.cache)
     tools = check_tools(json.loads(fetch(TOOLS_FILE).read_text(encoding="utf-8")))
     skipped: list[tuple[str, str]] = []
-    sets: dict[tuple[str, str], list[dict]] = {}
-    for shard, name in enumerate(SHARD_FILES):
-        sets.update(build_sets(shard, read_rows(fetch(name)), tools, skipped))
-    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    sets = iter_sets(fetch, tools, skipped)
     if args.check:
-        problems = check_sets(kept, args.corpus)
+        problems = check_sets(sets, args.corpus)
         for problem in problems:
             print(problem, file=sys.stderr)
         if not problems:
             whole = f"every row of its {len(SHARD_FILES)} shards"
             print(f"{args.corpus}: the SWE-Hero sets equal a fresh import of {SOURCE}, {whole}")
         return 1 if problems else 0
-    corpus_sets.report("SWE-Hero", sets, kept, repeats, args.corpus)
+    summary = corpus_sets.Summary()
+    write_sets(sets, args.corpus, summary)
+    corpus_sets.report_summary("SWE-Hero", summary, args.corpus)
     corpus_sets.report_skipped(skipped)
-    write_sets(kept, args.corpus)
     return 0

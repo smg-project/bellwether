@@ -424,6 +424,7 @@ def test_rows_are_read_from_the_shard_in_order_with_the_fields_the_import_uses(t
     assert list(swehero.read_rows(write_shard(tmp_path / "shard.parquet", rows))) == rows
 
 
+@pytest.mark.usefixtures("within_the_limit")
 def test_written_sets_read_back_and_check_clean_and_a_changed_missing_or_stale_file_is_reported(tmp_path):
     sets, corpus = swehero.build_sets(13, [row()], TOOLS), tmp_path / "corpus"
     (corpus / "render").mkdir(parents=True)
@@ -482,6 +483,34 @@ def serve(tmp_path, monkeypatch, *shards: list[dict], card: str = CARD, tools: l
     return downloads
 
 
+@pytest.fixture
+def within_the_limit(monkeypatch):
+    """The full import declares its sets compressed; a test that imports a few rows, whose sets stay within the limit,
+    takes their form from their total instead, as an import that declares none does."""
+    monkeypatch.setattr(swehero, "FORM", None)
+
+
+def test_the_full_import_declares_its_sets_compressed():
+    assert swehero.FORM == "zstd"
+
+
+def test_a_shards_sets_come_before_the_next_shard_is_fetched(tmp_path, monkeypatch):
+    downloads = serve(tmp_path, monkeypatch, [row()], [row(0, trajectory=EDGES)])
+    fetched = []
+
+    def fetch(name):
+        fetched.append(name)
+        return swehero.hf.fetch(swehero.REPO, swehero.REVISION, name, swehero.FILES[name], cache=tmp_path / "cache")
+
+    sets = swehero.iter_sets(fetch, TOOLS, [])
+    assert [next(sets)[:2], next(sets)[:2]] == [("render", "swehero-0"), ("parse", "swehero-0")]
+    assert fetched == [swehero.SHARD_FILES[0]]
+    assert [kind_name[:2] for kind_name in sets] == [("render", "swehero-1"), ("parse", "swehero-1")]
+    assert fetched == swehero.SHARD_FILES
+    assert len(downloads) == 2
+
+
+@pytest.mark.usefixtures("within_the_limit")
 def test_the_command_reads_every_pinned_shard_under_its_cache_then_writes_and_checks(tmp_path, monkeypatch, capsys):
     downloads = serve(tmp_path, monkeypatch, [row()], [row(0, trajectory=EDGES)])
     corpus = tmp_path / "corpus"
@@ -526,6 +555,7 @@ def test_a_tools_file_not_in_openai_shape_stops_the_import_before_the_shard_is_f
     assert [filename for _, filename, _ in downloads] == [hf.CARD, swehero.TOOLS_FILE]
 
 
+@pytest.mark.usefixtures("within_the_limit")
 def test_the_command_names_every_row_it_leaves_out_in_the_words_of_the_other_imports(tmp_path, monkeypatch, capsys):
     rows = [row(number, "GPL-3.0") for number in range(51)] + [row(51, trajectory=TRAJECTORY[:6]), row(52)]
     serve(tmp_path, monkeypatch, rows)
@@ -537,6 +567,7 @@ def test_the_command_names_every_row_it_leaves_out_in_the_words_of_the_other_imp
     assert f"no case for 1 row(s) ({unpaired}): {swehero.UNPAIRED}\n" in out
 
 
+@pytest.mark.usefixtures("within_the_limit")
 def test_the_command_leaves_out_a_case_that_repeats_an_earlier_one_across_shards_and_counts_distinct_messages(
     tmp_path, monkeypatch, capsys
 ):
@@ -563,7 +594,9 @@ def test_past_the_limit_the_command_writes_every_set_compressed_and_checks_it(tm
     serve(tmp_path, monkeypatch, [row()], [row(0, trajectory=EDGES)])
     corpus = tmp_path / "corpus"
     argv = ["import", "swehero", "--corpus", str(corpus), "--cache", str(tmp_path / "cache")]
+    monkeypatch.setattr(swehero, "FORM", None)
     assert main(argv) == 0
+    monkeypatch.setattr(swehero, "FORM", "zstd")
     monkeypatch.setattr(corpus_sets, "LIMIT", 1000)
     assert main([*argv, "--check"]) == 1
     assert "a fresh import writes this set as swehero-0.jsonl.zst" in capsys.readouterr().err
