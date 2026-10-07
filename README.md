@@ -4,7 +4,7 @@
 > amount of data. Then smg uses it in many places. Tokenizer, detokenization, gRPC router, and
 > symphony.
 >
-> Simo, 2026-10-06
+> The maintainer, 2026-10-06
 
 Bellwether holds expected values for several consumers in smg: the tokenizer crate (encoding and
 incremental decoding), the gRPC router's request path, and Symphony's parsers.
@@ -37,7 +37,7 @@ result is measured against.
 
 ## Who is right
 
-Two sources of truth, equal in authority (Simo, 2026-10-06):
+Two sources of truth, equal in authority (the maintainer, 2026-10-06):
 
 - **Hugging Face:** the checkpoint's own material at a pinned revision. That is the vendor's shipped
   encoder when there is one, else the chat template and tokenizer. For parsing it is the round trip:
@@ -272,7 +272,7 @@ one per registry entry that names none, ordered by tier and then within the tier
 |---|---|
 | `model` | the Hugging Face id, as the Hub spells it; for a registry entry that names no checkpoint, the entry's name (vLLM's architecture, SGLang's model family) |
 | `revision` | the Hub's sha when the list was built; for a checkpoint vLLM's registry pins (`refs/pr/17` for ERNIE-4.5-VL, a commit for HyperCLOVAX-SEED-Think-32B), the sha of that revision, and without the Hub the revision as vLLM writes it |
-| `tier` | 1: Simo's models, in his order; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads. `null` where the Hub decides the tier and was not asked (`--registry-only`) or gave no answer; those rows come after tier 2, by id |
+| `tier` | 1: the maintainer's priority models, in the order given; 2: created in the twelve months before the build; 3: the rest. Within tiers 2 and 3, by 30-day downloads. `null` where the Hub decides the tier and was not asked (`--registry-only`) or gave no answer; those rows come after tier 2, by id |
 | `status` | `pending`, or why nothing can be recorded yet: `no-checkpoint-named` (the registry entry names no checkpoint), `gated` (also when a config answers 401 or 403), `needs-vendor-code` (vLLM loads it with `trust_remote_code`, so the oracle would need the vendor's code; known without the Hub too), `no-chat-template`, `processor-chat-template` (the template is only in the processor's files, `chat_template.json` or the `chat_template` in `processor_config.json`, which `AutoProcessor` and vLLM read but the oracle's `AutoTokenizer` does not; the oracle reading processor templates is the follow-up), `not-on-hub`; when a config could not be read, `invalid-tokenizer-config` or `invalid-processor-config` (not a JSON object), or `hub-error-` and the HTTP status or the error (`hub-error-503`, `hub-error-read-timeout`); `unchecked` without the Hub |
 | `created`, `downloads` | the Hub's creation date and downloads over the last 30 days |
 | `modality` | `multimodal` when one of its architectures is multimodal in either engine's code (vLLM's multimodal table, an SGLang multimodal processor), else `text`; its architectures are those vLLM lists it under and, with the Hub, those its config names. `null` when none is known: an id only SGLang's docs give, without the Hub |
