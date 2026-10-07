@@ -111,10 +111,12 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | Group | Model | Checkpoints | Tier | Render cases | Parse cases | Refused | Sources |
 |---|---|---:|---:|---:|---:|---:|---|
 | [deepseek-r1](fixtures/deepseek-r1/sets.toml) | deepseek-ai/DeepSeek-R1 @ 56d4cbbb | 1 | 3 | 23 | 0 | 1 | hand-written |
-| [qwen3-8b](fixtures/qwen3-8b/sets.toml) | Qwen/Qwen3-8B @ b968826d | 6 | 1 | 24 | 16 | 0 | hand-written |
-| all | | 7 | | 47 | 16 | 1 | |
+| [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 38439 | 54418 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [hy4-preview](fixtures/hy4-preview/sets.toml) | tencent/Hy4-preview @ 705d81ee | 1 | 1 | 27160 | 54195 | 10576 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [qwen3-8b](fixtures/qwen3-8b/sets.toml) | Qwen/Qwen3-8B @ b968826d | 6 | 1 | 38440 | 54418 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| all | | 9 | | 104062 | 163031 | 10578 | |
 
-75 more groups (99 checkpoints) have a manifest and nothing recorded yet.
+73 more groups (97 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
