@@ -135,6 +135,35 @@ def test_the_model_config_s_stop_ids_count_only_where_no_generation_config_gives
     assert oracle_inputs(str(checkpoint), "local")["config.json"] != without
 
 
+def vendor_tokenizer(checkpoint: pathlib.Path) -> None:
+    """Make the checkpoint's tokenizer class the vendor's own: tokenizer_config.json names it in ``auto_map``."""
+    config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    config["auto_map"] = {"AutoTokenizer": ["tokenization_tiny.TinyTokenizer", None]}
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps(config))
+    (checkpoint / "tokenization_tiny.py").write_text("from .encoding_tiny import encode\n")
+    (checkpoint / "encoding_tiny.py").write_text("def encode(): ...\n")
+    (checkpoint / "tiktoken.model").write_bytes(b"vocabulary")
+
+
+def test_a_vendor_tokenizer_brings_every_python_file_and_vocabulary_at_the_root_into_the_inputs(checkpoint):
+    # The class auto_map names may import any Python file at the root and read its own vocabulary, so the sandbox
+    # that runs it must hold only files the manifest lists, each with its sha256.
+    vendor_tokenizer(checkpoint)
+    (checkpoint / "docs").mkdir()
+    (checkpoint / "docs" / "example.py").write_text("print('not at the root')\n")
+    inputs = oracle_inputs(str(checkpoint), "local")
+    for name in ("tokenization_tiny.py", "encoding_tiny.py", "modeling_tiny.py", "tiktoken.model"):
+        assert inputs[name] == sha256((checkpoint / name).read_bytes()), name
+    assert "docs/example.py" not in inputs and "README.md" not in inputs and "model.safetensors" not in inputs
+    assert list(inputs) == sorted(inputs)
+
+
+def test_without_a_vendor_tokenizer_no_python_file_is_an_input(checkpoint):
+    (checkpoint / "tiktoken.model").write_bytes(b"vocabulary")
+    inputs = oracle_inputs(str(checkpoint), "local")
+    assert not any(name.endswith(".py") or name == "tiktoken.model" for name in inputs)
+
+
 def test_each_named_chat_template_is_an_input_and_nothing_else_in_their_directory(checkpoint):
     # transformers reads every additional_chat_templates/<name>.jinja, and takes tool_use when a request has tools.
     named = checkpoint / "additional_chat_templates"

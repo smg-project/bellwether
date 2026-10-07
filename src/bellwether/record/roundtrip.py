@@ -79,6 +79,7 @@ from tokenizers import Tokenizer, normalizers
 from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
+from . import vendor
 from .reference import HfTemplateOracle
 
 SOURCE = "roundtrip"
@@ -96,8 +97,8 @@ class OutputText:
 
 
 class RoundtripOracle:
-    def __init__(self, model: str, revision: str) -> None:
-        self.renderer = HfTemplateOracle(model, revision)
+    def __init__(self, model: str, revision: str, vendor_code: bool = False) -> None:
+        self.renderer = HfTemplateOracle(model, revision, vendor_code)
         self.tokenizer = self.renderer.tokenizer
         self.generate_eos_ids, self.generation_config_source = generation_eos_ids(model, revision)
         # vLLM's stop set: the generation config's eos_token_id and the tokenizer's eos, when it has one.
@@ -147,8 +148,11 @@ class RoundtripOracle:
             )
         text = cut.text
         output_ids, ids_without_unicode_normalization = self.encode_output(text)
-        stream = DecodeStream(skip_special_tokens=False)
-        output_pieces = [stream.step(self.tokenizer.backend_tokenizer, token) or "" for token in output_ids]
+        if getattr(self.tokenizer, "backend_tokenizer", None) is None:  # a vendor's slow tokenizer
+            output_pieces = vendor.incremental_pieces(self.tokenizer, output_ids)
+        else:
+            stream = DecodeStream(skip_special_tokens=False)
+            output_pieces = [stream.step(self.tokenizer.backend_tokenizer, token) or "" for token in output_ids]
         if "".join(output_pieces) != text:
             raise ValueError("the output's tokens do not give back its text under the tokenizer's incremental decode")
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
@@ -212,8 +216,8 @@ class RoundtripOracle:
         padding, and splitting special tokens only when the checkpoint asks for it (``split_special_tokens``, which
         ``to_str`` does not carry).
         """
-        backend = self.tokenizer.backend_tokenizer
-        if not applies_unicode_normalization(backend.normalizer):
+        backend = getattr(self.tokenizer, "backend_tokenizer", None)
+        if backend is None or not applies_unicode_normalization(backend.normalizer):
             return None
         tokenizer = Tokenizer.from_str(backend.to_str())
         tokenizer.normalizer = without_unicode_normalization(tokenizer.normalizer)
@@ -445,6 +449,24 @@ class Cut:
     after: str = ""
 
 
+def with_offsets(tokenizer, text: str) -> list[tuple[int, tuple[int, int]]]:
+    """Each token of ``text`` with the characters it spans: the fast tokenizer's offset mapping, or, for a vendor's
+    slow tokenizer, which has none, the piece its incremental decode gives each token, in order. A token that ends
+    inside a character spans nothing, and the one that completes it spans the whole character."""
+    if getattr(tokenizer, "backend_tokenizer", None) is not None:
+        encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        return list(zip(encoded["input_ids"], encoded["offset_mapping"], strict=True))
+    ids = [int(i) for i in tokenizer.encode(text, add_special_tokens=False)]
+    pieces = vendor.incremental_pieces(tokenizer, ids)
+    if "".join(pieces) != text:
+        raise ValueError("the tokenizer's ids do not decode back to the text, so no token has a place in it")
+    spans, at = [], 0
+    for piece in pieces:
+        spans.append((at, at + len(piece)))
+        at += len(piece)
+    return list(zip(ids, spans, strict=True))
+
+
 def stop_in_turn(tokenizer, turn: str, stop_ids: set[int]) -> Cut | None:
     """Where the first stop id in the rendered ``turn`` ends the output; None when the turn holds none.
 
@@ -452,8 +474,7 @@ def stop_in_turn(tokenizer, turn: str, stop_ids: set[int]) -> Cut | None:
     when that is whitespace (Phi-4-mini writes ``<|end|><|endoftext|>``), since anything else is part of the turn the
     template renders after generation stops.
     """
-    encoded = tokenizer(turn, add_special_tokens=False, return_offsets_mapping=True)
-    tokens = list(zip(encoded["input_ids"], encoded["offset_mapping"], strict=True))
+    tokens = with_offsets(tokenizer, turn)
     for index, (token, (start, end)) in enumerate(tokens):
         if token not in stop_ids:
             continue
@@ -481,8 +502,7 @@ def stop_at_next_message(tokenizer, prompt: str, rendered: str, continued: str, 
             "so what follows the turn is unknown"
         )
     turn, tail = rendered[len(prompt) :], continued[len(prompt) :]
-    encoded = tokenizer(tail, add_special_tokens=False, return_offsets_mapping=True)
-    for token, (start, end) in zip(encoded["input_ids"], encoded["offset_mapping"], strict=True):
+    for token, (start, end) in with_offsets(tokenizer, tail):
         if end <= len(turn):  # the turn's own, a zero-width token at its end (trim_offsets) among them
             continue
         name = tokenizer.convert_ids_to_tokens(token)

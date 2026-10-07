@@ -1,8 +1,9 @@
 """bellwether record: run a corpus through one oracle and write or update fixtures.
 
-The reference oracles for ``render`` (the checkpoint's template) and ``parse`` (the round trip through
-that template) are implemented. Engine oracles and the other kinds exit with status 2 until their
-milestone lands, so a script never mistakes a missing oracle for a recorded one.
+The reference oracles for ``render`` (the checkpoint's template) and ``parse`` (the round trip through that template)
+are implemented, and with ``--oracle vendor`` the same two through the vendor's own tokenizer class, which runs only
+inside the sandbox ``bellwether sandbox-record`` starts (``vendor``). Engine oracles and the other kinds exit with
+status 2 until their milestone lands, so a script never mistakes a missing oracle for a recorded one.
 
 ``record`` checks the manifest before it reads the corpus. A checkpoint group is recorded once, by its primary: the
 manifest of any other member makes ``record`` name the primary to record instead and exit 1. The checkpoint's oracle
@@ -23,6 +24,7 @@ from bellwether.manifest import Manifest, find_manifest, load_manifest
 from bellwether.storage import COMPRESSED_SUFFIX, plain_text, stem
 
 from . import sets as set_tables
+from . import vendor
 from .chunks import chunk_plans
 from .corpus import Case, load_corpus
 from .fixtures import read_fixture_file, write_fixture_file
@@ -35,7 +37,7 @@ NOT_IMPLEMENTED = 2
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.oracle != "reference" or args.kind not in ("render", "parse"):
+    if args.oracle not in ("reference", "vendor") or args.kind not in ("render", "parse"):
         print(
             f"bellwether record: kind={args.kind} oracle={args.oracle} is not implemented yet "
             "(render and parse with the reference oracle landed in M2 and M4; engine oracles and the other "
@@ -67,11 +69,16 @@ def run(args: argparse.Namespace) -> int:
         return 1
     if wanted:
         sets = {name: cases for name, cases in sets.items() if name in wanted}
-    oracle = (
-        HfTemplateOracle(manifest.model, manifest.revision)
-        if args.kind == "render"
-        else RoundtripOracle(manifest.model, manifest.revision)
-    )
+    vendor_code = args.oracle == "vendor"
+    try:
+        oracle = (
+            HfTemplateOracle(manifest.model, manifest.revision, vendor_code)
+            if args.kind == "render"
+            else RoundtripOracle(manifest.model, manifest.revision, vendor_code)
+        )
+    except vendor.OutsideTheSandbox as err:
+        print(f"bellwether record: {err}", file=sys.stderr)
+        return 1
     provenance = {**oracle.provenance(), "revision": manifest.revision, "bellwether": __version__}
     not_recorded: list[tuple[str, str]] = []
     stop_ids: list[int] = []  # the stop id each parse output recorded in this run ends on
@@ -197,7 +204,7 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
         line = {
             "request": case.request,
             "reference": {
-                "source": RENDER_SOURCE,
+                "source": vendor.SOURCE if oracle.vendor_code else RENDER_SOURCE,
                 "input_ids": rendered.input_ids,
                 "text": rendered.text,
                 "provenance": provenance,
@@ -216,7 +223,7 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
         "malformed": False,
         "chunk_plans": chunk_plans(len(output.output_ids)),
         "reference": {
-            "source": PARSE_SOURCE,
+            "source": f"{PARSE_SOURCE}:{vendor.SOURCE}" if oracle.renderer.vendor_code else PARSE_SOURCE,
             "message": {"role": "assistant", **case.message},
             "finish_reason": output.finish_reason,
             "end_of_turn": output.end_of_turn,

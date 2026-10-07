@@ -12,7 +12,10 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
 - the token ids the end of a turn depends on (``STOP_IDS``), so that sampling defaults do not split a group: from
   ``generation_config.json``, or, for a checkpoint that ships none, from ``config.json`` as
   ``GenerationConfig.from_model_config`` reads it, ``text_config`` included;
-- from ``config.json``, the two fields that choose the tokenizer class.
+- from ``config.json``, the two fields that choose the tokenizer class;
+- for a checkpoint whose tokenizer class is the vendor's own code (``tokenizer_config.json`` names it in ``auto_map``),
+  every Python file and vocabulary file at the repository's root (``VENDOR_SUFFIXES``): the class may import any of
+  them, and the vendor-code oracle runs it in a sandbox that holds only files the manifest lists.
 
 A whole file is hashed as its bytes. A narrowed file is hashed over the canonical JSON of only its fields,
 ``json.dumps(..., sort_keys=True)`` with a field the file lacks written as null, so anyone can recompute it; for a
@@ -54,6 +57,10 @@ NARROWED = {
 }
 FILES = tuple(dict.fromkeys((*TOKENIZER_FILES, *TEMPLATE_FILES, *NARROWED)))
 PATTERNS = (*FILES, f"{NAMED_TEMPLATES}/*.jinja")
+# The files at the root of a checkpoint whose tokenizer class is the vendor's code that are inputs as well: its Python
+# modules, which the class may import, and the vocabulary formats such classes read.
+VENDOR_SUFFIXES = (".py", ".model", ".tiktoken", ".vocab", ".bpe")
+VENDOR_PATTERNS = tuple(f"*{suffix}" for suffix in VENDOR_SUFFIXES)
 
 
 def oracle_inputs(model: str, revision: str) -> dict[str, str]:
@@ -67,8 +74,28 @@ def oracle_inputs(model: str, revision: str) -> dict[str, str]:
             for path in (directory / NAMED_TEMPLATES).iterdir()
             if path.is_file() and path.suffix == ".jinja"
         ]
+    if vendor_tokenizer(directory):
+        names += [
+            path.name
+            for path in directory.iterdir()
+            if path.is_file() and path.suffix in VENDOR_SUFFIXES and path.name not in names
+        ]
     stop_ids_from_config = "generation_config.json" not in names
     return {name: _sha256(directory / name, stop_ids_from_config) for name in sorted(names)}
+
+
+def vendor_tokenizer(directory: Path) -> bool:
+    """Whether the checkpoint's tokenizer class is the vendor's own code: ``tokenizer_config.json`` names an
+    ``AutoTokenizer`` in its ``auto_map``. Read as JSON; nothing in the repository is run."""
+    path = directory / "tokenizer_config.json"
+    if not path.is_file():
+        return False
+    try:
+        config = json.loads(path.read_bytes())
+    except ValueError:
+        return False
+    auto_map = config.get("auto_map") if isinstance(config, dict) else None
+    return isinstance(auto_map, dict) and "AutoTokenizer" in auto_map
 
 
 def checkpoint_dir(model: str, revision: str) -> Path:
@@ -85,6 +112,9 @@ def checkpoint_dir(model: str, revision: str) -> Path:
         # for the commit's file list whenever the cache does not hold it, and fail. With the list cached, it refuses a
         # snapshot that lacks a listed file (IncompleteSnapshotError, a FileNotFoundError).
         found = snapshot_download(model, revision=revision, allow_patterns=list(PATTERNS), local_files_only=offline)
+        if vendor_tokenizer(Path(found)):
+            patterns = [*PATTERNS, *VENDOR_PATTERNS]
+            found = snapshot_download(model, revision=revision, allow_patterns=patterns, local_files_only=offline)
         if offline:
             get_cached_repo_tree(model, revision=revision)
     except CachedRepoTreeNotFoundError as err:
