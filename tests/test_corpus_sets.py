@@ -1,3 +1,6 @@
+import re
+import tracemalloc
+
 import pytest
 import zstandard
 
@@ -320,3 +323,175 @@ def test_check_names_a_compressed_set_zstd_cannot_read_and_write_replaces_it(tmp
     assert problem.startswith(f"{path} cannot be decompressed: ")
     corpus_sets.write(sets, tmp_path, "x-")
     assert check(sets, tmp_path) == []
+
+
+# Streamed imports: the sets one at a time, as an importer that builds them as it reads would yield them.
+
+
+def as_stream(sets: dict):
+    for (kind, name), lines in sets.items():
+        yield kind, name, lines
+
+
+def an_import_with_repeats() -> dict:
+    """Sets whose cases repeat across sets, and whose parse cases share a message, as a real import's do."""
+    return {
+        ("render", "x-b"): [render("x-b-0", ask("Hi")), render("x-b-1", ask("Bye")), render("x-b-2", ask("Hi"))],
+        ("parse", "x-b"): [
+            parse("x-b-3", ask("Hi"), {"content": "Hello"}),
+            parse("x-b-4", ask("Yo"), {"content": "Hello"}),
+        ],
+        ("render", "x-a"): [render("x-a-0", ask("Bye")), render("x-a-1", ask("Hey"))],
+        ("parse", "x-a"): [
+            parse("x-a-2", ask("Hi"), {"content": "Hello"}),
+            parse("x-a-3", ask("Hey"), {"content": "Hey"}),
+        ],
+    }
+
+
+def kept_size(sets: dict) -> int:
+    kept, _ = corpus_sets.leave_out_repeats(sets)
+    return plain_size(kept)
+
+
+def files_and_bytes(root) -> dict[str, bytes]:
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+
+
+def written_held(sets: dict, root, capsys, **declared) -> tuple[dict, str]:
+    """An importer that holds its sets, as every importer did: the repeat rule, the report, then the write."""
+    kept, repeats = corpus_sets.leave_out_repeats(sets)
+    corpus_sets.report("X", sets, kept, repeats, root)
+    corpus_sets.write(kept, root, "x-", **declared)
+    return files_and_bytes(root), capsys.readouterr().out.replace(str(root), "<root>")
+
+
+def written_streamed(sets: dict, root, capsys, **declared) -> tuple[dict, str]:
+    """An importer that streams its sets: write leaves out the repeats as they come, and the report follows."""
+    summary = corpus_sets.Summary()
+    corpus_sets.write(as_stream(sets), root, "x-", summary=summary, **declared)
+    corpus_sets.report_summary("X", summary, root)
+    return files_and_bytes(root), capsys.readouterr().out.replace(str(root), "<root>")
+
+
+@pytest.mark.parametrize("past", [False, True], ids=["plain", "compressed"])
+def test_a_streamed_import_writes_the_files_and_report_of_one_that_holds_its_sets(tmp_path, monkeypatch, capsys, past):
+    sets = an_import_with_repeats()
+    monkeypatch.setattr(corpus_sets, "LIMIT", kept_size(sets) - past)
+    held = written_held(sets, tmp_path / "held", capsys)
+    assert written_streamed(sets, tmp_path / "streamed", capsys) == held
+    suffix = ".jsonl.zst" if past else ".jsonl"
+    assert held[1].splitlines() == [
+        "no case x-b-2: it repeats x-b-0",
+        "no case x-a-0: it repeats x-b-1",
+        "no case x-a-2: it repeats x-b-3",
+        f"<root>/parse/x-a{suffix}: 1 cases, 1 left out as repeats, 1 distinct messages",
+        f"<root>/parse/x-b{suffix}: 2 cases, 1 distinct messages",
+        f"<root>/render/x-a{suffix}: 1 cases, 1 left out as repeats",
+        f"<root>/render/x-b{suffix}: 2 cases, 1 left out as repeats",
+        "<root>: 6 cases in the 4 X sets, 3 left out as repeats, 2 distinct messages",
+    ]
+
+
+def test_a_streamed_import_declared_compressed_writes_what_an_import_past_the_limit_writes(
+    tmp_path, monkeypatch, capsys
+):
+    sets = an_import_with_repeats()
+    monkeypatch.setattr(corpus_sets, "LIMIT", kept_size(sets) - 1)
+    held = written_held(sets, tmp_path / "held", capsys)
+    assert written_streamed(sets, tmp_path / "streamed", capsys, form="zstd") == held
+
+
+@pytest.mark.parametrize("past", [False, True], ids=["plain", "compressed"])
+def test_a_streamed_check_names_what_a_check_of_held_sets_names(tmp_path, monkeypatch, past):
+    sets = an_import_with_repeats()
+    kept, _ = corpus_sets.leave_out_repeats(sets)
+    monkeypatch.setattr(corpus_sets, "LIMIT", plain_size(kept) - past)
+    corpus_sets.write(kept, tmp_path, "x-")
+    assert corpus_sets.check(as_stream(sets), tmp_path, "x-", "x part") == []
+    form, other = (".jsonl.zst", ".jsonl") if past else (".jsonl", ".jsonl.zst")
+    (tmp_path / "parse" / f"x-a{form}").unlink()
+    storage.write(tmp_path / "render" / f"x-a{form}", b"{}\n")
+    (tmp_path / "render" / f"x-b{other}").write_bytes(b"{}\n")
+    (tmp_path / "render" / "x-gone.jsonl").write_bytes(b"{}\n")
+    held = check(kept, tmp_path)
+    assert len(held) == 4
+    assert corpus_sets.check(as_stream(sets), tmp_path, "x-", "x part") == held
+
+
+def test_a_streamed_import_declared_plain_is_refused_before_it_writes_past_the_limit(tmp_path, monkeypatch):
+    sets = an_import_with_repeats()
+    (tmp_path / "render").mkdir()
+    (tmp_path / "render" / "x-gone.jsonl").write_bytes(b"{}\n")
+    monkeypatch.setattr(corpus_sets, "LIMIT", 10)
+    with pytest.raises(ValueError, match=re.escape("but the import declares form 'plain'; declare form 'zstd'")):
+        corpus_sets.write(as_stream(sets), tmp_path, "x-", form="plain")
+    assert files(tmp_path) == ["render/x-gone.jsonl"]
+
+
+def test_a_streamed_import_declared_compressed_within_the_limit_is_refused_and_removes_nothing(tmp_path):
+    sets = an_import_with_repeats()
+    kept, _ = corpus_sets.leave_out_repeats(sets)
+    corpus_sets.write(kept, tmp_path, "x-")
+    plain = ["parse/x-a.jsonl", "parse/x-b.jsonl", "render/x-a.jsonl", "render/x-b.jsonl"]
+    assert files(tmp_path) == plain
+    with pytest.raises(ValueError, match=re.escape("but the import declares form 'zstd'; declare form 'plain'")):
+        corpus_sets.write(as_stream(sets), tmp_path, "x-", form="zstd")
+    assert set(plain) <= set(files(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "form, limit, wording",
+    [("plain", 10, "past the 10 that stay plain"), ("zstd", None, "within the 50000000 that stay plain")],
+    ids=["plain past the limit", "zstd within it"],
+)
+def test_a_check_names_a_declared_form_the_total_contradicts(tmp_path, monkeypatch, form, limit, wording):
+    sets = an_import_with_repeats()
+    if limit:
+        monkeypatch.setattr(corpus_sets, "LIMIT", limit)
+    problems = corpus_sets.check(as_stream(sets), tmp_path, "x-", "x part", form=form)
+    size = kept_size(sets)
+    other = "zstd" if form == "plain" else "plain"
+    assert problems[-1] == (
+        f"{tmp_path}: the x-* sets take {size} bytes as plain JSON Lines, {wording}, "
+        f"but the import declares form {form!r}; declare form {other!r}"
+    )
+
+
+def test_a_form_that_is_not_plain_or_zstd_is_refused(tmp_path):
+    with pytest.raises(ValueError, match=re.escape("form 'gzip' is not 'plain' or 'zstd'")):
+        corpus_sets.write(as_stream(an_import_with_repeats()), tmp_path, "x-", form="gzip")
+
+
+# Memory: an import streamed one set at a time holds about one set, however many sets it has.
+
+CASE_BYTES = 10_000
+CASES = 20
+SETS = 20
+ONE_SET = CASES * CASE_BYTES  # about one set's plain bytes; the import takes SETS times as many
+
+
+def many_sets():
+    for n in range(SETS):
+        yield "render", f"x-{n:02d}", [render(f"x-{n}-{i}", ask(f"{n}.{i} " + "a" * CASE_BYTES)) for i in range(CASES)]
+
+
+def traced_peak(function, *args, **kwargs) -> int:
+    """The most memory Python held at once, in bytes, while ``function`` ran, past what it held when it started."""
+    tracemalloc.start()
+    try:
+        held = tracemalloc.get_traced_memory()[0]
+        function(*args, **kwargs)
+        return tracemalloc.get_traced_memory()[1] - held
+    finally:
+        tracemalloc.stop()
+
+
+@pytest.mark.parametrize("form, limit", [("plain", None), ("zstd", 1000), (None, None), (None, 1000)])
+def test_a_streamed_write_and_check_hold_about_one_set_at_a_time(tmp_path, monkeypatch, form, limit):
+    if limit:
+        monkeypatch.setattr(corpus_sets, "LIMIT", limit)
+    assert traced_peak(corpus_sets.write, many_sets(), tmp_path, "x-", form=form) < 4 * ONE_SET
+    assert traced_peak(corpus_sets.check, many_sets(), tmp_path, "x-", "x part", form=form) < 4 * ONE_SET
+    assert corpus_sets.check(many_sets(), tmp_path, "x-", "x part", form=form) == []
+    assert len(files(tmp_path)) == SETS
