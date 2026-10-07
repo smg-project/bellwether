@@ -74,15 +74,16 @@ def run(args: argparse.Namespace) -> int:
         # or that the oracle now rejects, leaves the file. Witnesses are carried over by id, but
         # only while the request they were recorded for is unchanged.
         lines: dict[str, dict] = {}
-        witnesses_kept = witnesses_dropped = 0
+        witnesses_kept = witnesses_dropped = without_unicode_normalization = 0
         for case in cases:
             case_id = f"{manifest.slug}/{args.kind}/{case.name}"
             try:
-                line = _record(args.kind, oracle, case, provenance)
+                line, ids_without_unicode_normalization = _record(args.kind, oracle, case, provenance)
             except Exception as err:  # the reference cannot answer this case: report it, record nothing
                 not_recorded.append((case_id, f"{type(err).__name__}: {err}"))
                 rejected += 1
                 continue
+            without_unicode_normalization += ids_without_unicode_normalization
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
             if isinstance(oracle, RoundtripOracle):
                 stop_ids.append(line["reference"]["end_of_turn"]["stop_id"])
@@ -105,6 +106,11 @@ def run(args: argparse.Namespace) -> int:
         # Only once the new file is written, so a failed write keeps the set in its old form.
         other.unlink(missing_ok=True)
         summary = [f"{len(lines)} cases recorded"]
+        if without_unicode_normalization:
+            # Reported here only: a count in sets.toml would change the format of every table in it.
+            summary.append(
+                f"{without_unicode_normalization} with output ids built without the tokenizer's Unicode normalization"
+            )
         if witnesses_kept:
             summary.append(f"{witnesses_kept} with witnesses kept")
         if witnesses_dropped:
@@ -129,12 +135,16 @@ def run(args: argparse.Namespace) -> int:
     return 1 if not_recorded else 0
 
 
-def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, provenance: dict) -> dict:
-    """The fields of one fixture line below id, kind and model, for the case's kind."""
+def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, provenance: dict) -> tuple[dict, bool]:
+    """The fields of one fixture line below id, kind and model, for the case's kind.
+
+    Also whether the line's output ids leave out the tokenizer's Unicode normalization
+    (``RoundtripOracle.encode_output``); a render line has no output ids.
+    """
     if kind == "render":
         assert isinstance(oracle, HfTemplateOracle)
         rendered = oracle.render(case.request)
-        return {
+        line = {
             "request": case.request,
             "reference": {
                 "source": RENDER_SOURCE,
@@ -143,11 +153,12 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
                 "provenance": provenance,
             },
         }
+        return line, False
     assert isinstance(oracle, RoundtripOracle)
     if case.message is None:
         raise ValueError("a parse case needs `message`, the assistant message the output must parse to")
     output = oracle.render_output(case.request, case.message)
-    return {
+    line = {
         "request": case.request,
         "tools": list(case.request.get("tools") or []),
         "output_ids": output.output_ids,
@@ -163,3 +174,4 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "provenance": provenance,
         },
     }
+    return line, output.ids_without_unicode_normalization

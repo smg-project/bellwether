@@ -51,6 +51,14 @@ not of an engine. A template that cannot take an object (DeepSeek's concatenate 
 case: that is a finding about the template and the engines, reported, never worked around. The
 reference message keeps the JSON string.
 
+The output's ids are the tokenizer's encoding of the output text, the turn up to its stop id, and they
+must decode back to it. A normalizer that applies a Unicode normalization form can change the text
+before it is split: Qwen3's NFC writes U+09DF, a composition exclusion, as U+09AF U+09BC, so text
+that holds the one code point does not come back (#57). For such a case, and only then, the ids come
+from a copy of the tokenizer whose normalizer leaves out NFC, NFD, NFKC and NFKD, inside a
+``Sequence`` too, and keeps every other step; the text stays as the corpus wrote it. A case whose
+ids do not give back its text either way is reported and not recorded.
+
 Next to the ids the oracle records the text each token contributes under the tokenizer's incremental
 decode (``DecodeStream``), the pieces a replay feeds with each id: a token that does not complete a
 character contributes nothing, and the token that completes it carries the whole character. Joined,
@@ -60,13 +68,16 @@ the pieces must give back the output text; a case where they do not is reported 
 from __future__ import annotations
 
 import copy
+import functools
 import json
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from tokenizers import Tokenizer, normalizers
 from tokenizers.decoders import DecodeStream
+from tokenizers.normalizers import Normalizer
 
 from .reference import HfTemplateOracle
 
@@ -81,6 +92,7 @@ class OutputText:
     output_pieces: list[str]
     finish_reason: str
     end_of_turn: dict
+    ids_without_unicode_normalization: bool
 
 
 class RoundtripOracle:
@@ -131,16 +143,16 @@ class RoundtripOracle:
                 "the template writes more of the turn after the point where generation stops"
             )
         text = cut.text
-        output_ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
-        if self.tokenizer.decode(output_ids) != text:
-            raise ValueError("the output text does not survive a tokenize-detokenize round trip")
+        output_ids, ids_without_unicode_normalization = self.encode_output(text)
         stream = DecodeStream(skip_special_tokens=False)
         output_pieces = [stream.step(self.tokenizer.backend_tokenizer, token) or "" for token in output_ids]
         if "".join(output_pieces) != text:
             raise ValueError("the output's tokens do not give back its text under the tokenizer's incremental decode")
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
         end_of_turn = {"stop_id": cut.stop_id, "found_by": cut.found_by}
-        return OutputText(text, output_ids, output_pieces, finish_reason, end_of_turn)
+        return OutputText(
+            text, output_ids, output_pieces, finish_reason, end_of_turn, ids_without_unicode_normalization
+        )
 
     def check_no_stop_id_in_the_message(self, assistant: dict) -> None:
         """No string of the message, as the template gets it, may hold a stop id.
@@ -170,6 +182,42 @@ class RoundtripOracle:
             raise ValueError(
                 f"no stop id in the turn, and the template cannot render the next message: {type(err).__name__}: {err}"
             ) from err
+
+    def encode_output(self, text: str) -> tuple[list[int], bool]:
+        """Ids that decode back to ``text``, and whether they leave out the tokenizer's Unicode normalization.
+
+        The tokenizer's own ids come first, so every case they give back keeps the ids it was recorded with. Only
+        when they decode to other text do the ids come from the copy without Unicode normalization, and only if
+        those decode back to the text; otherwise the case is rejected.
+        """
+        ids = [int(i) for i in self.tokenizer.encode(text, add_special_tokens=False)]
+        if self.tokenizer.decode(ids) == text:
+            return ids, False
+        if (tokenizer := self.tokenizer_without_unicode_normalization) is not None:
+            ids = tokenizer.encode(text, add_special_tokens=False).ids
+            if self.tokenizer.decode(ids) == text:
+                return ids, True
+        raise ValueError("the output text does not survive a tokenize-detokenize round trip")
+
+    @functools.cached_property
+    def tokenizer_without_unicode_normalization(self) -> Tokenizer | None:
+        """A copy of the tokenizer whose normalizer leaves out the Unicode normalization forms.
+
+        ``None`` when the normalizer applies none: the copy would differ from the tokenizer only in going through
+        tokenizers instead of transformers, and that is no reason to give a case other ids. The oracle's own
+        tokenizer is never changed. The copy encodes as transformers' ``encode`` does: without truncation or
+        padding, and splitting special tokens only when the checkpoint asks for it (``split_special_tokens``, which
+        ``to_str`` does not carry).
+        """
+        backend = self.tokenizer.backend_tokenizer
+        if not applies_unicode_normalization(backend.normalizer):
+            return None
+        tokenizer = Tokenizer.from_str(backend.to_str())
+        tokenizer.normalizer = without_unicode_normalization(tokenizer.normalizer)
+        tokenizer.no_truncation()
+        tokenizer.no_padding()
+        tokenizer.encode_special_tokens = self.tokenizer.split_special_tokens
+        return tokenizer
 
     def check_every_call_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
         """Every call of the message must reach the rendered turn.
@@ -380,6 +428,31 @@ def strings_of(value: object, path: str = "") -> Iterator[tuple[str, str]]:
     elif isinstance(value, list):
         for index, item in enumerate(value):
             yield from strings_of(item, f"{path}[{index}]")
+
+
+UNICODE_NORMALIZATION = (normalizers.NFC, normalizers.NFD, normalizers.NFKC, normalizers.NFKD)
+
+
+def applies_unicode_normalization(normalizer: Normalizer | None) -> bool:
+    """Whether ``normalizer`` is a Unicode normalization form (NFC, NFD, NFKC, NFKD) or a ``Sequence`` holding one."""
+    if isinstance(normalizer, normalizers.Sequence):
+        return any(map(applies_unicode_normalization, normalizer))
+    return isinstance(normalizer, UNICODE_NORMALIZATION)
+
+
+def without_unicode_normalization(normalizer: Normalizer | None) -> Normalizer | None:
+    """``normalizer`` less its Unicode normalization forms (NFC, NFD, NFKC, NFKD), inside a ``Sequence`` too.
+
+    Every other step stays: SentencePiece's ``Prepend`` and ``Replace`` steps, which write U+2581 at the start and
+    for each space, are how the model writes text, and ids built without them are ids no model emits. ``None`` when
+    no step is left.
+    """
+    if isinstance(normalizer, UNICODE_NORMALIZATION):
+        return None
+    if isinstance(normalizer, normalizers.Sequence):
+        steps = [step for step in map(without_unicode_normalization, normalizer) if step is not None]
+        return normalizers.Sequence(steps) if steps else None
+    return normalizer
 
 
 def as_vllm_gives_it(message: dict) -> dict:

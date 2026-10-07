@@ -10,7 +10,7 @@ import subprocess
 import huggingface_hub.constants
 import pytest
 import zstandard
-from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
+from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors, trainers
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
@@ -615,6 +615,116 @@ def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     assert "".join(out.output_pieces) == "<think>\nr\n</think>\n\nCafé 🌍"
 
 
+# BENGALI LETTER YYA as one code point, as seven of MGSM's Bengali exemplars write it (#57). It is a
+# composition exclusion: NFC writes it as YA and NUKTA, and never puts the two back together.
+YYA = chr(0x09DF)
+YA_NUKTA = chr(0x09AF) + chr(0x09BC)
+# LOWER ONE EIGHTH BLOCK, which SentencePiece's normalizer writes for a space and its decoder reads back as one.
+SPACE_MARK = chr(0x2581)
+
+
+def normalizing_variant(tiny_model, tmp_path_factory, name: str, normalizer, decoder=None) -> pathlib.Path:
+    """The tiny model whose tokenizer has ``normalizer`` (and ``decoder``), saved the way a checkpoint ships one."""
+    directory = tmp_path_factory.mktemp(name)
+    tokenizer = Tokenizer.from_file(str(tiny_model / "tokenizer.json"))
+    tokenizer.normalizer = normalizer
+    if decoder is not None:
+        tokenizer.decoder = decoder
+    tokenizer.save(str(directory / "tokenizer.json"))
+    (directory / "tokenizer_config.json").write_bytes((tiny_model / "tokenizer_config.json").read_bytes())
+    return directory
+
+
+@pytest.fixture(scope="session")
+def nfc_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """The tiny model with Qwen3-8B's normalizer, NFC."""
+    return normalizing_variant(tiny_model, tmp_path_factory, "nfc-chat", normalizers.NFC())
+
+
+@pytest.fixture(scope="session")
+def spaces_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """NFC, then every space written as U+2581, which the decoder reads back as a space."""
+    return normalizing_variant(
+        tiny_model,
+        tmp_path_factory,
+        "nfc-spaces-chat",
+        normalizers.Sequence([normalizers.NFC(), normalizers.Replace(" ", SPACE_MARK)]),
+        decoders.Sequence([decoders.ByteLevel(), decoders.Replace(SPACE_MARK, " ")]),
+    )
+
+
+def encode_with(model: pathlib.Path, normalizer, text: str) -> list[int]:
+    """``text``'s ids under ``model``'s tokenizer with ``normalizer`` in place of its own."""
+    tokenizer = Tokenizer.from_file(str(model / "tokenizer.json"))
+    tokenizer.normalizer = normalizer
+    return tokenizer.encode(text, add_special_tokens=False).ids
+
+
+def test_roundtrip_builds_the_ids_of_text_nfc_would_change_from_the_text_as_written(nfc_model):
+    oracle = RoundtripOracle(str(nfc_model), "local")
+    text = f"Paris {YYA}"
+    assert oracle.tokenizer.decode(oracle.tokenizer.encode(text, add_special_tokens=False)) == f"Paris {YA_NUKTA}"
+    out = oracle.render_output({"messages": [user("Hi")]}, {"content": text})
+    # The output is the turn up to its stop id, as written, and the ids are those of that text.
+    assert out.text == text
+    assert out.end_of_turn == {"stop_id": token_id(nfc_model, "<|im_end|>"), "found_by": "turn"}
+    assert out.output_ids == encode_with(nfc_model, None, text)
+    assert oracle.tokenizer.decode(out.output_ids) == text
+    # The pieces come from the ids recorded: YYA's three bytes give two empty pieces, then the letter.
+    assert out.output_pieces[-3:] == ["", "", YYA]
+    assert len(out.output_pieces) == len(out.output_ids)
+    assert "".join(out.output_pieces) == text
+    # The ids came from a copy: the oracle's own tokenizer still normalizes.
+    assert isinstance(oracle.tokenizer.backend_tokenizer.normalizer, normalizers.NFC)
+
+
+def test_roundtrip_leaves_out_only_the_unicode_normalization_of_a_normalizer_sequence(spaces_model):
+    oracle = RoundtripOracle(str(spaces_model), "local")
+    text = f"Paris {YYA} fox"
+    out = oracle.render_output({"messages": [user("Hi")]}, {"content": text})
+    assert out.text == text
+    assert oracle.tokenizer.decode(out.output_ids) == text
+    # The Replace step stays: the ids write each space as U+2581, the way this tokenizer writes one.
+    assert out.output_ids == encode_with(spaces_model, normalizers.Replace(" ", SPACE_MARK), text)
+    assert out.output_ids != encode_with(spaces_model, None, text)
+    assert len(out.output_pieces) == len(out.output_ids)
+    assert "".join(out.output_pieces) == text
+
+
+@pytest.mark.parametrize("model", ["nfc_model", "spaces_model"])
+def test_roundtrip_keeps_the_tokenizers_own_ids_when_they_decode_back_to_the_text(model, request):
+    # YYA as NFC writes it: the normalizer leaves its letters alone; the spaces model still rewrites the spaces.
+    path = request.getfixturevalue(model)
+    oracle = RoundtripOracle(str(path), "local")
+    text = f"Paris {YA_NUKTA} fox"
+    out = oracle.render_output({"messages": [user("Hi")]}, {"content": text})
+    assert out.output_ids == oracle.tokenizer.encode(text, add_special_tokens=False)
+    assert "".join(out.output_pieces) == text
+
+
+def test_roundtrip_rejects_text_whose_ids_lose_it_with_and_without_the_unicode_normalization(spaces_model):
+    # The decoder reads every U+2581 back as a space, so text that holds one cannot come back either way.
+    oracle = RoundtripOracle(str(spaces_model), "local")
+    with pytest.raises(ValueError, match="^the output text does not survive a tokenize-detokenize round trip$"):
+        oracle.render_output({"messages": [user("Hi")]}, {"content": f"Paris {YYA}{SPACE_MARK}"})
+
+
+def test_roundtrip_encodes_once_for_a_tokenizer_without_unicode_normalization(tiny_model, tmp_path_factory):
+    # Spaces written as U+2581 and read back, and no Unicode normalization form: there is nothing to leave out,
+    # so a text whose ids lose it is rejected as before, and no copy of the tokenizer encodes it a second time.
+    model = normalizing_variant(
+        tiny_model,
+        tmp_path_factory,
+        "spaces-only-chat",
+        normalizers.Replace(" ", SPACE_MARK),
+        decoders.Sequence([decoders.ByteLevel(), decoders.Replace(SPACE_MARK, " ")]),
+    )
+    oracle = RoundtripOracle(str(model), "local")
+    with pytest.raises(ValueError, match="^the output text does not survive a tokenize-detokenize round trip$"):
+        oracle.render_output({"messages": [user("Hi")]}, {"content": f"Paris{SPACE_MARK}"})
+    assert oracle.tokenizer_without_unicode_normalization is None
+
+
 def test_roundtrip_reports_a_turn_the_template_cannot_extend(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     request = {"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}}
@@ -677,6 +787,24 @@ def test_record_parse_reports_an_output_whose_tokens_do_not_give_back_its_text(t
     assert list(read_fixture_file(out_dir / "common.jsonl")) == ["tiny-chat/parse/plain"]
     err = capsys.readouterr().err
     assert "not recorded tiny-chat/parse/held: ValueError: the output's tokens do not give back its text" in err
+
+
+def test_record_parse_counts_the_cases_whose_ids_leave_out_the_unicode_normalization(tmp_path, nfc_model, capsys):
+    cases = [
+        {"name": "as-written", "request": {"messages": [user("Hi")]}, "message": {"content": f"Paris {YYA}"}},
+        {"name": "plain", "request": {"messages": [user("Hi")]}, "message": {"content": "Paris"}},
+    ]
+    status, out_dir = record(tmp_path, nfc_model, ("common", cases), kind="parse")
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert status == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/parse/as-written"]
+    assert line["reference"]["text"] == f"Paris {YYA}"
+    assert "".join(line["output_pieces"]) == f"Paris {YYA}"
+    expected = "common.jsonl: 2 cases recorded, 1 with output ids built without the tokenizer's Unicode normalization\n"
+    assert expected in captured.out
+    # The count is reported, not stored: sets.toml keeps its fields.
+    assert list(sets_tables(tmp_path)["parse"]["common"]) == list(set_tables.FIELDS)
 
 
 def test_record_parse_needs_the_message(tmp_path, tiny_model, capsys):
