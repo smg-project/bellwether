@@ -161,6 +161,11 @@ def registry_only_rows(entries: Iterable[Entry], built: date, served: Served = N
     return ordered([*rows, *_rows_without_checkpoint(entries, multimodal)])
 
 
+# Organizations whose checkpoints SMG's own parsers name and no engine registry does, so no engine example leads the
+# Hub to them: Sarashina (SMG's `sarashina` tool parser) is published by sbintuitions.
+SMG_PUBLISHERS = ("sbintuitions",)
+
+
 def hub_rows(
     entries: list[Entry],
     hub: Hub,
@@ -187,7 +192,7 @@ def hub_rows(
         model.split("/")[0]
         for model, f in found.items()
         if f.named.example or not (is_test_model(model) or is_quantized_copy(model))
-    }
+    } | set(SMG_PUBLISHERS)
     for org in sorted(publishers):
         try:
             listing = hub.list_models(org)
