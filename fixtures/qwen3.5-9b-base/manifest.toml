@@ -1,0 +1,11 @@
+model    = "Qwen/Qwen3.5-9B-Base"
+revision = "68c46c4b3498877f3ef123c856ecfde50c39f404"
+tier     = 1
+group    = "qwen3.5-4b-base"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"           = "35e1cee5383d93737dff5f52533413433fcc119f9a7722e485deca14a5045650"
+"merges.txt"            = "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+"tokenizer.json"        = "fe000e3ed39ed12b8d2481d527d44f93c65d37e87645d2dcc80d1bf9d50d2927"
+"tokenizer_config.json" = "3891e840d7dc5fca0af33d3a25083a735e36fe06214e3f707024820cb6b9f89c"
+"vocab.json"            = "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"

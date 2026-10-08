@@ -1,0 +1,10 @@
+model    = "Qwen/Qwen-Image-2.1-PE-I2I"
+revision = "72927bc08afc99b7888ceb7d7d51a12db3700bbd"
+tier     = 1
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "340698c97c859f379c322ad11a39425746076d34ee81bf659348504b37e6cc66"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "b0130c1a11528a8a2d6a079d51a38ca357d4100e97ee3d4c02da034771e85430"

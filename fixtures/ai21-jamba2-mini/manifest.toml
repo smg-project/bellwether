@@ -1,0 +1,12 @@
+model    = "ai21labs/AI21-Jamba2-Mini"
+revision = "24cbbd23e3df170f254aa601d907cdf416ffd344"
+tier     = 2
+group    = "ai21-jamba2-3b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d027ed3478d927b912afb0984fd3e9671c6e8d2af49de78800ea6a46c530c6cf"
+"config.json"             = "5eb64188d7c5416935c0ce81ab36ef7fc63c80937b059719a62011cd6e0aee5d"
+"generation_config.json"  = "9592aaeeadef5f769bb4b443b0f08e421e0112e67f9cba51cb8480c414b2589e"
+"special_tokens_map.json" = "90a1f613c89566d8c7f53043a7092321d376498ac541aae1914ef1328e895be7"
+"tokenizer.json"          = "e7a4e48ea138a47ad25233b59d59babae314ee104ba9557644f28f5f2e49f900"
+"tokenizer_config.json"   = "a05e17f6c5eff04d8d86c3bc2cd90c4613fbee2fb474de21cc3814a47f54ffad"
