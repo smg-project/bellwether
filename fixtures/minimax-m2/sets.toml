@@ -1,0 +1,323 @@
+[parse.common]
+form = "plain"
+cases = 5
+rejected = 11
+plain_bytes = 13447
+plain_sha256 = "a551c38a31199808217f35fbffd9fe3771ecda39cdbdeef0404e1b4461a46c3b"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.gsm8k-test-reasoning-content]
+form = "zstd"
+cases = 1319
+rejected = 0
+plain_bytes = 6385537
+plain_sha256 = "18e61faf844410a336d6124fad8ac6995b316e6df61c43b78cbab7716f1010f4"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.gsm8k-train-reasoning-content]
+form = "zstd"
+cases = 7473
+rejected = 0
+plain_bytes = 35574201
+plain_sha256 = "7bd36aa9c7ef2748c13572062d9431aa7469546a3b6a01f37678ca7bb24f25ae"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.mgsm-exemplars]
+form = "zstd"
+cases = 88
+rejected = 0
+plain_bytes = 371282
+plain_sha256 = "d6d21f251be6c589ba48c0cd5bce662ac088eaceec7410d8809d699b0492da82"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.shapes-reasoning]
+form = "zstd"
+cases = 1000
+rejected = 0
+plain_bytes = 6924938
+plain_sha256 = "09d9dbac04868e7f010ca241dacd36437d2561257406ee9172fe3c2c6e404c06"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.shapes-reasoning-calls]
+form = "zstd"
+cases = 968
+rejected = 32
+plain_bytes = 9272209
+plain_sha256 = "8811c0abde8208864d4c6ff63d0041b5ff43feded2377b4bc3a87e3b7acc09fb"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.shapes-reasoning-content]
+form = "zstd"
+cases = 1000
+rejected = 0
+plain_bytes = 7750831
+plain_sha256 = "8cba31ead396403a064da5c0b1fe872870f57c9619b5429b85b3d8b62c9e9e41"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.shapes-reasoning-content-calls]
+form = "zstd"
+cases = 968
+rejected = 32
+plain_bytes = 10145660
+plain_sha256 = "8cc419330af1d90c841495b6a6567cedf2bfa4207aef639d3221940ca352275b"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[render.bfcl-irrelevance]
+form = "zstd"
+cases = 240
+rejected = 0
+plain_bytes = 963051
+plain_sha256 = "8e3a69129c558dc82a38d0eaae7b29c82f06b768727b425764b67b29d1031d95"
+
+[render.bfcl-live-irrelevance]
+form = "zstd"
+cases = 878
+rejected = 0
+plain_bytes = 8960612
+plain_sha256 = "cafe653805e820525205d7be721cddb8638bd2e01a6addffb669fbc1ff45d1d8"
+
+[render.bfcl-live-multiple]
+form = "zstd"
+cases = 1053
+rejected = 0
+plain_bytes = 15320572
+plain_sha256 = "c6b9eb672fdba285a8a869af849aeef6d033a298dfcbd507e6dbea0e0056b983"
+
+[render.bfcl-live-parallel]
+form = "zstd"
+cases = 16
+rejected = 0
+plain_bytes = 78823
+plain_sha256 = "50425b47cbe9820e9771b7883f6e2ba5db167e6d547527fe90dbee6c71fdc495"
+
+[render.bfcl-live-parallel-multiple]
+form = "zstd"
+cases = 24
+rejected = 0
+plain_bytes = 324411
+plain_sha256 = "2b7a3f39a5fb9fa789dbe3320763261de090b84c1a68ec2444cff2595c6514c8"
+
+[render.bfcl-live-relevance]
+form = "zstd"
+cases = 16
+rejected = 0
+plain_bytes = 187701
+plain_sha256 = "8ca67999bfcdaf29c6e8ec02295e7dee0aa9f666237d875a296977b0bbd879d1"
+
+[render.bfcl-live-simple]
+form = "zstd"
+cases = 258
+rejected = 0
+plain_bytes = 1288959
+plain_sha256 = "2b3fc0d1ac315e7f21ec2618d40d363f7a7630e4061212b0fd8766cfc6f04ca5"
+
+[render.bfcl-multi-turn-base]
+form = "zstd"
+cases = 199
+rejected = 0
+plain_bytes = 15341146
+plain_sha256 = "fcf0d38f70b1471ed77db5917ebcf3eab54563b6bbaa7d1a5a65a629e6296892"
+
+[render.bfcl-multi-turn-long-context]
+form = "zstd"
+cases = 3
+rejected = 0
+plain_bytes = 269900
+plain_sha256 = "64976832f916c39a70acb4d2dab458d9e0596e4479478fcd3cf5aef0baa7743c"
+
+[render.bfcl-multi-turn-miss-func]
+form = "zstd"
+cases = 199
+rejected = 0
+plain_bytes = 14635418
+plain_sha256 = "159793c50ba1d3093f902298ee8f4ac68cf39da351af33f79515574d19112bf8"
+
+[render.bfcl-multi-turn-miss-param]
+form = "zstd"
+cases = 83
+rejected = 0
+plain_bytes = 6215709
+plain_sha256 = "13d747f2c7325feba14de301799e5c9e0b2cfb9e783c6a7c8bf1cc6d14f75a22"
+
+[render.bfcl-multiple]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 1499700
+plain_sha256 = "636e92106e03ee327f08c30492f965dc7b8351db359d9506b706e99a9b429d43"
+
+[render.bfcl-parallel]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 909276
+plain_sha256 = "ed11c91e4b82a338ebee808741206d752741ce9a5d29935bcb01027b317cfc69"
+
+[render.bfcl-parallel-multiple]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 1572639
+plain_sha256 = "3ef21b547572e7491d4bc41a871c94c05c90008347252177f1ed22b5cb822917"
+
+[render.bfcl-simple-java]
+form = "zstd"
+cases = 100
+rejected = 0
+plain_bytes = 504063
+plain_sha256 = "2cf37b14e94eb9dc501d14436dbf011657262ab8da9d7af20ca24edd124f1569"
+
+[render.bfcl-simple-javascript]
+form = "zstd"
+cases = 50
+rejected = 0
+plain_bytes = 266624
+plain_sha256 = "fc8fed9643ccb62c248747b4fbbe0afa277338191c9e0fda383764cc28cc4a8e"
+
+[render.bfcl-simple-python]
+form = "zstd"
+cases = 400
+rejected = 0
+plain_bytes = 1631772
+plain_sha256 = "e76e57a23a158811324f430e6392ee9bd3bea8c0b7ea3e9d452d4949b2cadc07"
+
+[render.common]
+form = "plain"
+cases = 20
+rejected = 4
+plain_bytes = 32725
+plain_sha256 = "e68c8ceb6604c4bd3d1a0055fc48eca36b6a2620e238aae777a911f6c210f3b4"
+
+[render.gsm8k-test]
+form = "zstd"
+cases = 1319
+rejected = 0
+plain_bytes = 2129638
+plain_sha256 = "a3d7c0197f360887478139ededc2727f6ef237740974bb5aa6e1ea3eeb3f7da4"
+
+[render.gsm8k-train]
+form = "zstd"
+cases = 7473
+rejected = 0
+plain_bytes = 11946060
+plain_sha256 = "a8d85f36e1cfe3414b0f75565a54b9602f68d888a39e0504b70c3a86e5921f60"
+
+[render.hermes-func-calling-singleturn]
+form = "zstd"
+cases = 1100
+rejected = 0
+plain_bytes = 11165416
+plain_sha256 = "b6a3cb3e4796f2058504c7cc5cde5e367011381e0f992efcb8981de86e8fd8da"
+
+[render.hermes-glaive-func-calling]
+form = "zstd"
+cases = 8394
+rejected = 10348
+plain_bytes = 43583714
+plain_sha256 = "38414ed1021d23ab0cdbc8e0d1f53635f630a2f40b083d8d6ac4f4972fe8c3ca"
+
+[render.mgsm-bn]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 790564
+plain_sha256 = "63d2a088b3fde95cd54440c3fdbab8846f5fe9d7b7d5f04e134fc944f4d08023"
+
+[render.mgsm-de]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 450987
+plain_sha256 = "540ed586b87d135e6fbcd0d9fc55750d35c11585ac62ff501b62e5a396af5054"
+
+[render.mgsm-es]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 424537
+plain_sha256 = "05d652506642dfecc25471db490a6a6119434993107b33fc94a32cefb8b5e554"
+
+[render.mgsm-fr]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 432443
+plain_sha256 = "2f62c116441dfbe55d42a8e5e8541b1792423df4037dc971157bf30b7c94a86d"
+
+[render.mgsm-ja]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 453002
+plain_sha256 = "9e74ed2e6e4fb0e7eadcd08d8770424778dd13a689fede207304b324085cb6cd"
+
+[render.mgsm-ru]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 556240
+plain_sha256 = "657bacb26ec0b85b684588718d05e5d4bf9288b00d2a6fb6027ace5821510121"
+
+[render.mgsm-sw]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 470091
+plain_sha256 = "32068f92c92d50581b9fca1dd3b7644facca3264509028d433beabfcfc190e43"
+
+[render.mgsm-te]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 887506
+plain_sha256 = "d0509b2150158c55d01aaefa6c4f96d1e66b1162b514c530da3e2043d580602a"
+
+[render.mgsm-th]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 829438
+plain_sha256 = "75c3bf83ae5a4b6b6d798bfd24fbd48c7db4e2cf9c0efddeb77b695fd8be7055"
+
+[render.mgsm-zh]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 399763
+plain_sha256 = "d1d355b886f5d9c96c9b22ff14735420dcf737799c68bd9d051f475efe34b2c1"
+
+[render.swebench-test]
+form = "zstd"
+cases = 1697
+rejected = 0
+plain_bytes = 25856880
+plain_sha256 = "498a3fc053a6f09241dd4936c2d01711bc3b810105554b071f1ef76ee2945581"
+
+[render.swebench-test-copyleft]
+form = "zstd"
+cases = 47
+rejected = 0
+plain_bytes = 858664
+plain_sha256 = "b301c293b2df6579cda3f82dc8113784cbf1aeacfd021bc510374bc6708cf868"
+
+[render.swebench-verified]
+form = "zstd"
+cases = 482
+rejected = 0
+plain_bytes = 5870675
+plain_sha256 = "995dbfbf2c451ba2b86d7e115e0fe887c53e29822660efca50ea1b1c9654c47b"
+
+[render.swebench-verified-copyleft]
+form = "zstd"
+cases = 10
+rejected = 0
+plain_bytes = 199385
+plain_sha256 = "df2a9fc649b91e83ed15dc7a396ce8e16925ebc1c3287c153498be1453c52d76"
