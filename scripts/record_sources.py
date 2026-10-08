@@ -1,13 +1,14 @@
 """Record the named corpus sources for one checkpoint group, as a ``record`` workflow job does on a runner.
 
-    uv run python scripts/record_sources.py <slug> [--sources glaive-v2 tau2 swehero] [--jobs 3]
+    uv run python scripts/record_sources.py <slug> [--sources common bfcl ... swehero] [--jobs 3]
 
 1. **The checkpoint's files.** The oracle inputs are read once with network access, as the recorder reads them
    (``bellwether.inputs.checkpoint_dir``), which leaves them in the Hugging Face cache at the manifest's revision with
    the commit's file list beside them; the recorder then runs offline (``HF_HUB_OFFLINE=1``), and every call reads the
    same snapshot.
 2. **The calls.** ``bellwether record`` runs for each source and kind, on a few sets at a time, and ``--jobs`` calls run
-   at once, the largest first, so the job does not end on one large call running alone. Each call reads a corpus
+   at once, the largest first, so the job does not end on one large call running alone. A source's sets are the corpus
+   files named ``<source>-<part>``, or ``<source>`` alone (``common``), plain or compressed. Each call reads a corpus
    directory of its own that links only its sets, and names them with ``--set``: ``load_corpus`` reads every set file
    in the directory it is given, so a call against the whole corpus would hold all of it (17-20 GB), and ``--set``
    leaves the group's other fixture sets and their ``sets.toml`` tables as they are (the recorder locks ``sets.toml``
@@ -39,11 +40,25 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from bellwether.storage import stem as set_name  # a corpus file's set: its name without .jsonl.zst or .jsonl
+
 ROOT = Path(__file__).resolve().parent.parent
-SUFFIX = ".jsonl.zst"
+# Every source in the corpus, the ones a group recorded before the benchmark-scale imports first.
+SOURCES = ["common", "bfcl", "gsm8k", "mgsm", "hermes", "shapes", "swebench", "glaive-v2", "tau2", "swehero"]
 # How many sets one call records: glaive-v2's 71 sets take 0.54 GB (render) and 0.70 GB (parse) as plain JSON Lines in
-# all, tau2's 22 about 4.9 GB and SWE-Hero's 14 about 7.4 GB.
-SETS_PER_CALL = {"glaive-v2": 71, "tau2": 4, "swehero": 1}
+# all, tau2's 22 about 4.9 GB and SWE-Hero's 14 about 7.4 GB. The others are small enough for one call a kind: the
+# hermes sets about 100 MB, SWE-bench's 45 MB, BFCL's 37 MB, GSM8K's 23 MB, the shapes 18 MB, MGSM's 4 MB.
+SETS_PER_CALL = {
+    "glaive-v2": 71,
+    "tau2": 4,
+    "swehero": 1,
+    "bfcl": 17,
+    "gsm8k": 4,
+    "mgsm": 12,
+    "hermes": 3,
+    "shapes": 6,
+    "swebench": 8,
+}
 RECORDED = re.compile(r": (\d+) cases recorded")
 # Files an oracle looks up by name beside the oracle inputs, such as the parse oracle's generation config for the end
 # of turn. Offline, a file the checkpoint does not ship must be known to be absent: the Hub's answer marks it so in
@@ -59,13 +74,21 @@ def listed(sets_toml: Path, kind: str) -> set[str]:
     return set(tomllib.loads(sets_toml.read_text("utf-8")).get(kind, {}))
 
 
+def source_sets(corpus: Path, kind: str, source: str) -> list[Path]:
+    """The source's set files of ``kind``, in name order."""
+    directory = corpus / kind
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and (name := set_name(path)) is not None and (name == source or name.startswith(f"{source}-"))
+    )
+
+
 def calls(corpus: Path, kind: str, source: str, per: int, done: set[str]) -> list[list[Path]]:
     """The source's set files of ``kind`` not in ``done``, in name order, cut into calls of ``per`` sets."""
-    files = [
-        path
-        for path in sorted((corpus / kind).glob(f"{source}-*{SUFFIX}"))
-        if path.name.removesuffix(SUFFIX) not in done
-    ]
+    files = [path for path in source_sets(corpus, kind, source) if set_name(path) not in done]
     return [files[start : start + per] for start in range(0, len(files), per)]
 
 
@@ -73,9 +96,7 @@ def queue(corpus: Path, sources: list[str], sets_toml: Path) -> list[tuple[str, 
     """Every call the group still needs, as ``(kind, sets)``, the largest corpus first. A source with no corpus set of
     either kind is refused, so a misspelt one is not taken for one already recorded."""
     kinds = ("render", "parse")
-    missing = [
-        source for source in sources if not any(any((corpus / kind).glob(f"{source}-*{SUFFIX}")) for kind in kinds)
-    ]
+    missing = [source for source in sources if not any(source_sets(corpus, kind, source) for kind in kinds)]
     if missing:
         raise SystemExit(f"no corpus set for {', '.join(missing)} under {corpus}")
     pending = [
@@ -138,7 +159,7 @@ def fetch_inputs(model: str, revision: str) -> None:
 def record(slug: str, model: str, kind: str, call: list[Path], fixtures: Path, failures: list[str]) -> None:
     """One ``bellwether record`` call, on a corpus directory that links its sets alone."""
     bellwether = str(Path(sys.executable).parent / "bellwether")
-    names = [path.name.removesuffix(SUFFIX) for path in call]
+    names = [set_name(path) for path in call]
     with call_corpus(kind, call) as directory:
         args = [bellwether, "record", "--model", model, "--kind", kind, "--oracle", "reference"]
         args += ["--fixtures", str(fixtures), "--corpus", str(directory)]
@@ -160,7 +181,7 @@ def record(slug: str, model: str, kind: str, call: list[Path], fixtures: Path, f
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("slug")
-    parser.add_argument("--sources", nargs="+", default=["glaive-v2", "tau2", "swehero"])
+    parser.add_argument("--sources", nargs="+", default=SOURCES, help="default: every source in the corpus")
     parser.add_argument("--fixtures", type=Path, default=ROOT / "fixtures")
     parser.add_argument("--corpus", type=Path, default=ROOT / "corpus")
     parser.add_argument("--jobs", type=int, default=3, help="calls at once (default: %(default)s)")
