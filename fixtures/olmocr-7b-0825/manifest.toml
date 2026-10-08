@@ -1,0 +1,13 @@
+model    = "allenai/olmOCR-7B-0825"
+revision = "f1463418cd4cc4af00a1db889378f72b53ebcaa6"
+tier     = 3
+group    = "qwen2.5-vl-7b-instruct"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "4ba01a2d7899915c5194ec5afed2e3d71752bc7b40b564a239c2466d77e86692"
+"config.json"            = "0d76832488b8dc90a9406c354207ed692ccec4daeff738afce319af006b63613"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"  = "4abd3520120e266da84c0864fee064d1fb10806f02225911a47253dd38dc5f56"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
