@@ -1,0 +1,12 @@
+model    = "Qwen/Qwen2-VL-2B-Instruct"
+revision = "895c3a49bc3fa70a340399125c650a463535e71c"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "4ba01a2d7899915c5194ec5afed2e3d71752bc7b40b564a239c2466d77e86692"
+"config.json"            = "7137b1c66a417253c50a961b9959b4c9045d119cc37c96e8b385f335020a6243"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "cb63a0a23eef3d5b01063a9880a1925a65aaf4d1591d519910ee3527852950a0"
+"tokenizer_config.json"  = "ff5c4fd898fe8c39591eb70e5d39d2782802d4204d6ae9ba1223252f354842a0"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

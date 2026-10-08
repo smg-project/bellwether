@@ -1,0 +1,11 @@
+model    = "HuggingFaceM4/Idefics3-8B-Llama3"
+revision = "fddb4ff79181e55a994674777e06cd5456ce3dc3"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"      = "e70043d2185d9abe0e97a1814b0a7a9009992259ab523c7d6af89ee2964d0d78"
+"config.json"             = "d19c41413436c8a7892d63d38df9818c1bbe99ead50bb7c66c4e8023ffcc7f4c"
+"generation_config.json"  = "f04b14878947bfd7fa5149c37d435003fe842b3a281f7877998df384292902e4"
+"special_tokens_map.json" = "890c25f56d1cbb0f97fb47bb3b4f51c0727db2723aefb7e263d04bc7dafb2572"
+"tokenizer.json"          = "c813df93a4d055a468052ffa0d6793e77b960daed2987758fb4307f79b5dbb08"
+"tokenizer_config.json"   = "ee3000ee24247286f8844366a82fb325b80d36d8e0d623be7ef25d2bc7eb727c"

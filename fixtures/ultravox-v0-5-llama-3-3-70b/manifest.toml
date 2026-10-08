@@ -1,0 +1,11 @@
+model    = "fixie-ai/ultravox-v0_5-llama-3_3-70b"
+revision = "adbc4202680235e7d9b7666a5a6de3e666c36eec"
+tier     = 3
+group    = "ultravox-v0-5-llama-3-1-8b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "8c79939308884de46d8e7a0c1194b61f31f58391d2300b45550aaade961f13ec"
+"generation_config.json"  = "b727f44f3a90ac2bdc63f90bdfc1954626b5da9ddad51b0091a8e3660638fdc7"
+"special_tokens_map.json" = "9ed9adc740c3a05f3cec3afff1e10046233e7b250e62f0ba6c2c52d019502f4c"
+"tokenizer.json"          = "e87771bfea74770d36a1432b5f9ba6d7f611d33fb63681d10c2479540c1591f8"
+"tokenizer_config.json"   = "f95f0669ec4c7629f4be16b5c47293db003a53f2f3e7496512221d1a06460495"

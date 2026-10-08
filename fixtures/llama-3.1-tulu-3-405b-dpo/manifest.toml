@@ -1,0 +1,11 @@
+model    = "allenai/Llama-3.1-Tulu-3-405B-DPO"
+revision = "5825f5e1598ebf36083f94e841136dfd0327f75d"
+tier     = 3
+group    = "llama-3.1-tulu-3.1-8b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "fc2978173b2150ad09d61697c9d5691119ba756df206e963479e800678b1df6d"
+"special_tokens_map.json" = "2c732a19d798dfa2591e920df4c34d0c801f2c55bc5b0ba119594e836ba97eaf"
+"tokenizer.json"          = "9400df98529060210393c40f08cb127f7c0df584338b3fbfdba8cf82a33c1ade"
+"tokenizer_config.json"   = "06a3ace51e6b848dfb57994fe7a3118ffb26e2fecdfd648784f2e5a9468be955"

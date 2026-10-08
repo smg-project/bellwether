@@ -1,0 +1,10 @@
+model    = "arcee-ai/AFM-4.5B"
+revision = "e84d19711eca5817c1608cb344d931bf05c966dd"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "c92fc17a7b43bfa5ebbbf5e834ffaba872131711f7a15ece4757b20581c931e8"
+"generation_config.json"  = "0a39c6b65e1502cb1c0111bf4c6b62e7aae825616edc15eef11bd7bafdb30320"
+"special_tokens_map.json" = "a27d5e476c626fafa424e654213ae7f68f917ff846fa992c0ceda2c84d7b15f6"
+"tokenizer.json"          = "d48708c6021027e8fc6d5342e1498111d8e87aae8903319d3ead1fbdfc4a9125"
+"tokenizer_config.json"   = "b7b5f2bdabea93742271394baaf133e5d246cd5f1d8b27e3d862ab4e7e92850f"

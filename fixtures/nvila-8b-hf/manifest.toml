@@ -1,0 +1,13 @@
+model    = "Efficient-Large-Model/NVILA-8B-hf"
+revision = "e722ed6889396b54ff37a10fcfeabf8c2df3c935"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "f5883f2c4b87703a6d6f6018e20cc35831ba8411d216120607de50a8d7a02493"
+"chat_template.jinja"     = "111dab536673b8835f5f94a507f4d7a0dd470b82e773d35c22ee34909dabbdc6"
+"config.json"             = "4f9f4ea854909f8648d7f0a73c0858fa1494fe757bcb5783ad4df91e5a2bc864"
+"generation_config.json"  = "94cd82084f9e10a4b69f3a7f49eda69763d162321a1f6a6b2c0c9290984361ad"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "eacc3087bef13e5615ec534eb8a191db20c7ac4f23e30017643cd9994af4fd23"
+"tokenizer_config.json"   = "eafa866a84dd6bf05dd1eef371fc16699224f8eafb7a97b4598a06b2b4867d5a"
+"vocab.json"              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"

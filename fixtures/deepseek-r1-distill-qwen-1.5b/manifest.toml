@@ -1,0 +1,9 @@
+model    = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+revision = "ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
+"generation_config.json" = "a0502c35d2ec4156852b1f6e4da0cf077d87fc4880b93eb69f1e50b5b8e65c9c"
+"tokenizer.json"         = "88145e3c3249adc2546ede277e9819d6e405e19072456e4b521cbc724bd60773"
+"tokenizer_config.json"  = "8ac8c85fb242563c2260baec0909debd69d718af6a0b3d90e6cab62b4d341cd5"

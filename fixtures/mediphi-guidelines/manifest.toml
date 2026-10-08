@@ -1,0 +1,13 @@
+model    = "microsoft/MediPhi-Guidelines"
+revision = "4b8253b30c575219c11f035a33c876ffea54621a"
+tier     = 3
+group    = "mediphi-pubmed"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "f8e5a880c6c563a126d9efacb654e105fc4b66f21e5a540f04436e9487a955fb"
+"config.json"             = "9c3b00b6e966f4e3a6add34502f7e6906dc35245ac41b79045c410edd4786878"
+"generation_config.json"  = "955f7019c100b850d55a97146b0d45bb809f68b6d48c2f7b8f87b1ea7fdc4fa3"
+"special_tokens_map.json" = "f10dc90731b20258c8512c6969ab6d696e7ad0cd47de35dbb0e4b0f6fec03d54"
+"tokenizer.json"          = "072ab882d6c7192a42f78790945d16c064691321a73251a4b18f6a380f0fbe39"
+"tokenizer.model"         = "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347"
+"tokenizer_config.json"   = "7692aec3081c38ad800d12133ed3d3c3e96fae730b59a1be7b52fd30fbaaad5b"

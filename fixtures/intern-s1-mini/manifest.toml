@@ -1,0 +1,20 @@
+model    = "internlm/Intern-S1-mini"
+revision = "0f25c8f60f4190a18dd6620c94bdccedbebc208d"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"          = "d513edc4ab2a6a568468d70837bdf2c1f3e3b8d3faebe54acd9be2f271759045"
+"config.json"                  = "7d76caf60f71159d7f77b4ebaa3c9384d67da752e08c69de3b66b63e57c00ce5"
+"configuration_interns1.py"    = "9c65a989777c524636a1280343cb5992bcd583a9aa893746788465e086b07787"
+"generation_config.json"       = "94cd82084f9e10a4b69f3a7f49eda69763d162321a1f6a6b2c0c9290984361ad"
+"merges.txt"                   = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"modeling_interns1.py"         = "61dcbcac2aecc6d17ad388c9a24800fdafe177bab44f0aaab18331933ae4e0ee"
+"processing_interns1.py"       = "858a72670c52c5fe35d570d02f3d44f0561bbf79107b97cafa53d6bd7c463e0f"
+"special_tokens_map.json"      = "214cc3800213886a596594bc5e1667203a316cb1c32847ff4ca3525809370853"
+"tokenization_interns1.py"     = "0695012185b0e257b9352b333121d95e4e2336fc9331c56ec6d06dea54e60af5"
+"tokenizer_FASTA.model"        = "6e719023a50767e2da1165925feb3afe77d63702f08d0cd39c4ddadba7cdaaca"
+"tokenizer_IUPAC.model"        = "6e719023a50767e2da1165925feb3afe77d63702f08d0cd39c4ddadba7cdaaca"
+"tokenizer_SMILES.model"       = "d8dd3252680ab2fedacab7e71b75a48f08d6fbae70a9cc38d355c65ec42fbd0d"
+"tokenizer_config.json"        = "e70c009e166cc4c82e926b6fcac08b4e627e611f4053bb0a17047c9607ff6424"
+"video_processing_interns1.py" = "6ed7cef081abaed7ec3275805e4994a6d2882f9ee8aca8a05a5e254908976507"
+"vocab.json"                   = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"

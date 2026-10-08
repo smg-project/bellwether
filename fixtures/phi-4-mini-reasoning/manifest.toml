@@ -1,0 +1,13 @@
+model    = "microsoft/Phi-4-mini-reasoning"
+revision = "0e3b1e2d02ee478a3743abe3f629e9c0cb722e0a"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "d4f2aceb0f20b71dd1f4bcc7e052e4412946bf281840b8f83d39f259571af486"
+"config.json"             = "9c3b00b6e966f4e3a6add34502f7e6906dc35245ac41b79045c410edd4786878"
+"generation_config.json"  = "0d7137e399883f7e7dab6ccbdb3ae57e2abe5f6962035a16449a0a74a109e3c6"
+"merges.txt"              = "856ce61180bb689282eed6b3a6838bb1f438399be23aefe9d20eb379791fb4ad"
+"special_tokens_map.json" = "aff38493227d813e29fcf8406e8e90062f1f031aa47d589325e9c31d89ac7cc3"
+"tokenizer.json"          = "f08ed885956f70d877a4d9078ec9e3119d8b68a8d579003e230be18cad66911c"
+"tokenizer_config.json"   = "a8c82becd87806054deee49ad3e00322eafdd72f65b0b7dfd99a75c74f5df329"
+"vocab.json"              = "6cb65a857824fa6615bb1782d95d882617a8bbce1da0317118586b36f39e98bd"

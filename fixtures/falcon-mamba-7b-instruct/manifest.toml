@@ -1,0 +1,10 @@
+model    = "tiiuae/falcon-mamba-7b-instruct"
+revision = "b250fc9399d14f56aca18e9ea70bbfb1f73479eb"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "17184fafbfe5160ef5d40fe1c5fe6c99cef43d32edb5437f9223b5efdd30c238"
+"generation_config.json"  = "ff2803c8a92522fa9cb24d5e3174db76ef8b28059432a8b5cc70f0d7eb7f7a10"
+"special_tokens_map.json" = "1ca9f41296d36483d4eb7e24310fda83bc43d62bf1126899dd9d57145a03951b"
+"tokenizer.json"          = "b1b750b8558835296cf1168f93a4f0b01c56f58fee980c396cde436678a036b2"
+"tokenizer_config.json"   = "870f874e5fc7483932f837b41585ec9c07bdda7f2e2e8fc440408531c0c54430"

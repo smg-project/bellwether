@@ -1,0 +1,13 @@
+model    = "NousResearch/k2-merged-3.5T-bf16"
+revision = "a64f366fe54e27dddb216e1c0097abaacdb8d7b1"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"       = "0d8c1b9b65099ad3d47e06b39dab52ff46d024dfaff45b0aaa56769bc6d273fe"
+"config.json"               = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"configuration_deepseek.py" = "54f29dd0d56e9a13f639c703e524daa71794e360050012aea3788ad7cfc38b17"
+"generation_config.json"    = "563cecc538917aa08d5a4d59ef67186ddbfcd65db1e41458ef422aa463cf4d54"
+"modeling_deepseek.py"      = "ce753fc9076ce13ce9557e680e2f5bd68ae8929a8225772968a9a22a1d17b7d4"
+"tiktoken.model"            = "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103"
+"tokenization_kimi.py"      = "2a22f051c9f5f2d75d280188391a1c38ad42bcd132fbf9771c1864ec4523a890"
+"tokenizer_config.json"     = "5ba77d5822137ac3cb9337d2b84561d10425562cf8b8f2c74c91a832516a778d"

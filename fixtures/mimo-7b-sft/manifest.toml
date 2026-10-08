@@ -1,0 +1,11 @@
+model    = "XiaomiMiMo/MiMo-7B-SFT"
+revision = "2c8c99d54d85f77dd003a1a473ceff1a101d30ec"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "b4cfef52d1004d3a6985381d16b25a6f26d97d7172ad8fb60ff0e724db631a25"
+"generation_config.json" = "94cd82084f9e10a4b69f3a7f49eda69763d162321a1f6a6b2c0c9290984361ad"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"  = "e0f3c98369c93e05e00fa73d32a5a52fd0fb09269196cba514a8f1fe7709c3ec"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

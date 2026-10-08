@@ -1,0 +1,10 @@
+model    = "tencent/Hunyuan-MT-Chimera-7B"
+revision = "3d9e4551dad0ae6b9fb6be5e96eee942bfcea047"
+tier     = 3
+group    = "hunyuan-mt-7b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "37423d6adec3ab0842a4298de2e6e646997c711adb30ade05e9f5481841bb9f8"
+"generation_config.json" = "94b27992232e29b6f921e0afabbccae66aa36a204123652f0818b4b7a1175cfb"
+"tokenizer.json"         = "4185389a69284fdd3ebf737c6120bbeee36cbed9763151fa5bac5986a39e05d4"
+"tokenizer_config.json"  = "4a31cd44d6a1cb4e9334fe9f597f9c15274a12c4e85a7af314dafdeea801d6d6"

@@ -1,0 +1,13 @@
+model    = "baidu/ERNIE-4.5-0.3B-PT"
+revision = "b565cf6caebdb7a1eadf00100857b1ed5e044f12"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "08ab98258652553a53455b164c258488ce840322f0949877676d962a1d958cad"
+"chat_template.jinja"     = "471fb571976770318fe6f27749e37940be8d29c0a7770558140f141f5906f2a2"
+"config.json"             = "8280bcec59db3be5a0953541f4cead72f4d63301bedf77d587b0ae0e0552a987"
+"generation_config.json"  = "9592aaeeadef5f769bb4b443b0f08e421e0112e67f9cba51cb8480c414b2589e"
+"special_tokens_map.json" = "d96a4630d4a8bbddabc3e1ad272a0e6a42f37a515239c8d25626d09154d7603b"
+"tokenizer.json"          = "4e5b4d49475d27c7ef7a61eea2d675f9cc013e91e3ddb5e06d964f5027c1814a"
+"tokenizer.model"         = "34ef7db83df785924fb83d7b887b6e822a031c56e15cff40aaf9b982988180df"
+"tokenizer_config.json"   = "e9bc80502f0e997cc36b4d1f2bd025a3ca549a108736f7a1cef014229db0a82d"

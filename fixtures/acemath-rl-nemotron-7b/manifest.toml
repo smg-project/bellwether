@@ -1,0 +1,11 @@
+model    = "nvidia/AceMath-RL-Nemotron-7B"
+revision = "2099899a83b3b984ea20e410d76909b3f123e431"
+tier     = 3
+group    = "acereason-nemotron-7b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
+"generation_config.json"  = "787372a88bbc523f43c536affa826c65268e8e706c57b2db8d43087fdafa2fd2"
+"special_tokens_map.json" = "59cda48bbe8bab9d61ffb410e6e3c07b6d98bff73cee7c88ff8b51f95f21ab1c"
+"tokenizer.json"          = "e20ddafc659ba90242154b55275402edeca0715e5dbb30f56815a4ce081f4893"
+"tokenizer_config.json"   = "92a23085bfbd6862f4868df0db8404d8f18f6393225ec5b2bbef0bd1630111fa"

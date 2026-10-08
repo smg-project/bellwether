@@ -1,0 +1,9 @@
+model    = "zai-org/glm-4-9b-chat-hf"
+revision = "8599336fc6c125203efb2360bfaf4c80eef1d1bf"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "c26ab7cc87a30099d1f3ccfc931d8a2866a118e1cf288d4b9cd2d9e70fc7b9cf"
+"generation_config.json" = "1e0992236b9eb4736b87aa2e00b2146ce9c5a000fe2b67fff93095d56caad93c"
+"tokenizer.json"         = "8a7269d6daa6328de533def0082ff9d3a825bb89036cbcc665c324f941f67fbf"
+"tokenizer_config.json"  = "5ac39fe659e4fafd9e93dc158883590a73339ced96e1a91c767cd12a9cb3f8df"

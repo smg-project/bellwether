@@ -1,0 +1,10 @@
+model    = "kakaocorp/kanana-1.5-2.1b-base"
+revision = "83fdd4426138b2becb3b33197126de2e4f5dfcd3"
+tier     = 3
+group    = "kanana-1.5-8b-base"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json" = "fc2978173b2150ad09d61697c9d5691119ba756df206e963479e800678b1df6d"
+"tokenizer.json"         = "e134af98b985517b4f068e3755ae90d4e9cd2d45d328325dc503f1c6b2d06cc7"
+"tokenizer_config.json"  = "c058e1ff967585f08c1c4dc1577c68a825a482b38bc0b2bff059ab113bf603bf"

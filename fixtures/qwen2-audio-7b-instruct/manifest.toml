@@ -1,0 +1,11 @@
+model    = "Qwen/Qwen2-Audio-7B-Instruct"
+revision = "0a095220c30b7b31434169c3086508ef3ea5bf0a"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "39f1d31c443ae6c0d729ec9f57217b06638e1badee77c8d54790c330a789e110"
+"generation_config.json" = "ba98041785e9ea15ebb7c346ac75afb82855a3df4e7d9d538233ae83b0291550"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "f7c9b2dba4a296b1aa76c16a34b8225c0c118978400d4bb66bff0902d702f5b8"
+"tokenizer_config.json"  = "c738158e70eeecf25736a6c4d8e5f34cfce683079980757edfb0665a7b2457ed"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
