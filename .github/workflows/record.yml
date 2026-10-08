@@ -42,10 +42,11 @@ jobs:
           SLUGS: ${{ inputs.groups }}
           SOURCES: ${{ inputs.sources }}
         run: |
-          # A source's sets are corpus/<kind>/<source>-<part> or <source> alone, plain or compressed.
+          # A source's sets are corpus/<kind>/<source>-<part> or <source> alone, as .jsonl or .jsonl.zst.
           for source in $SOURCES; do
-            compgen -G "corpus/*/$source-*.jsonl*" > /dev/null || compgen -G "corpus/*/$source.jsonl*" > /dev/null ||
-              { echo "::error::no corpus set for $source"; exit 1; }
+            found=no
+            for set in corpus/*/"$source"{-*,}.jsonl{,.zst}; do [ -f "$set" ] && found=yes; done
+            [ "$found" = yes ] || { echo "::error::no corpus set for $source"; exit 1; }
           done
           python3 scripts/record_plan.py $SLUGS >> "$GITHUB_OUTPUT"
       # The sources' compressed corpus sets, fetched from Git LFS once into a cache every group's job restores: Git LFS
@@ -63,7 +64,7 @@ jobs:
         env:
           SOURCES: ${{ inputs.sources }}
         run: |
-          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,' "$source"; done)
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,corpus/*/%s.jsonl.zst,' "$source" "$source"; done)
           git lfs fetch --include "${include%,}"
 
   record:
@@ -114,7 +115,7 @@ jobs:
           fail-on-cache-miss: true
       - name: The sources' corpus sets
         run: |
-          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,' "$source"; done)
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,corpus/*/%s.jsonl.zst,' "$source" "$source"; done)
           git lfs pull --include "${include%,}"
       - name: Record
         id: record
