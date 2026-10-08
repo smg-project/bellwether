@@ -1,0 +1,11 @@
+model    = "microsoft/Phi-tiny-MoE-instruct"
+revision = "2fe50e88d0e2a5a132563815686ea0dcc8e252b5"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "84addd9b7448d7b7f5320d3ed40274ba90c58340ffe183a5d13ce5293cbd1f82"
+"config.json"             = "1af67e8dc0f5df73c47724bcceab43b60fca0e7571bb41e7cb5cc74b9b858a97"
+"generation_config.json"  = "fa279412011fec491e74f714fb394476e19830f0e99a6761833b8e25d32ff98b"
+"special_tokens_map.json" = "474d699677e264edd3851559548cbbb61801ad8da6b249c81455007602313c34"
+"tokenizer.json"          = "d0f067e1e15cd0a36ebef3668024882cb67a80b86fb4b7b4b128481f0d474db7"
+"tokenizer_config.json"   = "f1dd849855d10277cec0457162688f71e5c9230a7b69370ae66f804755f5e90f"

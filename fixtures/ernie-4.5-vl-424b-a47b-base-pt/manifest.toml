@@ -1,0 +1,15 @@
+model    = "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT"
+revision = "2ce673130e7a6f58d6db9c18cc0ca7e2b25a3927"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"            = "feea71fd871e27758410175c945fe72306fc0abedcfc4ddc5b47b988bd04497b"
+"chat_template.json"           = "46e1d0d727006b9088a5f10f5aa1c5ba0dea3bb87ee233134b003c51348672c7"
+"config.json"                  = "0af7fce09bb1298759a47fb6cf54ca5ebda113350994f73d718261977ce9f751"
+"configuration_ernie4_5_vl.py" = "018bcc83e28f8ce20dcd87ef51af88913b19eb8dd70e4726215ce7de8e480cae"
+"generation_config.json"       = "9592aaeeadef5f769bb4b443b0f08e421e0112e67f9cba51cb8480c414b2589e"
+"modeling_ernie4_5_vl.py"      = "cbd8c61a2d5081d9b4f9aeb3805174436b2d864ca11161dc4edf076c3cb66ce2"
+"processing_ernie4_5_vl.py"    = "e3b765cfd20cdc9e830edb198478cc13d81d9dd16d7ea2f07b4ba37dccc0d4dc"
+"special_tokens_map.json"      = "b1b92788fd1e393051d620f5e4daa28463e99f40409459869f6d08ce4330f1d7"
+"tokenizer.model"              = "2ed2203974453df691287a0432c06737f1b17f20f5ab325fb33e31844d90ddb0"
+"tokenizer_config.json"        = "f47d88241265adfb53508e7143ba3049cead2f41c8cd6bb81479a747e0c64220"

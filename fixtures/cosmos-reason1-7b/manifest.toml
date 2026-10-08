@@ -1,0 +1,10 @@
+model    = "nvidia/Cosmos-Reason1-7B"
+revision = "375e24000b24baed78f4618d3dd779e47cd96323"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "4ba01a2d7899915c5194ec5afed2e3d71752bc7b40b564a239c2466d77e86692"
+"config.json"            = "0d76832488b8dc90a9406c354207ed692ccec4daeff738afce319af006b63613"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"tokenizer.json"         = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"  = "4abd3520120e266da84c0864fee064d1fb10806f02225911a47253dd38dc5f56"

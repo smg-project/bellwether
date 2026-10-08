@@ -1,0 +1,10 @@
+model    = "hmellor/tiny-random-LlamaForCausalLM"
+revision = "9408c553e5c189a7dcdc5a5dbd2feb476b061759"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"special_tokens_map.json" = "4859e5dbde90e059988a0a2136d8df3f2773d4d2fc4c4543690028f0b2166e7f"
+"tokenizer.json"          = "d606f46a8aa6f29f0a0abdec7c3ffddefc9f9bfe26919532d209a0a850e25029"
+"tokenizer_config.json"   = "040872e9d5a8ba8676627762439adb9f7bc0a2b91175a679141f50009d966595"

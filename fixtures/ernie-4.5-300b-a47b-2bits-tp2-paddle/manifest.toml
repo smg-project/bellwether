@@ -1,0 +1,12 @@
+model    = "baidu/ERNIE-4.5-300B-A47B-2Bits-TP2-Paddle"
+revision = "495cf4a3f7aaeded0bc62bdd00a0cd42dc42949f"
+tier     = 3
+group    = "ernie-4.5-300b-a47b-paddle"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "9135892e63c950dc701d0aa3220b6d550919b40e828de32afef1eeead0a85b61"
+"config.json"             = "686a41cbb4978a9d69f3a800178c41d2444a44c994e10216a8847c12bdcc2764"
+"generation_config.json"  = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"special_tokens_map.json" = "cc13d82950d679a01b61764c0995fbecc730b260dd190870bb2e0c8eec81cedc"
+"tokenizer.model"         = "34ef7db83df785924fb83d7b887b6e822a031c56e15cff40aaf9b982988180df"
+"tokenizer_config.json"   = "a0b92c8d8a0ec162644ac22085316c3d6339a0127bc404ab138d3a8a53ccf18f"

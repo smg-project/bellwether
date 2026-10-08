@@ -1,0 +1,13 @@
+model    = "llava-hf/llava-v1.6-mistral-7b-hf"
+revision = "2424fdd47412fccc66d91719126b420e9fbd7065"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "a94c56096001713e3eb9a34b1a545a8c1d5e8034ed2fb81f897c8cb54b420121"
+"chat_template.json"      = "209bb66c89adf70491229d8d2673cf990630504d060b89fc979277d00bf76f3d"
+"config.json"             = "afea2a48cd147a72720a7fafe657e9fbd4648ff4c105c22b74c38f5be4a8c1aa"
+"generation_config.json"  = "c073f5002fe4a7ca5e9624bd94f442afeff4e9a00b2fd5f4ed6678651d8b84a3"
+"special_tokens_map.json" = "358c249e2fb29060c6b73157d428853b0c48710deffc8ee670ab1013880946c9"
+"tokenizer.json"          = "3ac63c3abef09099abe96833fbad9cdf473ede830413b0063bf8c3f357ed833c"
+"tokenizer.model"         = "dadfd56d766715c61d2ef780a525ab43b8e6da4de6865bda3d95fdef5e134055"
+"tokenizer_config.json"   = "37729d3fee9c6d74290bd6a85524941cd06cc7e9c9acb013863c23e9c6275d2f"

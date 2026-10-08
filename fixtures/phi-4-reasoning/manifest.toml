@@ -1,0 +1,11 @@
+model    = "microsoft/Phi-4-reasoning"
+revision = "1de18ec97600877ce63dbf60c73b998da99f0195"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9c3b00b6e966f4e3a6add34502f7e6906dc35245ac41b79045c410edd4786878"
+"generation_config.json"  = "1534dffe4fd7aa143c007bf0867cb24ed88473e15a1677d96907c3e47290d0b5"
+"special_tokens_map.json" = "9344c191cb4f9d47f617bba671e7ffff5d60fe37e49ae7a8d275dcae1d40885f"
+"tokenizer.json"          = "b28a32dcbbb2779573aa8e345457e7b10f470ccfd262d01672c2469698cbd4f7"
+"tokenizer_config.json"   = "6d3efcfa6a8a438e089633132f3bb4ba3d192a5a912f5e908fcce56b1de9d4ce"
+"vocab.json"              = "23b80b3c4932a7733eb91487cb2fdbc56c5bd199a459128f538095a36dad5287"

@@ -1,0 +1,10 @@
+model    = "ai21labs/AI21-Jamba-Reasoning-3B"
+revision = "7524370414253301341370beba35e3d549cbf5f3"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "5eb64188d7c5416935c0ce81ab36ef7fc63c80937b059719a62011cd6e0aee5d"
+"generation_config.json"  = "564a0fc0940fee9b61a37a8b51c54b9689ad792a881b82e921b2e131569c083f"
+"special_tokens_map.json" = "90a1f613c89566d8c7f53043a7092321d376498ac541aae1914ef1328e895be7"
+"tokenizer.json"          = "e7a4e48ea138a47ad25233b59d59babae314ee104ba9557644f28f5f2e49f900"
+"tokenizer_config.json"   = "5beca31998208cbd8c94c8994f065f8ca0d62edba1806db3eb53aa29ec5d2161"

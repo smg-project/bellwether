@@ -1,0 +1,11 @@
+model    = "ibm-granite/granite-3.0-3b-a800m-instruct"
+revision = "51ced9b4d6ecb3a6671e2e52c937bc12a4a470a5"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "081bdeaf76fc5463cc2e20fbadf17ad9eb569bb5343b120cc64b98840754f96c"
+"config.json"             = "64fd36113fd87b1421e4adb245e6da568126c2d16c37108ddc667715030ef0e6"
+"merges.txt"              = "303127a244b0078878156c17229f36d11b7a3a3f8e47b7cfdbb304ff46be5030"
+"special_tokens_map.json" = "596d752bf46f5cace1f6826b52ed7d913347a4eea0ecce8ab2f869471ca40369"
+"tokenizer_config.json"   = "9aab47148a9468bacde5b86b69af3cc2e0d7e1fe55c23c0d07d3179f37e2b69b"
+"vocab.json"              = "1525f4cac3802a415e8da860ced60d896133c9b420ec1e6b023e7a2a9bd8690b"

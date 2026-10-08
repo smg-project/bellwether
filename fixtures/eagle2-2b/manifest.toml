@@ -1,0 +1,13 @@
+model    = "nvidia/Eagle2-2B"
+revision = "3ab0a536b1778c885624ae920cd73d06228ae441"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "e66b6bc948dec3421f01a8986f31632cf8d556aaa89f7b39c183b3dd4b5b2c83"
+"chat_template.json"      = "60d851b3481bce3a0820075955e10a48b3e078ee538d3fb62b0e53290acaf177"
+"config.json"             = "e930ed1c469e846429e853582781bb3b88bc171bfab147a78e12d168f654fcaa"
+"generation_config.json"  = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"merges.txt"              = "455e0caaa06abffc663e9282dfe71dde07fd1991eaf24146bf08793c4dba4497"
+"special_tokens_map.json" = "13a6dea522a937ef05172912c66214162c75165e723a3d6cf4ae2d09752013bf"
+"tokenizer_config.json"   = "54b7617275d9c25742e86d63d7ad68653916bf3f8fb25cede1b48a98e557e507"
+"vocab.json"              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"

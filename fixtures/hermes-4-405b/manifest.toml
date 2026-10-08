@@ -1,0 +1,11 @@
+model    = "NousResearch/Hermes-4-405B"
+revision = "88e3dce03c4a5535e2f4a2bcc08e939a2b302f82"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "89116c1ac22ce005afdf1772cb40644c1529af6a91300cf655566d10274d4175"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "fc2978173b2150ad09d61697c9d5691119ba756df206e963479e800678b1df6d"
+"special_tokens_map.json" = "7a6d7fa83a01e8192333cd7b848541159709c4b206739071980432612f807807"
+"tokenizer.json"          = "39e4573a56ca97b0233ddc2dd63f634aeee35b84f352d2ce2aaa5992735cfcad"
+"tokenizer_config.json"   = "beb2e35eeb32be25c3bc8c7c9ad765ebe2a1a48cfffc3e06cf6e6d5525309fca"

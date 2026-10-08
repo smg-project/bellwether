@@ -1,0 +1,9 @@
+model    = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+revision = "6a6f4aa4197940add57724a7707d069478df56b1"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json" = "fc2978173b2150ad09d61697c9d5691119ba756df206e963479e800678b1df6d"
+"tokenizer.json"         = "b9c9eb63a8e03059914880f918cd28a880dec8b6e15e4461e1ff677e3743dbb8"
+"tokenizer_config.json"  = "8ac8c85fb242563c2260baec0909debd69d718af6a0b3d90e6cab62b4d341cd5"
