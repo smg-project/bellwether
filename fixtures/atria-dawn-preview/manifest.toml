@@ -1,0 +1,10 @@
+model    = "internlm/Atria-Dawn-Preview"
+revision = "311a9b8c6c0e8dd4b00b2d7baff7a926c3415e78"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "4200da2f2e5e5e63e521113f95f8e6792fb1ed49bda603bd06d405d37a27c6fd"
+"config.json"            = "12a9b182604d0ecaa4ffb3fa6393a142fbb9078cba9eb611c51a06659e68e6a1"
+"generation_config.json" = "8702e4074821d0cbe4f5e8e0c4659f78b9fbabbb023ac597a23eb748df0e18e7"
+"tokenizer.json"         = "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"
+"tokenizer_config.json"  = "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"

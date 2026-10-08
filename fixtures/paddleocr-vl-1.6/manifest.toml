@@ -1,0 +1,13 @@
+model    = "PaddlePaddle/PaddleOCR-VL-1.6"
+revision = "c5630abae1d940eafe0697512a0325494b02ab42"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "f59f889088e0fe21c523e7cf121bb6dca3b0bb148cb7159fbb4572c74dfc5644"
+"chat_template.jinja"     = "2f27812dab7f333e471884e0c803d807f11953d5453140dfb1aaba234f872bc8"
+"config.json"             = "fb589e4ab9b8d96aff41815163dc221a6c02d079f1318607078fd62a92473e50"
+"generation_config.json"  = "4c5c0b1b2e792851259fc0256c46681f2418f59db1fc1910fa96c7f9879ee40e"
+"special_tokens_map.json" = "d3a125c03103deb2acaf7730791bdbbf196f620e5a2213b664511ff9b4b25bab"
+"tokenizer.json"          = "c8a215a59183d0d0781adc33bacd3ce6162716f7fd568fb30234a74d69803a7d"
+"tokenizer.model"         = "34ef7db83df785924fb83d7b887b6e822a031c56e15cff40aaf9b982988180df"
+"tokenizer_config.json"   = "1f979337347cc0cb72a6282d8a23ed183539aa81a87a906f022aee2bab83c7c5"

@@ -1,0 +1,14 @@
+model    = "nvidia/music-flamingo-hf"
+revision = "e560c33247f20e2f735c87ce9adebb8e53befe69"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "471e864795cf6fb1977076bbd16ed8a4642e0f617b159260f0b1166f5c64dfb6"
+"chat_template.jinja"     = "e0decdf286563b84cd266c60effd4cfb4256a0d4e128487a382602ddef1ff269"
+"config.json"             = "40f3f880c14dc22d22366e70f2598ad6c036ec39884ffbd78713f45ec7a5d0d2"
+"generation_config.json"  = "511a8182ea7664ed87f657ca7e7803715025bcf8f6f7f588aad9d3bbf44e3f8e"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "9d47cba180617d9fe8f6a2424d38bab8c82a995dc6a3f3527a9f23c53d437845"
+"tokenizer.json"          = "6edcdd127f82f3bd1e68f7a96d4ef61920bebb8c8fc8e62fbd41a08c41e0792d"
+"tokenizer_config.json"   = "771424601805fc2d35441709c1042aa728f9c8965bc38ce5a7cbb8b1e626bc01"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

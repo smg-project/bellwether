@@ -1,0 +1,9 @@
+model    = "codecho/Qwen3.5-35B-A3B-text-only"
+revision = "504ce4f0c99b9ed1bc977dd27141deb8678bbeb7"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "5d22f3b00137a43b8368d0217cc02ac56f85cc28edc9a76242560cbc4f56a295"
+"generation_config.json" = "da21c9e3edabfac1433ec60fdc006bee19c4c3731b40c0b0f9fb0b5e338562be"
+"tokenizer.json"         = "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+"tokenizer_config.json"  = "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"

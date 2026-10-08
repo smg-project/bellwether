@@ -1,0 +1,11 @@
+model    = "nvidia/Cosmos3-Edge"
+revision = "344d602b128d1bbdacb43b08d0a3626f46343e29"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "7120ee6666468d4e9b2dc11e133ac5c2fa765fa5907706bf0f906270aa5510c8"
+"config.json"             = "ec1a91ef75d8cc1139b5d667a68c1cecd384e65afb88bfc01f10cbf5171815ab"
+"generation_config.json"  = "97e2993b57d7ed5d5a1e8e9a61323786b4c6f1c9f4b3b5ec3e55f068cbd0eae3"
+"special_tokens_map.json" = "e9435fefd6d838fd9fcbbc44b97a8e3ff322be7f6dfb7e4fd2468586574bb52b"
+"tokenizer.json"          = "4dc692a99dca6d92a44e9529ffb53541eb79bb260eec7281bc51268c05d7311c"
+"tokenizer_config.json"   = "85577f01be64ea03ee9aacc0536088e47b96971e4aff21e0aa604900b1410386"

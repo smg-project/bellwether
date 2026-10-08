@@ -1,0 +1,10 @@
+model    = "mistralai/Ministral-3-3B-Instruct-2512"
+revision = "b35d4dfe56c142746f54dbd64f579faab2744308"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "0701cfbdc2b7d44fdbad104dff604faee4b0543e8247624568777fe465746f9b"
+"config.json"            = "4612a7231d10fbc5c6aec94da10f1d5e489e96986a911df7504514c07f22cc54"
+"generation_config.json" = "4bb7741954ffc0dbe810e45849d1c40db1b5939876e8bb3300850311acafb61f"
+"tokenizer.json"         = "99cf274236c60277fcfad861a5a1007518687ad06ba8938760f50b55ffa0b1ef"
+"tokenizer_config.json"  = "4a05af595aa11c3436d3b68a616219ae99b303426f708a12b31bc9ce32530728"

@@ -1,0 +1,10 @@
+model    = "inclusionAI/LLaDA2.0-flash"
+revision = "744c3f8c6c8317d2377d6d16d8a3d4be2caef563"
+tier     = 2
+group    = "llada2.1-flash"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "51b89c9bd69b168c63836e89f690dda7104a27e2b04ff70be20f466d4928714b"
+"special_tokens_map.json" = "dc0d1b183df92acde02863003f000672b18fe59223457215e87de51a76e99ae4"
+"tokenizer.json"          = "0a1db22fe3dfb28f9b2be6d87f472af371b50235d7f5366ecac14b52ff8c002b"
+"tokenizer_config.json"   = "053a74db9233c69408762c4e70043cf9811504d1a59220adb0d00c956cf7749c"

@@ -1,0 +1,13 @@
+model    = "nvidia/LocateAnything-3B"
+revision = "c32291ca5e996f5a7a485845b4f57a233936bba0"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "1a87d2bec4c707c3946235046555d91f9df6986b8dd4a3ac53e6d0b24c36d176"
+"chat_template.json"      = "60d851b3481bce3a0820075955e10a48b3e078ee538d3fb62b0e53290acaf177"
+"config.json"             = "cb108f1c411b877cf8c5d323f94e60b12d7f7f8ce112348a74bd070aeefa0f4c"
+"generation_config.json"  = "94cd82084f9e10a4b69f3a7f49eda69763d162321a1f6a6b2c0c9290984361ad"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "bfadce2f545458bf9d39fc9153cd2ac1077371ed5ab553fa4988061fefe67ac7"
+"tokenizer_config.json"   = "930b057de30312f861a22780017b09eccd87e893d966bd004bf4d70eec0e2652"
+"vocab.json"              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"

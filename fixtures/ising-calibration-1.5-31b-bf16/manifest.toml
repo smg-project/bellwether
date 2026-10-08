@@ -1,0 +1,10 @@
+model    = "nvidia/Ising-Calibration-1.5-31B-BF16"
+revision = "b9b4f513ce36a3455d8717c74dc99912c8e15290"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "db6d2e247fee65f2af245de33eadef049e424b537f2454645d0fffe078931ce9"
+"config.json"            = "285a6691775003b5c39879f47808f79fb5bb631c52df2bffb914ec7990fc3173"
+"generation_config.json" = "0ab17eca56423a75570330f9e1917a36bdbe0eacbc22aa8e63df0a5d5d7b6e11"
+"tokenizer.json"         = "12bac982b793c44b03d52a250a9f0d0b666813da566b910c24a6da0695fd11e6"
+"tokenizer_config.json"  = "5b7fb91eb504682178569a2bf1c5fb90eb7264e835792e18f613088bece5ec62"

@@ -1,0 +1,10 @@
+model    = "EssentialAI/rnj-1-instruct"
+revision = "5ef96d7a82b2bff8009192979432c9bc64e870cd"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "0b20f10e3de8068df9d5e040c91e0c3165a8ae292d0e469402a109c640340674"
+"generation_config.json"  = "e21aaee9dc34513ac1178a1b69ce812fbb2defefdd7ddd72c011d526569ee234"
+"special_tokens_map.json" = "cc2e013b7545f183ef03e079a3c91c6f364fa37e4068c512d7dd843e59024535"
+"tokenizer.json"          = "050a14faefc0c4f12075579c1676a9a6ca207801b4218c64f69cd7553bdda1b8"
+"tokenizer_config.json"   = "927a3b8b2d157bccc509e2b969ce9cc8bf80fc67fcca7a8b24db72f029bcce6a"
