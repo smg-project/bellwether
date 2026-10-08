@@ -1,0 +1,10 @@
+model    = "EleutherAI/olmo3-7b-sdf-sft-clean150"
+revision = "fe0424e66ba1702ccf5b114f622fb086ea771e6e"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "069df97ece1458153abf216e97c415a0f4574b8d0f24983156b00b0f042b0851"
+"config.json"            = "331570079e3e034283eb69b785325746e5e08618ca571d5a04b6216c915f20e4"
+"generation_config.json" = "2340a721e5770e04534bd95eabd0a6273775359cb3f278cb766e8f50b9535029"
+"tokenizer.json"         = "f70526df373bc8bf2a27c97598918fa10095c42f0bfce44f1e57791ec0abcb2d"
+"tokenizer_config.json"  = "39f29da79d9031c5242d7301799f4f0c1fdf910a3603ebcd7a288856e52fbcb2"

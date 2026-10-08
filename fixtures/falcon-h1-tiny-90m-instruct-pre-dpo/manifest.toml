@@ -1,0 +1,11 @@
+model    = "tiiuae/Falcon-H1-Tiny-90M-Instruct-pre-DPO"
+revision = "6ca0e38542fb30eb5b7e9cc98546c367206e7352"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d3aff4b6198c753a363b325790cb79baa04262b8e0c2b2fb731aa4dc5374264b"
+"config.json"             = "446831c95ae61d41d042157a67490f3e5cf020ac23e202c9535acb369f479b80"
+"generation_config.json"  = "53740d860e16a9d8eee76f4f97c595d82e41645f9f458b389530ace9b29485e8"
+"special_tokens_map.json" = "351dd82112bb5577df600ffcc1fe3e8d9008f4f105faba25b29badd8f06108db"
+"tokenizer.json"          = "feb3e9ebdd9bab567a1de4eac5f49bdc51d0abc782fab4a3361b741549d7f390"
+"tokenizer_config.json"   = "7febb0ca9885b3d0410acdde2e45dcae5a44801d2a75a8d8e817ca62ffdda856"

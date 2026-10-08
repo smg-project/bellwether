@@ -1,0 +1,10 @@
+model    = "imdatta0/tiny_qwen3_moe_2.8B_0.7B"
+revision = "d266d1a008f6d645e8e8e9beee7d7874d5d52ca8"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326"
+"config.json"            = "d1a467f281b8e08a081f3d33a7f6eaeab9a28924856747af916bc9f8693cdc46"
+"generation_config.json" = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"tokenizer.json"         = "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+"tokenizer_config.json"  = "7b0782d0e37e9c9ddfe57912414e06b12c8de2fdd85c713c29cbe64f967182d3"

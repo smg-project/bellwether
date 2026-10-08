@@ -1,0 +1,12 @@
+model    = "FreedomIntelligence/openPangu-R-72B-2512"
+revision = "68e0f64acc81933e77e3650b85950832801a9668"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"                = "f52a2048f84dd242ae6f2c60fea1badd5dc749258dc3d47538417291c6e7c9a6"
+"configuration_pangu_moe.py" = "b22bfabc39e41b526c26f44740b6f701c0a7c39e9a04e8f9ecb8a280cfbbc6cd"
+"generation_config.json"     = "f030c6f34bff7c9fc4869b530125e678b3f9a3b83c793d2d51051854b9b9489c"
+"special_tokens_map.json"    = "6fa06efa2785e450051989a6f8fb4416b10149ded485ddd3f127a40734f5cfd0"
+"tokenization_openpangu.py"  = "dc66392cc309a4522a091ba2bca97a16c4c0f82afd6515ea9aa7df302cc28fae"
+"tokenizer.model"            = "6b16f1558c0cd4ae6ef1a2c605713be0a514f50e1ce2d2c878979ce988c148ec"
+"tokenizer_config.json"      = "be905ef06f8b683c1438557a753cb6f23f22f5271c8c7a794310dbdb74a92a3c"

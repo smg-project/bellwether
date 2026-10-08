@@ -1,0 +1,10 @@
+model    = "stepfun-ai/Step-3.5-Flash-Base-Midtrain"
+revision = "c0ca7213603af091e1e8ecf87185644d3f4270ab"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "fb85ddd4e818add3de7b74d2911dee82bbd98b426a71f665fe80c78152c88aaa"
+"config.json"             = "68e2bd5b660a2acc0257a8bee3c95df22e43e08867096ebb5446b537d56eefad"
+"special_tokens_map.json" = "d47424bda11df4cedc3f9458915c465a28e601d3b7df0e78f6dff4d7727006c4"
+"tokenizer.json"          = "b564c620eb77fa11d0926011c2202347d6cfc358d79724ee04ae7007e13636f0"
+"tokenizer_config.json"   = "78202af487f4d4360e8d15cb0506d60718f8599770599c6f28f7f1fa045a591f"

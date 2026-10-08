@@ -1,0 +1,10 @@
+model    = "EleutherAI/qwen3-8b-djinnsdf-dolci"
+revision = "1da40ca2782e9ed8df0fae08235b27831a87075b"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+"config.json"            = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"tokenizer.json"         = "be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506"
+"tokenizer_config.json"  = "d9bf1d78a80bad5eb65b83c2608910e3be00a9d3250c8153a5a393ad1257e1d6"

@@ -1,0 +1,15 @@
+model    = "mispeech/midashenglm-7b-1021-fp32"
+revision = "1696dee0b07f0261ad55a903b0d5b3f79ba2c1c7"
+tier     = 2
+group    = "midashenglm-7b-1021-bf16"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "fc92db60af4247b7322536b340fd0f8a5bdacab0ea083691cd00f403d3077446"
+"chat_template.jinja"     = "90d1def3ba51ee98d157f5e4c2799e393c9ea84fedbe9ea6526465c70b6a7c1a"
+"config.json"             = "ec4e8043cf03f789bb85a1a9115afe78c7668e3b257456a9fc827699080a354d"
+"generation_config.json"  = "ba98041785e9ea15ebb7c346ac75afb82855a3df4e7d9d538233ae83b0291550"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "5f244943dff7a1cadee455a86cd334f72687588cfdc7751d51037d32449902c5"
+"tokenizer.json"          = "c40343a9d670f4fadbe6415ed2cff441055f663e51d813f2315c3368399914d5"
+"tokenizer_config.json"   = "21103e529956f5e0dde61ad42dae4ab39e4afd0301c9b0ea90f1c3f309520cef"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

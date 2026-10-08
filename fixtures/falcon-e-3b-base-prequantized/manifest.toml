@@ -1,0 +1,10 @@
+model    = "tiiuae/Falcon-E-3B-Base-prequantized"
+revision = "5feb4d43fbd3bcdba09c2e44fdab814c0e047070"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "a25019b06d94bb4d4930d824d6d6ceb9f390c34d77af5d985e582165c9842326"
+"config.json"            = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json" = "dd158cca5a69cc99ec91f0963d8a67f15194f4b7c09244276f4cfb2f9369c113"
+"tokenizer.json"         = "bebbcd0f6c0f52383e4e919d5b24d4585e0203fd010e61999ce339cf4ba2cbef"
+"tokenizer_config.json"  = "f20657e9e6510a822e9090524e5515caddc75026a8a6013ae015990e67756b44"
