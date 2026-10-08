@@ -1,0 +1,10 @@
+model    = "openbmb/RLPR-Llama3.1-8B-Inst"
+revision = "1463692d8e165a30a8f2937442d9435b895a1eb0"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "eca1ba592474ddf905ebf3fc856ad101fbce4c0dfe055220490893a42d9e478d"
+"special_tokens_map.json" = "1b1835caa5b4d70acaa210fa222b0036f1882f9525c4660fd4810fb3e1e40ff8"
+"tokenizer.json"          = "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+"tokenizer_config.json"   = "cf9caa6e3956c24f5787bff455fccb25532afa5091d6b8cbee01a5b7235a1362"

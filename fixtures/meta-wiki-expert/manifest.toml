@@ -1,0 +1,10 @@
+model    = "facebook/meta-wiki-expert"
+revision = "14fafb95b24ec1b79bcfbe31fa17f864d7eadbde"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "228a7438adda24be38305b9a20bf6b27cc0cdbcaa36bd012fa27a4bc42ba376a"
+"special_tokens_map.json" = "462d91939dbc37178aa5a3eae7068d1990ccc92e09f288cc71f42cdf139d69cc"
+"tokenizer.json"          = "01e3be37353fbc0be479c7509d53c76860b7915a6b1852d5e75ec0c92707138b"
+"tokenizer_config.json"   = "87f5167484a4fa12d94831f234b55c4a340917034d9ac81d2dd2e54a8460ef84"

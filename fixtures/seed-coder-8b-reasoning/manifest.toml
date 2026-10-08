@@ -1,0 +1,10 @@
+model    = "ByteDance-Seed/Seed-Coder-8B-Reasoning"
+revision = "9927b7724deb1f8189da1cc6a50328dfb885d60d"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "2ca29fd1643ee459822c6791cb0acd091f9c58c7d5e36cf895f9d18ec64202e4"
+"special_tokens_map.json" = "dc0c22e96ab28d40c0a808d5bb4d479d22776fd059bddbcc424f25b493a1120d"
+"tokenizer.json"          = "db6520146c388c495a98bbea62ff6d00c0a8935bed33622e33bb33ec71aaafed"
+"tokenizer_config.json"   = "bfc80b9873151e6ffd20247aab73da83ed88f44d39dd25dae834486c4a34048a"

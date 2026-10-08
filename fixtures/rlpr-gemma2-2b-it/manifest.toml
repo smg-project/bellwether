@@ -1,0 +1,11 @@
+model    = "openbmb/RLPR-Gemma2-2B-it"
+revision = "0f9270b837cdf42377d2ad1ca0af503b9edd35c1"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "87bca907043cf139294a89955abdae2b6cff4f158914f6a59892bf64077c96ae"
+"generation_config.json"  = "4ae185a99839340093e3e0a52dabbf14c605110948b21a2f1da210b2650ad5d4"
+"special_tokens_map.json" = "f65f1b09194276efdce220a63853039f7677e8f23d52a61e34e4089bf18eba2e"
+"tokenizer.json"          = "5f7eee611703c5ce5d1eee32d9cdcfe465647b8aff0c1dfb3bed7ad7dbb05060"
+"tokenizer.model"         = "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2"
+"tokenizer_config.json"   = "3486e75097485e46a935dbc70acb8481d5e7fe13171ef307aeb2761bc6a84dac"

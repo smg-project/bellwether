@@ -1,0 +1,11 @@
+model    = "nvidia/Llama-3.3-Nemotron-70B-Select"
+revision = "d2ffac7dce29a6cf00e4574446cc4ca27bbe585f"
+tier     = 3
+group    = "llama-3.3-nemotron-70b-reward"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "c1c6532e0617e1555c244bea712afc01884b41fbeaf2848608062f49eaef47e1"
+"special_tokens_map.json" = "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec"
+"tokenizer.json"          = "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4"
+"tokenizer_config.json"   = "4bf5284e15fe63439e081641988ff787a97a6c6ad041fd33887baf7c8f9c11ad"

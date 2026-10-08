@@ -1,0 +1,11 @@
+model    = "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1-FP4-QAD"
+revision = "aefd101dc9cd08925f82a623562630ce86b24dcb"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "a77bd80e31af879ef6237930d08178363127f3e8d19e562a0d115b241047d1f5"
+"config.json"             = "235b25f7d65fccc62caddbdf4f88b993e8fa26c012b85e64a4afc9ab4ec1918c"
+"generation_config.json"  = "b8e73562ad85bf89d5879191ecc086cd441b8b9e0622b81e81cf2fff73d7dfcd"
+"special_tokens_map.json" = "1b1835caa5b4d70acaa210fa222b0036f1882f9525c4660fd4810fb3e1e40ff8"
+"tokenizer.json"          = "f5725802f93aea2c6126c605128904b2feaad45cdc0b16240fb153481a229948"
+"tokenizer_config.json"   = "940abcdb5af1518b57502a431265c90a0af35a65a1a06186d56ea4535c19aa69"

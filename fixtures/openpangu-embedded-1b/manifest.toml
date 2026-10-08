@@ -1,0 +1,15 @@
+model    = "FreedomIntelligence/openPangu-Embedded-1B"
+revision = "9b81db714dcceb4cd023f96eae027d29e7f6784c"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"                      = "95588132043e1c2c85eaf4af41fece7dc6d20abdd8c03a7bae4e5ac747e598bf"
+"configuration_openpangu_dense.py" = "7694a0e7b59d7ec2eeebc2fd058f02fe4dc4464b27f82839fc9f425a88555a3a"
+"generate.py"                      = "9c89bd73f1476fa85bec0ae0cef61bb1ca094f5fc4fd76bb5ea031e2479795be"
+"generation_config.json"           = "78a1ab59d4ce9183d7cac567740e0b1e23793469378ab03b6e27c79f56ab4f87"
+"modeling_openpangu_dense.py"      = "34da056fb9ed655839092ef2d55f919d88fefead1ffea79d03f43af621a3f48e"
+"modular_openpangu_dense.py"       = "bc3d4b3160626c795676e89bfcc1f9169ec5e8582f8bd17c13931476fbe8694a"
+"special_tokens_map.json"          = "b34cf5e7c7660889303b6e2d0a346c440356385c9db551d06f6615cf9fc600d1"
+"tokenization_openpangu.py"        = "c98602d6d1f61792a8bd3393972bbbe7409a205c0bb6299394c74287c26bd723"
+"tokenizer.model"                  = "6b16f1558c0cd4ae6ef1a2c605713be0a514f50e1ce2d2c878979ce988c148ec"
+"tokenizer_config.json"            = "acb88eac57f8765fedf34e9c10bc16d55c46f0902b0fea74fbf041daca2667ae"

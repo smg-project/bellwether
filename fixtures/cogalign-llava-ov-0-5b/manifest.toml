@@ -1,0 +1,12 @@
+model    = "Salesforce/cogalign-llava-ov-0_5b"
+revision = "a72980473d82a2bce3102a4fb88e7a5ed0891c22"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "f86f2a952b4888d195b8d77e3d56ad96864ecc696cca2155d0d4ac933fcfd55f"
+"config.json"             = "13a0e738ff807019bf87f8aac2cbf23540ed25f80b370f4f84464637f137d598"
+"generation_config.json"  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"              = "455e0caaa06abffc663e9282dfe71dde07fd1991eaf24146bf08793c4dba4497"
+"special_tokens_map.json" = "f4f79e08d97f4d1c87f8d89264f525c8789da3b73b3bb55d1e12f692f41a7b1b"
+"tokenizer_config.json"   = "3ae8d5ad312360a6efd9b24299ca74b0f8342b41fe82799130a958c7000a92ff"
+"vocab.json"              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"
