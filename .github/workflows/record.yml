@@ -1,6 +1,7 @@
 name: record
 
-# Records corpus sources for checkpoint groups on the organization's CPU runners (the smg-org-runner-cpu scale set), one
+# Records corpus sources for checkpoint groups on the bellwether-record runner scale set (registered to this repository
+# alone; 8 CPU and 64 GiB a pod, smg's scripts/k8s-runner-resources/runner-values-bellwether-record.yaml), one
 # job per group, and pushes each group's new fixture sets to a branch of its own, record/<slug>/<run id>, with the
 # job's own token; pull requests are put together from those branches afterwards, so the sets' Git LFS objects go from
 # the runners to GitHub once. Started by hand only: the runners are the organization's, and this repository is public.
@@ -16,9 +17,9 @@ on:
         required: false
         default: glaive-v2 tau2 swehero
       jobs:
-        description: Recorder calls at once in each group's job (the runner pods have 16 GiB)
+        description: Recorder calls at once in each group's job (a pod has 64 GiB; a tau2 call holds up to ~19 GB)
         required: false
-        default: "3"
+        default: "2"
       max-parallel:
         description: Groups at once
         required: false
@@ -67,7 +68,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.count != '0'
     name: record ${{ matrix.group.slug }}
-    runs-on: smg-org-runner-cpu
+    runs-on: bellwether-record
     timeout-minutes: 720
     permissions:
       contents: write  # the push of record/<slug>/<run id>
