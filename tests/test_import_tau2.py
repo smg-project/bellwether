@@ -6,6 +6,7 @@ import pytest
 
 from bellwether.cli import main
 from bellwether.importers import corpus_sets, github, tau2
+from bellwether.record.corpus import read_cases
 
 # llm_agent.py as the release writes it, down to what the import reads: six prompt constants, each a triple-quoted
 # string stripped, and the solo agent's stop tool and token as class attributes.
@@ -284,6 +285,27 @@ def test_a_run_of_an_agent_with_no_public_prompt_is_left_out_with_its_reason(pro
 def test_a_set_is_named_by_its_run_without_the_user_model_and_trials():
     name = "claude-3-7-sonnet-20250219_telecom-workflow_no-user_gpt-4.1-2025-04-14_4trials.json"
     assert tau2.set_name(name) == "tau2-claude-3-7-sonnet-20250219-telecom-workflow-no-user"
+
+
+def test_a_model_name_with_a_dot_gives_a_set_name_the_recorder_takes():
+    # The recorder takes names of lowercase letters, digits and hyphens only; GPT-4.1's dot becomes a hyphen.
+    assert tau2.set_name("gpt-4.1-2025-04-14_airline_default_gpt-4.1-2025-04-14_4trials.json") == (
+        "tau2-gpt-4-1-2025-04-14-airline-default"
+    )
+    assert tau2.set_name("gpt-4.1-mini-2025-04-14_retail_base_gpt-4.1-2025-04-14_4trials.json") == (
+        "tau2-gpt-4-1-mini-2025-04-14-retail-base"
+    )
+
+
+def test_the_recorder_reads_every_set_the_import_writes(prompts, tmp_path, monkeypatch):
+    # The import declares its sets compressed, which corpus_sets allows only past LIMIT; these sets are small.
+    monkeypatch.setattr(corpus_sets, "LIMIT", 1000)
+    runs = [("gpt-4.1-2025-04-14_telecom_default_gpt-4.1-2025-04-14_4trials.json", "0" * 64, run())]
+    tau2.write_sets(tau2.iter_sets(runs, prompts, TOOLS, []), tmp_path, b"MIT License\n")
+    written = sorted(tmp_path.glob("*/tau2-*.jsonl.zst"))
+    assert [path.parent.name for path in written] == ["parse", "render"]
+    for path in written:
+        assert read_cases(path)
 
 
 def test_written_sets_check_equal_and_a_changed_case_is_named(prompts, tmp_path, monkeypatch):
