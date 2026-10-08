@@ -13,9 +13,9 @@ on:
         required: false
         default: ""
       sources:
-        description: Corpus sources to record, separated by spaces
+        description: Corpus sources to record, separated by spaces; a group's sets already recorded are skipped
         required: false
-        default: glaive-v2 tau2 swehero
+        default: common bfcl gsm8k mgsm hermes shapes swebench glaive-v2 tau2 swehero
       jobs:
         description: Recorder calls at once in each group's job (a pod has 64 GiB; a tau2 call holds up to ~19 GB)
         required: false
@@ -42,12 +42,14 @@ jobs:
           SLUGS: ${{ inputs.groups }}
           SOURCES: ${{ inputs.sources }}
         run: |
+          # A source's sets are corpus/<kind>/<source>-<part> or <source> alone, plain or compressed.
           for source in $SOURCES; do
-            ls corpus/*/"$source"-*.jsonl.zst > /dev/null 2>&1 || { echo "::error::no corpus set for $source"; exit 1; }
+            compgen -G "corpus/*/$source-*.jsonl*" > /dev/null || compgen -G "corpus/*/$source.jsonl*" > /dev/null ||
+              { echo "::error::no corpus set for $source"; exit 1; }
           done
           python3 scripts/record_plan.py $SLUGS >> "$GITHUB_OUTPUT"
-      # The sources' corpus sets, fetched from Git LFS once into a cache every group's job restores: Git LFS bandwidth
-      # is metered, a cache restore is not.
+      # The sources' compressed corpus sets, fetched from Git LFS once into a cache every group's job restores: Git LFS
+      # bandwidth is metered, a cache restore is not. Plain sets are in the checkout.
       - id: key
         env:
           SOURCES: ${{ inputs.sources }}
