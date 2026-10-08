@@ -6,8 +6,10 @@ import pathlib
 import re
 import shutil
 import subprocess
+from functools import cache
 
 import huggingface_hub.constants
+import jsonschema_rs
 import pytest
 import zstandard
 from conftest import TEMPLATE
@@ -1326,35 +1328,23 @@ def roundtrip_line(**reference) -> dict:
     }
 
 
-@pytest.mark.parametrize(
-    "end_of_turn",
-    [
-        None,
-        {"stop_id": 7},
-        {"found_by": "turn"},
-        {"stop_id": 7, "found_by": "banana"},
-        {"stop_id": 7, "found_by": "next_message"},
-        {"stop_id": "x", "found_by": "turn"},
-        {"stop_id": -1, "found_by": "turn"},
-        {"stop_id": 7.5, "found_by": "turn"},
-        {"stop_id": True, "found_by": "turn"},
-        {"stop_id": 7, "found_by": "turn", "stop_ids": [7]},
-        7,
-    ],
-    ids=[
-        "missing",
-        "no-found-by",
-        "no-stop-id",
-        "found-by-banana",
-        "found-by-misspelled",
-        "stop-id-string",
-        "stop-id-negative",
-        "stop-id-fraction",
-        "stop-id-boolean",
-        "misspelled-key",
-        "not-an-object",
-    ],
-)
+# The end_of_turn a round-trip parse line may not carry, by name.
+MALFORMED_END_OF_TURN = {
+    "missing": None,
+    "no-found-by": {"stop_id": 7},
+    "no-stop-id": {"found_by": "turn"},
+    "found-by-banana": {"stop_id": 7, "found_by": "banana"},
+    "found-by-misspelled": {"stop_id": 7, "found_by": "next_message"},
+    "stop-id-string": {"stop_id": "x", "found_by": "turn"},
+    "stop-id-negative": {"stop_id": -1, "found_by": "turn"},
+    "stop-id-fraction": {"stop_id": 7.5, "found_by": "turn"},
+    "stop-id-boolean": {"stop_id": True, "found_by": "turn"},
+    "misspelled-key": {"stop_id": 7, "found_by": "turn", "stop_ids": [7]},
+    "not-an-object": 7,
+}
+
+
+@pytest.mark.parametrize("end_of_turn", list(MALFORMED_END_OF_TURN.values()), ids=list(MALFORMED_END_OF_TURN))
 def test_the_case_schema_refuses_a_round_trip_parse_line_without_a_well_formed_end_of_turn(end_of_turn):
     # A round-trip parse line says which stop id ends its output and which step found it, beside finish_reason.
     line = roundtrip_line() if end_of_turn is None else roundtrip_line(end_of_turn=end_of_turn)
@@ -1371,6 +1361,31 @@ def test_the_case_schema_takes_a_well_formed_end_of_turn_and_asks_it_of_round_tr
     validator().validate(
         {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "roundtrip"}}
     )
+
+
+def test_the_committed_set_check_and_jsonschema_give_one_verdict_on_every_schema_example():
+    # The committed-set check validates every line of a benchmark-scale set with jsonschema-rs, a compiled validator
+    # some 200 times faster than jsonschema; on every line the schema's own tests use, kept or refused, the two agree.
+    lines = [roundtrip_line(end_of_turn={"stop_id": 0, "found_by": found_by}) for found_by in ("turn", "next-message")]
+    lines += [roundtrip_line() if e is None else roundtrip_line(end_of_turn=e) for e in MALFORMED_END_OF_TURN.values()]
+    engine = roundtrip_line()
+    engine["reference"]["source"] = "engine:vllm"
+    lines += [
+        engine,
+        {"id": "tiny-chat/render/a", "kind": "render", "model": "m", "reference": {"source": "roundtrip"}},
+    ]
+    for line in lines:
+        assert committed_line_valid(line) == (not list(validator().iter_errors(line))), line
+
+
+@cache
+def fast_validator():
+    """The case schema compiled by jsonschema-rs: the committed-set check reads every line of every fetched set."""
+    return jsonschema_rs.validator_for(json.loads(schema_path().read_text()))
+
+
+def committed_line_valid(case: dict) -> bool:
+    return fast_validator().is_valid(case)
 
 
 COMMITTED_SETS = sorted([*ROOT.glob("fixtures/*/*/*.jsonl"), *ROOT.glob("fixtures/*/*/*.jsonl.zst")])
@@ -1403,7 +1418,9 @@ def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
     cases = [json.loads(line) for line in lines]
     assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
     for raw, case in zip(lines, cases, strict=True):
-        validator().validate(case)
+        if not committed_line_valid(case):
+            validator().validate(case)  # jsonschema's error names the field
+            pytest.fail(f"{path}: {case['id']}: jsonschema-rs refuses the line and jsonschema takes it")
         assert raw == canonical_line(case)
         assert case["id"].startswith(f"{manifest.slug}/{path.parent.name}/")
         assert case["model"] == manifest.model
