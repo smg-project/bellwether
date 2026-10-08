@@ -278,9 +278,10 @@ def expected(raw: dict) -> dict:
 
 
 def set_name(file_name: str) -> str:
-    """The run's set: its agent model, domain and variant, without the user model and trial count every run shares."""
+    """The run's set: its agent model, domain and variant, without the user model and trial count every run shares,
+    as a name the recorder takes (lowercase letters, digits and hyphens: GPT-4.1's dot becomes a hyphen too)."""
     stem = file_name.removesuffix(USER_MODEL_SUFFIX).removesuffix(".json")
-    return SET_PREFIX + stem.replace("_", "-")
+    return SET_PREFIX + stem.replace("_", "-").replace(".", "-")
 
 
 def origin(file_name: str, sha256: str, simulation: int, sim: dict, turn: int, agent: str, model: str) -> dict:
