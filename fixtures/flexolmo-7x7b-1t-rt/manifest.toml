@@ -1,0 +1,10 @@
+model    = "allenai/FlexOlmo-7x7B-1T-RT"
+revision = "193b1e91c93f602f819b3c363ecc17a3da277165"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "419c9b6997c116f1a6398c43465717f0eb987409095646d3aac848852983554b"
+"generation_config.json" = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"tokenizer.json"         = "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca"
+"tokenizer_config.json"  = "f88a904a48f1ac78256d0e3c2a3e4e70aace5dcc0370d29416701bc6e5dce33b"
+"vocab.json"             = "9e14712c91b37c7aab74b1306baa46ac342d620637a4b44523cdc3aec7d24195"

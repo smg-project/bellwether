@@ -1,0 +1,13 @@
+model    = "ibm-granite/granite-guardian-3.2-5b-lora-harm-correction"
+revision = "9d20ea5e655941dd30ad53a6eb234fc92206b66d"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "081bdeaf76fc5463cc2e20fbadf17ad9eb569bb5343b120cc64b98840754f96c"
+"chat_template.jinja"     = "2cca22d24442bdcfefaf1ed4f0f49cbf61d107d6ad2fbd4e0d0a58a018b18d56"
+"config.json"             = "f9ee82ac274496afc9c4eb286ea8840f15252037e182ea5093bea29be729ae5d"
+"merges.txt"              = "303127a244b0078878156c17229f36d11b7a3a3f8e47b7cfdbb304ff46be5030"
+"special_tokens_map.json" = "17850f63b93e27f7e8587b97d168a04bfeef56f47247e0db68236e47e6f190d7"
+"tokenizer.json"          = "6909695f75cf55988c41f971abd90f20405b3b3730346a3cdd2abbac7ae1eaea"
+"tokenizer_config.json"   = "1eac53132cafc3f0f6e4decd3d534b3347e1059dbb3a1aa213878bedb3727850"
+"vocab.json"              = "80ab859339a2525fdfbda14bc39df02dffb824aefdaf86426217bbb146d17e01"

@@ -1,0 +1,14 @@
+model    = "BAAI/OpenSeek-Small-v1-SFT"
+revision = "1515c184e6fe4a91e6061be513a79d607e8787cb"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"       = "af9c0233881b083b52ff773580215222b5440ac3d0beeeca99b76329b048f8db"
+"config.json"               = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"configuration_deepseek.py" = "6f5f0b99944a79ff5b2cd3d65ef3c532d045e5d919fae3cd5a732592c0cbb465"
+"generation_config.json"    = "5de07c8c74662c1bf8b7afaa72e160ecd2d3fc83efd56e05b86a564c289d8edb"
+"modeling_deepseek.py"      = "6288c9eff0d9e28e68885c57919b5d2eb5f0d49b7140bc3f4d8c10ac0602badd"
+"qwen.tiktoken"             = "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186"
+"special_tokens_map.json"   = "4ee01a150c60c6e1e20efcbb341ea5d9cd1cbbe1e9286eb684992f03a2d4b793"
+"tokenization_qwen.py"      = "c9bbb7710bacfaa323d48b8414643d8d7893d174f85f65e83fbc363de271b69a"
+"tokenizer_config.json"     = "f982916c4fff01475daed06f67e8b792acf1bcc754a67fdf7ac5f7c985792367"

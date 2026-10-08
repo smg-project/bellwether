@@ -1,0 +1,11 @@
+model    = "lmms-lab/LLaVA-Critic-R1-7B-LLaMA32v"
+revision = "d79e49136cca1da0fb434881eb470426890a3822"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "53ff0dc467531d098a8bdd2ba38a3b2c157c9a90e96e16a0a79aa86476d47eea"
+"config.json"             = "00b554018e9fd31d1052c30766a046b301da6b74acf500993e95897c116a9ca0"
+"generation_config.json"  = "f6690c06a0b492c33c2de3f230f538de854481e38773d457e492349989364be1"
+"special_tokens_map.json" = "94e708c3f5e64acf85bbe5ad01467a1248faadb73e83b41793087ecced586e8f"
+"tokenizer.json"          = "9816d43bd5347d64bccc66b7710947fb18e9818cc660215b1462061d4a44e449"
+"tokenizer_config.json"   = "88c693a3ffff45390b059fb0fad812412d6a00d7100de870ad9dab9841850afe"

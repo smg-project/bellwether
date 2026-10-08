@@ -1,0 +1,14 @@
+model    = "xlangai/OpenCUA-72B"
+revision = "3cc4af5337a1d0010f934284df3c482797266547"
+tier     = 3
+group    = "opencua-32b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"              = "492837689fdc7e143b1f1101eb1d74da3beddf6547699f9f4f238890570e199d"
+"configuration_opencua.py" = "a2d7fe2ff92cf04e8977be3b8f5bdf05fd391d0d5109efbf95b14614fe7d9da2"
+"generation_config.json"   = "2fe46ff9f22c31e7b583b2f407a926c1ce99d7db74676d56146f783f19d4a07e"
+"modeling_opencua.py"      = "fb8fcf59150cd659d7cb54151f32b49e18bbd2c662fbe93daf78afc33f0a1b53"
+"processing_opencua.py"    = "58198678600fd5a81aab6838321ab56b663f6f2c29918af1bac03ac2378b1b99"
+"tiktoken.model"           = "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186"
+"tokenization_opencua.py"  = "06a102f34c2fb7eb3b43862a6402be2e88be367a5cc88f8ae65716488b76f535"
+"tokenizer_config.json"    = "d4e3fdefbdf32b8b1e16b9ead85ccc4b734d242be1ac83a0b9efdd194c3194f2"

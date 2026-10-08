@@ -1,0 +1,10 @@
+model    = "microsoft/Phi-Ground"
+revision = "5eed0cdac8f426c1f95650fa764c91306c4221a4"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "a1301d7f3a4e2e18a56ac795c49137a8a72238c795806b71e55d110d81fe4e58"
+"generation_config.json"  = "9d2f63b047e121ef6cfe3de827074e53ffed7ac22c97819cb044b1038e331153"
+"special_tokens_map.json" = "f9535fada19315e0d8eb89521cebe111c008fee98d16e7c6744acfb50505d8c3"
+"tokenizer.json"          = "47ec03c09954f2a8cd5410b89d084cff2768ddec89a2b4b1a6a78b325056fc2e"
+"tokenizer_config.json"   = "c283a3e36a6cf085afb6de00e6ec744c68b2ce2fa0295b2fa8e8ebeb7ca81fcb"

@@ -1,0 +1,14 @@
+model    = "EleutherAI/SmolLM2-1.7B-magpie-ultra-v1.0-random"
+revision = "a5ec09e9118f577b4d6f22836270f8c1cf8214dd"
+tier     = 3
+group    = "smollm2-1.7b-magpie-ultra-v0.1-attribution-lowest"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "153280e3ff55d19da1398bdb3914ee2a51b80429bfaedde11d7d216c39db80f3"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "ecddfad995c790a6fbbe28d877414724ae6627684cc8904fce93a089c7a583a1"
+"merges.txt"              = "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510"
+"special_tokens_map.json" = "2b7379f3ae813529281a5c602bc5a11c1d4e0a99107aaa597fe936c1e813ca52"
+"tokenizer.json"          = "7d27c493c729a66ecefc837280b05d948b1ed50d130eebdbf911b1b36cf38ed7"
+"tokenizer_config.json"   = "5dbff37e2d5899f5f69d86116f80733e11a790f703fd59855e2aef5717533ac5"
+"vocab.json"              = "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"

@@ -1,0 +1,12 @@
+model    = "openbmb/MiniCPM4.1-8B-AutoAWQ"
+revision = "e199301c6d61e204686836ff6a49643b70c92648"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "4760fcbf90bc193f33827ffe02f2e7ba1af1ec43644cc02ac22fdd611f6cca15"
+"config.json"             = "8b00e68df48bff84ca5f9a41b089fc997b7c8328787957b0fa62626e881fa815"
+"generation_config.json"  = "59c5bde8d4d099c95e098ebfb94a861eb70b709da744dc4931e35a7905646d25"
+"special_tokens_map.json" = "aa36446e046d615dd89275b2e5a2bf369a4a694090f04504c5f542f3aad9448c"
+"tokenizer.json"          = "adf7208af154a5ca065d2eda4e5419e02aac58c2c00627874748b75ec6769094"
+"tokenizer.model"         = "bb74d51116831c3bf65db812c553f94ab0c88dcf97a5bbb37e3504f6d359c530"
+"tokenizer_config.json"   = "4e8ed8965a95a134e947b2059dfeab01be4c2409bd66ad083ef1aea595727b66"

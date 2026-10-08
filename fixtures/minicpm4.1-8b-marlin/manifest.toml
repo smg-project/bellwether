@@ -1,0 +1,12 @@
+model    = "openbmb/MiniCPM4.1-8B-Marlin"
+revision = "bc89322c880e83a5f3384adea564a45bf93b478d"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "4760fcbf90bc193f33827ffe02f2e7ba1af1ec43644cc02ac22fdd611f6cca15"
+"config.json"             = "8b00e68df48bff84ca5f9a41b089fc997b7c8328787957b0fa62626e881fa815"
+"generation_config.json"  = "59c5bde8d4d099c95e098ebfb94a861eb70b709da744dc4931e35a7905646d25"
+"special_tokens_map.json" = "aa36446e046d615dd89275b2e5a2bf369a4a694090f04504c5f542f3aad9448c"
+"tokenizer.json"          = "b00802b71a613e3f7df3899fe9643a3ff949736d333a2b892448a974383fe372"
+"tokenizer.model"         = "bb74d51116831c3bf65db812c553f94ab0c88dcf97a5bbb37e3504f6d359c530"
+"tokenizer_config.json"   = "b08bf638bf5431130657d5e2e311c01ea125d3a0bb80289109abadb9e19271ee"

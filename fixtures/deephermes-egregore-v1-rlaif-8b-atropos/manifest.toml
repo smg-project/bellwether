@@ -1,0 +1,11 @@
+model    = "NousResearch/DeepHermes-Egregore-v1-RLAIF-8b-Atropos"
+revision = "6d9f264b1928e163cccbb206068d8cf9d5624fc1"
+tier     = 3
+group    = "deephermes-financial-fundamentals-prediction-specialist-atropos"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "918bffbd5aa9e87b62c847a9b91f5fb7857b2905f4766e55d9d96fc4ecdf5e72"
+"special_tokens_map.json" = "7a6d7fa83a01e8192333cd7b848541159709c4b206739071980432612f807807"
+"tokenizer.json"          = "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+"tokenizer_config.json"   = "b96a16793869fa44589efebc7a70184a93f8b4f2b44f4be957ea7f520e323d3e"
