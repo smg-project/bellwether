@@ -95,6 +95,18 @@ def test_the_calls_of_every_source_and_kind_queue_largest_first(tmp_path):
     ]
 
 
+def test_a_source_with_no_corpus_set_is_refused_and_a_finished_one_is_not(tmp_path):
+    record = load("record_sources")
+    for kind in ("render", "parse"):
+        (tmp_path / "corpus" / kind).mkdir(parents=True)
+        (tmp_path / "corpus" / kind / "glaive-v2-00.jsonl.zst").write_bytes(b"x")
+    sets_toml = tmp_path / "sets.toml"
+    sets_toml.write_text("[parse.glaive-v2-00]\ncases = 1\n\n[render.glaive-v2-00]\ncases = 1\n")
+    assert record.queue(tmp_path / "corpus", ["glaive-v2"], sets_toml) == []
+    with pytest.raises(SystemExit, match="no corpus set for swehro under"):
+        record.queue(tmp_path / "corpus", ["glaive-v2", "swehro"], sets_toml)
+
+
 def test_a_call_reads_a_corpus_directory_that_links_its_own_sets_alone(tmp_path):
     record = load("record_sources")
     source = tmp_path / "corpus" / "render"

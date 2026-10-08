@@ -66,11 +66,18 @@ def calls(corpus: Path, kind: str, source: str, per: int, done: set[str]) -> lis
 
 
 def queue(corpus: Path, sources: list[str], sets_toml: Path) -> list[tuple[str, list[Path]]]:
-    """Every call the group still needs, as ``(kind, sets)``, the largest corpus first."""
+    """Every call the group still needs, as ``(kind, sets)``, the largest corpus first. A source with no corpus set of
+    either kind is refused, so a misspelt one is not taken for one already recorded."""
+    kinds = ("render", "parse")
+    missing = [
+        source for source in sources if not any(any((corpus / kind).glob(f"{source}-*{SUFFIX}")) for kind in kinds)
+    ]
+    if missing:
+        raise SystemExit(f"no corpus set for {', '.join(missing)} under {corpus}")
     pending = [
         (kind, call)
         for source in sources
-        for kind in ("render", "parse")
+        for kind in kinds
         for call in calls(corpus, kind, source, SETS_PER_CALL.get(source, 1), listed(sets_toml, kind))
     ]
     return sorted(pending, key=lambda item: -sum(path.stat().st_size for path in item[1]))
