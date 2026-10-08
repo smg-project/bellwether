@@ -110,17 +110,32 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 
 | Group | Model | Checkpoints | Tier | Render cases | Parse cases | Refused | Sources |
 |---|---|---:|---:|---:|---:|---:|---|
+| [ai21-jamba2-3b](fixtures/ai21-jamba2-3b/sets.toml) | ai21labs/AI21-Jamba2-3B @ 525c6c8e | 1 | 2 | 38436 | 41533 | 9 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [deepseek-r1](fixtures/deepseek-r1/sets.toml) | deepseek-ai/DeepSeek-R1 @ 56d4cbbb | 1 | 3 | 23 | 0 | 1 | hand-written |
 | [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 38439 | 54418 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [glm-5.3-flash](fixtures/glm-5.3-flash/sets.toml) | zai-org/GLM-5.3-Flash @ eb9eb208 | 1 | 1 | 27161 | 54193 | 10577 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [granite-4.1-3b](fixtures/granite-4.1-3b/sets.toml) | ibm-granite/granite-4.1-3b @ c0650403 | 1 | 2 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [hermes-4-14b](fixtures/hermes-4-14b/sets.toml) | NousResearch/Hermes-4-14B @ d6ce765c | 1 | 2 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [hy4-preview](fixtures/hy4-preview/sets.toml) | tencent/Hy4-preview @ 705d81ee | 1 | 1 | 27160 | 54195 | 10576 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [iquest-q1](fixtures/iquest-q1/sets.toml) | IQuestLab/IQuest-Q1 @ 5c21b063 | 1 | 2 | 27161 | 54193 | 10577 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [k-exaone-236b-a23b](fixtures/k-exaone-236b-a23b/sets.toml) | LGAI-EXAONE/K-EXAONE-236B-A23B @ 61e6d578 | 1 | 2 | 38439 | 54416 | 3 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [kimi-k3](fixtures/kimi-k3/sets.toml) | moonshotai/Kimi-K3 @ f831ab66 | 1 | 1 | 38439 | 54418 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [lfm2.5-1.2b-instruct](fixtures/lfm2.5-1.2b-instruct/sets.toml) | LiquidAI/LFM2.5-1.2B-Instruct @ 0f604ada | 1 | 2 | 27421 | 54418 | 10092 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [ling-3.0-flash](fixtures/ling-3.0-flash/sets.toml) | inclusionAI/Ling-3.0-flash @ ef06d91f | 1 | 3 | 27161 | 54195 | 10575 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [llama-xlam-2-8b-fc-r](fixtures/llama-xlam-2-8b-fc-r/sets.toml) | Salesforce/Llama-xLAM-2-8b-fc-r @ a0efe39a | 1 | 3 | 38440 | 40529 | 9 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [mimo-v2.5](fixtures/mimo-v2.5/sets.toml) | XiaomiMiMo/MiMo-V2.5 @ 63651580 | 1 | 2 | 27160 | 54181 | 10590 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [minimax-m3](fixtures/minimax-m3/sets.toml) | MiniMaxAI/MiniMax-M3 @ f0e1c1e0 | 1 | 1 | 27161 | 54180 | 10590 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [mistral-7b-instruct-v0.3](fixtures/mistral-7b-instruct-v0.3/sets.toml) | mistralai/Mistral-7B-Instruct-v0.3 @ c170c708 | 1 | 3 | 27154 | 0 | 10359 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
+| [nanbeige4.2-3b](fixtures/nanbeige4.2-3b/sets.toml) | Nanbeige/Nanbeige4.2-3B @ b82e54bd | 1 | 2 | 27160 | 54195 | 10576 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [nvidia-nemotron-3-nano-30b-a3b-bf16](fixtures/nvidia-nemotron-3-nano-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 @ bf77c317 | 1 | 2 | 27161 | 12829 | 10419 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [olmo-3-7b-instruct](fixtures/olmo-3-7b-instruct/sets.toml) | allenai/Olmo-3-7B-Instruct @ 6e5971d9 | 1 | 2 | 27161 | 41533 | 10357 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [phi-4-mini-instruct](fixtures/phi-4-mini-instruct/sets.toml) | microsoft/Phi-4-mini-instruct @ cfbefacb | 1 | 3 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen-agentworld-35b-a3b](fixtures/qwen-agentworld-35b-a3b/sets.toml) | Qwen/Qwen-AgentWorld-35B-A3B @ 60d2b043 | 1 | 1 | 27159 | 54193 | 10579 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen-drive-1.0-4b](fixtures/qwen-drive-1.0-4b/sets.toml) | Qwen/Qwen-Drive-1.0-4B @ 28484089 | 1 | 1 | 27159 | 54179 | 10593 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen2.5-7b-instruct-1m](fixtures/qwen2.5-7b-instruct-1m/sets.toml) | Qwen/Qwen2.5-7B-Instruct-1M @ e28526f7 | 2 | 1 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [qwen2.5-omni-7b](fixtures/qwen2.5-omni-7b/sets.toml) | Qwen/Qwen2.5-Omni-7B @ ae9e1690 | 2 | 1 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [qwen2.5-vl-32b-instruct](fixtures/qwen2.5-vl-32b-instruct/sets.toml) | Qwen/Qwen2.5-VL-32B-Instruct @ 7cfb30d7 | 1 | 1 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [qwen2.5-vl-7b-instruct](fixtures/qwen2.5-vl-7b-instruct/sets.toml) | Qwen/Qwen2.5-VL-7B-Instruct @ cc594898 | 3 | 1 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen3-30b-a3b](fixtures/qwen3-30b-a3b/sets.toml) | Qwen/Qwen3-30B-A3B @ ad44e777 | 2 | 1 | 38440 | 54418 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen3-30b-a3b-instruct-2507](fixtures/qwen3-30b-a3b-instruct-2507/sets.toml) | Qwen/Qwen3-30B-A3B-Instruct-2507 @ 0d7cf239 | 2 | 1 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen3-30b-a3b-thinking-2507](fixtures/qwen3-30b-a3b-thinking-2507/sets.toml) | Qwen/Qwen3-30B-A3B-Thinking-2507 @ 144afc2f | 2 | 1 | 38440 | 54418 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
@@ -147,11 +162,14 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [qwen3.8-flash-next](fixtures/qwen3.8-flash-next/sets.toml) | Qwen/Qwen3.8-Flash-Next @ de4b8e4d | 1 | 1 | 27159 | 54193 | 10579 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [qwen3guard-gen-0.6b](fixtures/qwen3guard-gen-0.6b/sets.toml) | Qwen/Qwen3Guard-Gen-0.6B @ fada3b2f | 3 | 1 | 38436 | 0 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [qwq-32b](fixtures/qwq-32b/sets.toml) | Qwen/QwQ-32B @ 976055f8 | 1 | 1 | 38436 | 0 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
+| [seed-oss-36b-instruct](fixtures/seed-oss-36b-instruct/sets.toml) | ByteDance-Seed/Seed-OSS-36B-Instruct @ 497f1dca | 1 | 2 | 27161 | 53178 | 10592 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [step-3.5-flash](fixtures/step-3.5-flash/sets.toml) | stepfun-ai/Step-3.5-Flash @ ab446a3d | 1 | 3 | 27161 | 54181 | 10589 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [step3](fixtures/step3/sets.toml) | stepfun-ai/step3 @ e2d67fc9 | 1 | 2 | 27161 | 0 | 10352 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [tinyllama-1.1b-chat-v1.0](fixtures/tinyllama-1.1b-chat-v1.0/sets.toml) | TinyLlama/TinyLlama-1.1B-Chat-v1.0 @ fe8a4ea1 | 1 | 3 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 38436 | 54418 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
-| all | | 65 | | 1268931 | 1732054 | 195008 | |
+| all | | 86 | | 1848302 | 2468096 | 322876 | |
 
-39 more groups (42 checkpoints) have a manifest and nothing recorded yet.
+21 more groups (21 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
