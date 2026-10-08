@@ -1,0 +1,11 @@
+model    = "zai-org/AutoGLM-Phone-9B"
+revision = "66a46ea238158e5f71efc91928668e9c35b42247"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d758178244b68c9ed01fdb2ebd60e3f8f7d3368bedb33b1ad4d9ef1ed255f13d"
+"config.json"             = "2a4cdcff048ff2e8abdaa701065e8d0123c0cb0ab084cb0b6c739736463180a4"
+"generation_config.json"  = "98048489726ae42d166af31f710bafba6bff3f664c3dfe27a0f802a60c704a3b"
+"special_tokens_map.json" = "d1c2389367cb484bce5dd2e9fcd843a1dfaaf2e39d95644d7c8c3aa7550d2d9a"
+"tokenizer.json"          = "c2f7919ffc6c6628cbde5f0b1a204a78bc23319be4e85b7331c71a9a48a8d06d"
+"tokenizer_config.json"   = "a881239bab2dc4222417de903424938d36f43f37cb43c6725132cfbd21be1e1f"

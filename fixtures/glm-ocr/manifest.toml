@@ -1,0 +1,10 @@
+model    = "zai-org/GLM-OCR"
+revision = "2e85a62840ccac27daa451df36c736c4636b8628"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "062e7ee4cc8defa88a5938b5d456dc60366ffd80647f918946ee747bf09ddc7c"
+"config.json"            = "90aa3034f270899e7b255e437c5ce4ce3154292f04071bae1651709323bf55c2"
+"generation_config.json" = "1b16298b6686a40d7ad779c963b97f56fdee865c4b9978e899b07e938e028095"
+"tokenizer.json"         = "aa0fd058c73a5718bb191f6672dc16d122ee0147b20c123d1726514298f9968a"
+"tokenizer_config.json"  = "95abd49942be9cdc6e2653528aed7b4c1cb9e180828421d3488ab38da3057016"

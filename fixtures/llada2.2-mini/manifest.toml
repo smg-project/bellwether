@@ -1,0 +1,15 @@
+model    = "inclusionAI/LLaDA2.2-mini"
+revision = "038922eee61174fd2e2dc6848fb6b87eb740afb5"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"         = "17fbfd9f15607136dfb070154885364413aa1af8fe8942dcf46b1c8a80c4fdf0"
+"config.json"                 = "c0c7097fbf95067a5802ff51de0f139128abf438f2551c54435c1f3e1d6ad4b0"
+"configuration_llada2_moe.py" = "8ad02902146ca73fbf21a95c2802cfbe2c5059a6a06a4d065facdd50c2ce5fb9"
+"generation_config.json"      = "592819158882f00d3d204746525d029316cfa1d58660865deb33010a70d1ac85"
+"modeling_llada2_moe.py"      = "ab246877017cefd93821f7498a74ef0a6af9e4cfb8295d750491601a3f6e9a59"
+"special_tokens_map.json"     = "2fb357349941f0b4b88669cc2745e70350487dc1b46a5b4dfab8ae1882efdf0b"
+"tokenization_llada2.py"      = "ef39ef0f85a6c44bcb5a4900c6b1d7b919ee05e583088d49c2361d56bedec2c8"
+"tokenizer.json"              = "d4bf00cd6e1a32509f5b7c6a0d81d330b861a172adbcbd8b882ad621ccbe56e1"
+"tokenizer_config.json"       = "0d001195b70bb116c22717c825640f3f188797e0a6ec7ef0b40dac221cf5c216"
+"tool_declaration_ts.py"      = "8330b48a92ebb938dcacfee583bdcabeb65592b6c9b95653e7d4ae36bc6ec051"

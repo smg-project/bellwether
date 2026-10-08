@@ -1,0 +1,12 @@
+model    = "JetBrains/Mellum2-12B-A2.5B-Thinking-SFT"
+revision = "9960b87f6b52137159303c013e160cea35ca51e3"
+tier     = 2
+group    = "mellum2-12b-a2.5b-thinking"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "c607950de2ad9273121b3e43e1069841ae16911aec35203567d316db79c33545"
+"config.json"             = "487473f0cd91672cbf37816f3a917cf07a94518a04ef0132019b9b5fd5bd3311"
+"generation_config.json"  = "f6656f273665deeac1bd98cedbdffb2a6a77cbd88400c41df8a4743bbbce0189"
+"special_tokens_map.json" = "20e1ead0b0986b55989aa8116bafe63efcbae0daf8ed047970cd28b36aada4d9"
+"tokenizer.json"          = "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a"
+"tokenizer_config.json"   = "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"

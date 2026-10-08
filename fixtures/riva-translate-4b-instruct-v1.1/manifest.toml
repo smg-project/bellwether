@@ -1,0 +1,10 @@
+model    = "nvidia/Riva-Translate-4B-Instruct-v1.1"
+revision = "1eb944ce9f2717d7be6b7b7c2310f7c58b35d10b"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "4784f5e393ed1be452a813c4e38843b021180513790af359b3c2289d463e50b9"
+"generation_config.json"  = "c073f5002fe4a7ca5e9624bd94f442afeff4e9a00b2fd5f4ed6678651d8b84a3"
+"special_tokens_map.json" = "6fa06efa2785e450051989a6f8fb4416b10149ded485ddd3f127a40734f5cfd0"
+"tokenizer.json"          = "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2"
+"tokenizer_config.json"   = "5374ce46eabe62ec393d90f4b85ad334392351adc788951e9b1f561cab926950"

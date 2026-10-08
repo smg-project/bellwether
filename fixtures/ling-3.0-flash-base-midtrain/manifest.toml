@@ -1,0 +1,11 @@
+model    = "inclusionAI/Ling-3.0-flash-base-midtrain"
+revision = "34f7c1ed096bdb3118ec1474132ad21794d4510a"
+tier     = 2
+group    = "ling-3.0-tiny-base"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "765eb42bb2ae9fceb43e8d388e9c6f4a7c1075a84b00dd7a3a317224f4d567bf"
+"config.json"             = "e6b8882139519494f0e64c4f82e8dae85583dcc5d71b66f2e20195373e0ace70"
+"special_tokens_map.json" = "dd579bcaad160638adb08ab7ac6a52a4c509df94905a1be93032e1269f9a50fc"
+"tokenizer.json"          = "69b270ecab6ec613830ac2ca66e020af842ea1a81a97e4e2bf47142c911c68d8"
+"tokenizer_config.json"   = "85b936bfd0cedb00b4c0dbfb24439287b046094aed06221106cecb067ce70c5a"

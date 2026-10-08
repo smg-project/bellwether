@@ -1,0 +1,11 @@
+model    = "tencent/Hy-MT2-1.8B"
+revision = "9a341cd1b679d3efd23b46e847b01745a71ed792"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "b7491ec0e9c869dfce20f2176758099bf248d979dd05530ede99deb21698acee"
+"config.json"             = "37423d6adec3ab0842a4298de2e6e646997c711adb30ade05e9f5481841bb9f8"
+"generation_config.json"  = "0e4ec7b7a50899ba1d88ea1e779829bfc96ee50e8428a37cf9466b05440c4717"
+"special_tokens_map.json" = "bb9f59990034dae326581b9c62471523975417869f78a244b7ae2ce8cbb085eb"
+"tokenizer.json"          = "b475bbef1b0b2fd57dcb865332b546475bd1ede2deb3bb91bafd0c047a8a530a"
+"tokenizer_config.json"   = "53bd8581b601a8ee9caefeb988207de50b3fc0b733295bdf5ad68dec4cc0b07c"

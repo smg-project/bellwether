@@ -1,0 +1,10 @@
+model    = "allenai/Olmo-Hybrid-Instruct-DPO-7B"
+revision = "ec62da5af0106ab4e83a60e07c4796ff358fd204"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "f5186d42d99c8a0445d37fd8a6c7ccf07fe3e24a29ce622d8bd245da9507b12b"
+"config.json"            = "d43d37d1f32ebbd6b4ff176c1ec69b99ef4d1939685fe7dd6686a37ba0d9af99"
+"generation_config.json" = "6e2d511249003e62968a9c92303b4f4ad8efb84e2adf29fc7ad1226dc368e8af"
+"tokenizer.json"         = "75f0d78a15d3bd663a07d3313056cf91b0d64ab45605501cb6dedbbe54817a3e"
+"tokenizer_config.json"  = "a3c5ce6b4d1ac9f798d6d15674c7ed984b0bfa5b5fa8d256d74fb71b4f583edb"

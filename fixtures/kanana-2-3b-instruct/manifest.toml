@@ -1,0 +1,10 @@
+model    = "kakaocorp/kanana-2-3b-instruct"
+revision = "6a5d7889964c4c590299d16e309eabab1f73f8a9"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "b8ee6b31575eada17ebbe73d3f1ac65d3efde64f0a25ff922031dec7e1cae3e3"
+"config.json"            = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
+"generation_config.json" = "19e32aa60532e07f38dffbe0b169f49f5404fb53e569f5c9fb4a146de100cb91"
+"tokenizer.json"         = "1c4be9ecf77c926456fb82d4cf07ff1218a91907f3408f44895d2b01e0f2b5ab"
+"tokenizer_config.json"  = "1cdee8fcd4f6209e07e6d9966c8a3ff2d738830d79475193e94e448e153ae2d5"

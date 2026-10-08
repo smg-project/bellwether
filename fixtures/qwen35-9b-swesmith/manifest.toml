@@ -1,0 +1,11 @@
+model    = "allenai/qwen35-9b-swesmith"
+revision = "11e629d9cd391aaf0cf4adad2ded89fe94409914"
+tier     = 2
+group    = "tmax-9b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "d0eee281dec542894f3864ff2320c3f5998cdb8ab88e31366042ee4ebf4ca6b9"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "340698c97c859f379c322ad11a39425746076d34ee81bf659348504b37e6cc66"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"

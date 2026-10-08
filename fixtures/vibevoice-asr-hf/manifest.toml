@@ -1,0 +1,10 @@
+model    = "microsoft/VibeVoice-ASR-HF"
+revision = "f22241c2062b3b25272bf117397e03d73381037a"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "facaa74472ce1cc68fd19be60062e202ec5ce8b7b87c28a28a7d27f6adfef58d"
+"config.json"            = "23a3e061053db6977c129761d09f1f41faa90c0f9ef6d4e578c2bbad6023dff0"
+"generation_config.json" = "1f10afaf6e8fa8d2d7405f14866b3ae4a4de4b80c87207dcb3e6b61e60570aaf"
+"tokenizer.json"         = "3fd169731d2cbde95e10bf356d66d5997fd885dd8dbb6fb4684da3f23b2585d8"
+"tokenizer_config.json"  = "64029a57ca4f977c2f50fe95dda323a923d4b5f9e31836257610c0362c8e683c"

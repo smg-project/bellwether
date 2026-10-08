@@ -1,0 +1,11 @@
+model    = "google/gemma-4-12B-it-qat-q4_0-unquantized"
+revision = "b6ed86275a6a5735884e208bfed95b445a684ca2"
+tier     = 2
+group    = "gemma-4-12b-it"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "ae53464bf3be25802b3a5b37def7fd89667067d7577049b3b2d74c4d8de4c6d4"
+"config.json"            = "0f0499944abcf21a26b9ac968d739e1ccf1ab695c4b5d6f8db59fda919ccf812"
+"generation_config.json" = "4468e1ab38c047b3c98169b95cd9cc3a5751fb3bfbfca697558d3b67f3408a0c"
+"tokenizer.json"         = "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"
+"tokenizer_config.json"  = "a62f4e85a47c0c136edaaa3a4f591fd6783717299a9def47e5ad03a49f6a5eb9"

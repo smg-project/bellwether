@@ -1,0 +1,11 @@
+model    = "CohereLabs/command-a-plus-05-2026-bf16"
+revision = "5fb6fde5fd12ff89356aae552e11883bc49f069b"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d10a9670a452470da190b176b3e2e9eba9eae5994ca73bb291a9917782a1eb56"
+"config.json"             = "baa36b1f89c69e65dc54fe9d0f2633bd0dd84498973bffcad36ecb61a1f8d8ee"
+"generation_config.json"  = "b011623e91d062884dcf4471d41bd5e8e376fd52ec6d7d56493a3e02fe6da3ae"
+"special_tokens_map.json" = "fe4912e0cea12d8de22659040447580d43faa1f9aebe7fceb02841f60ae8b491"
+"tokenizer.json"          = "14bd1c49d7d11874921d324986713df4be21cd06060530c497dacef99919b7a5"
+"tokenizer_config.json"   = "421cd7a194a1ffcffd2ba2056e2f379fde5069060567f45cd1df301b9bd407b9"

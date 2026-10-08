@@ -1,0 +1,12 @@
+model    = "openbmb/BitCPM-CANN-1B"
+revision = "f784def4a90c5337cb46e87bb40f165082584973"
+tier     = 2
+group    = "bitcpm-cann-3b-unquantized"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "59c5bde8d4d099c95e098ebfb94a861eb70b709da744dc4931e35a7905646d25"
+"special_tokens_map.json" = "068594063e37662c02b21acf42ebb334ef6a74fb810e68a2368f88f08351de76"
+"tokenizer.json"          = "b00802b71a613e3f7df3899fe9643a3ff949736d333a2b892448a974383fe372"
+"tokenizer.model"         = "bb74d51116831c3bf65db812c553f94ab0c88dcf97a5bbb37e3504f6d359c530"
+"tokenizer_config.json"   = "8d655f0c5bfbb2ee7eb313bffc000e9665ece21a2e1d408659d4f6708a319260"
