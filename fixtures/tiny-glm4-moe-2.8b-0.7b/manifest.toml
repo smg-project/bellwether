@@ -1,0 +1,10 @@
+model    = "imdatta0/tiny_glm4_moe_2.8B_0.7B"
+revision = "b7c68d9767ea75aa39d124298a9d165389c7a58b"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "44f815868bf02fa458dd2f741a338046f4bf45f398eb6d067766726b9d96cce3"
+"config.json"            = "e27606de8b366fc262d66de5a78c1331ba549573dff852fef9e9eb9291a475c0"
+"generation_config.json" = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"tokenizer.json"         = "bda8e2146c3bb7b7e0fc96dcc4f0aeff041c6c27952e3ace0665663ebff346ba"
+"tokenizer_config.json"  = "6c729eecffe137f28bcafdb4edaa390c3be74ccda7a8134a3824a3cb0d0c32e3"

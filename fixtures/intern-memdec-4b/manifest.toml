@@ -1,0 +1,15 @@
+model    = "internlm/Intern-MemDec-4B"
+revision = "5d8f5b50832cc671142ea87505f09e5f515181ad"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"      = "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+"config.json"              = "35e1cee5383d93737dff5f52533413433fcc119f9a7722e485deca14a5045650"
+"merges.txt"               = "3bd640ba6d8da8f5844f3548b7e2184fc664dd670e1447e425a48dbaaad1ef43"
+"tokenization_interns1.py" = "e9827427dc82126ad638a3029af4a535a55eae3f88a885aa4dad0248721865f4"
+"tokenizer.json"           = "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+"tokenizer_PROT.model"     = "1144f52f86f3ca5a29940d69b037e508c05a89e6eedbe42bea641e226b20dbe0"
+"tokenizer_SMILES.model"   = "fba1c97da0353ccbffd368ae78e311ccbc762aa5ba74f9aff8bf2ab363c4d37d"
+"tokenizer_XNA.model"      = "58fc8bfb2af3dfe936a13dad8a9cb28dab7850b70b358db19605d867c133fb35"
+"tokenizer_config.json"    = "df7c228c49db46f8d05e57600f47f2aa9fe174379fd456c8c077053d003b7cc6"
+"vocab.json"               = "657191b77e1d51b28521773221d4121bfe4844900147f7818499e0347d8c66f6"

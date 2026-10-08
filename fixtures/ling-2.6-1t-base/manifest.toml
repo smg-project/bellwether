@@ -1,0 +1,9 @@
+model    = "inclusionAI/Ling-2.6-1T-base"
+revision = "64beeb8a048920769d206e52ae303a81779296ec"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "e6b8882139519494f0e64c4f82e8dae85583dcc5d71b66f2e20195373e0ace70"
+"special_tokens_map.json" = "dd579bcaad160638adb08ab7ac6a52a4c509df94905a1be93032e1269f9a50fc"
+"tokenizer.json"          = "fa1f47319ea5a1799c5e1a7ce6f2c2f2dd463b160132c1b041da3c200995053d"
+"tokenizer_config.json"   = "8d4f4f17281f4158267cf9d912868f43b829548658fa2486656038cbde914eda"

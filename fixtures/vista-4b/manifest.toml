@@ -1,0 +1,11 @@
+model    = "inclusionAI/VISTA-4B"
+revision = "5cccfeaec3d11cfcfdac4358ac007d0c72715053"
+tier     = 2
+group    = "vista-9b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "c6a68e77bbd5b2ec5f0a75d1842c864e5633dfb6286768c39c7fe33d60cc9510"
+"tokenizer.json"         = "547a658514e17c019c67b63c1c8ad0b57239d96b04f20cf1fa421827961631a5"
+"tokenizer_config.json"  = "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"

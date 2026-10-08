@@ -1,0 +1,11 @@
+model    = "IFM/K2-V2-Instruct"
+revision = "6ef3e31ccda25fa16bf0f5e4d8cb8273edde7d18"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d906286d6535881caea0d789a95db021b43b39d96178835c06480c8ab41ff98d"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "91fb14e3500c52b9ab71cc9270c3a8421b5ade9580ed0b16716eca62cb6b2b93"
+"special_tokens_map.json" = "cc2e013b7545f183ef03e079a3c91c6f364fa37e4068c512d7dd843e59024535"
+"tokenizer.json"          = "60c35bb84df92c4a57a70525008eed410589dfda476a63d43147fbbe85a443e7"
+"tokenizer_config.json"   = "65dac7091f58e40f1894e2b45413f52be058e81850c7239755ddbb9aa0585862"

@@ -1,0 +1,12 @@
+model    = "lightonai/LightOn-rerank-PW-0.8B"
+revision = "e2459c2554b95969a68cba3aa6f0bd696723934f"
+tier     = 2
+group    = "lighton-rerank-pw-2b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"additional_chat_templates/reranker.jinja" = "6fc4751fd0cc25e1e78c1165309e5c24c36a3758b756fba83d208ba1f3cc100d"
+"chat_template.jinja"                      = "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+"config.json"                              = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json"                   = "340698c97c859f379c322ad11a39425746076d34ee81bf659348504b37e6cc66"
+"tokenizer.json"                           = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"                    = "ca5217bf1509a5483d8c8789f714905f4fe264afe1c94edeb178c2634eae6239"

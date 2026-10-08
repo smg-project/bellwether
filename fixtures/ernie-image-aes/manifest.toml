@@ -1,0 +1,13 @@
+model    = "baidu/ERNIE-Image-Aes"
+revision = "8a0bb5ea7d3ffa161dcb24568f5ecdab85c5c239"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "e66b6bc948dec3421f01a8986f31632cf8d556aaa89f7b39c183b3dd4b5b2c83"
+"config.json"             = "11b2f47518762bbe62c9556a3700d91555320bbe8ad11185ed688889f25a625f"
+"generation_config.json"  = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"merges.txt"              = "455e0caaa06abffc663e9282dfe71dde07fd1991eaf24146bf08793c4dba4497"
+"special_tokens_map.json" = "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+"tokenizer.json"          = "19537f1058dea75e735b1325e27b029bbbcf73ba36d659bc4c39ef8a217cb026"
+"tokenizer_config.json"   = "7f2e6e4fe44edf355e4b5d13ef30c44232fe93376cfabc3397051df4d6b2481f"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

@@ -1,0 +1,12 @@
+model    = "pfnet/plamo-3-610m-fin-instruct"
+revision = "a000b59209f1688322c0804009dc9f3fd67e62c1"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "7ec6bcd4b4733427aff31eda391e0cd39a6e6236204fcffca2c0345f0b2b4f30"
+"config.json"             = "3482cfdbe15069d2c7cbd6a4abda50abaa881d5a16834599dbc36927285824ed"
+"generation_config.json"  = "525ca8b04eebcf14c9a88e1bcda4302c7d3763d5878bd4a566dafcc6c4262816"
+"modeling_plamo.py"       = "e40918ebbbd5002c6e5b00239abdb23bf4d90850d047ea94c3070b0ba0e2e2dd"
+"special_tokens_map.json" = "31f381bcd13eb10038006b9e26c4eb9099201ae162500d95a50c9bec990abd4d"
+"tokenization_plamo.py"   = "7f7eed1d05b0e50792cfc21dfdf3c6ffcebbaaabdc9c21c65cc66968f110aac5"
+"tokenizer_config.json"   = "7549e7812d0e2705ad0a8a234a8cf8ae01f92fe4f5c66f76b5e149510e4d25f0"

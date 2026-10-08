@@ -1,0 +1,10 @@
+model    = "imdatta0/tiny_deepseek_v3_2.5B_0.4B"
+revision = "38d6386412fe8ee56b646def91c0bcbc63048535"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "3b8267e54b67df6500f231ffa969955cc9d26b3444a291ced4eb96ca7d3ca1ea"
+"config.json"            = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"generation_config.json" = "91fb14e3500c52b9ab71cc9270c3a8421b5ade9580ed0b16716eca62cb6b2b93"
+"tokenizer.json"         = "9c6b4b351e0d0ea08794bda818b92e009a135128efa423255da9b69c0ba6b93a"
+"tokenizer_config.json"  = "0ad811c953875499d0892688d939bbdcc7a703c4d852095b1d779aebba8ddde9"

@@ -1,0 +1,11 @@
+model    = "HuggingFaceTB/SmolLM3-3B-GSM8K-SFT"
+revision = "44034b1b8898ad2ad3c5a7034b5bbde1c0b87c0a"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d2771c9694cc22f4d983cbf2344551d4d0933156a927f673584a358e4aee0563"
+"config.json"             = "fb5b857eb276935be8a8330056c1c522d80f605f26780c1113177a2628cac8b3"
+"generation_config.json"  = "809ec53eafd4ee1b7a0e7c93fb6d76e3041ae9d11149dfbeea90abfd255d60ef"
+"special_tokens_map.json" = "15864bf8c2203d4df3e6030bf2f917a45d7ee5e6b4145bc42868392703da7972"
+"tokenizer.json"          = "ab4da6b2aa68247e9c0fa9b97fc7fcc796505038d01f7e144522a65ce0dbd2e5"
+"tokenizer_config.json"   = "ce5751001657b8a901887461604ff5e452c283e574373ca94a6b3ca81ef8d027"

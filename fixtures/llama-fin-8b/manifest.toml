@@ -1,0 +1,10 @@
+model    = "Salesforce/Llama-Fin-8b"
+revision = "491d4c7cb49fd173eae47b186809cce9d21038eb"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "a077e70b4a81979ab7b87c078ad3f2f8be20d214085b4e89a9c896b05f209fe6"
+"special_tokens_map.json" = "1b1835caa5b4d70acaa210fa222b0036f1882f9525c4660fd4810fb3e1e40ff8"
+"tokenizer.json"          = "3c5cf44023714fb39b05e71e425f8d7b92805ff73f7988b083b8c87f0bf87393"
+"tokenizer_config.json"   = "cdaab4a243135459480bf2f80139e65da594efe9486bf1171b457561856f44c1"

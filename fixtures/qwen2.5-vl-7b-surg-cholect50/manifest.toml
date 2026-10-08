@@ -1,0 +1,12 @@
+model    = "nvidia/Qwen2.5-VL-7B-Surg-CholecT50"
+revision = "c1a01db98c72f4fca5ec671405325c4c841dcafd"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b"
+"config.json"             = "0d76832488b8dc90a9406c354207ed692ccec4daeff738afce319af006b63613"
+"generation_config.json"  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+"tokenizer_config.json"   = "f939294a8457b05bde6764ab3d5368140df309d4b69534943a9372c8aa901b32"
+"vocab.json"              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"
