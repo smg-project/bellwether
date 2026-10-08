@@ -392,6 +392,12 @@ reference stays the checkpoint's own files.
   --config_format hf --load_format hf`. It is compared with the second reference by the two-sources
   rule, and a disagreement's fingerprint names the template too, `vllm:<what
   differs>:<group>:<template>`.
+  - The second reference is the template's output and does not depend on the parser; the witness
+    does. Where two statements name one template for a checkpoint with two parsers, each parser gets
+    its own witness, and its fingerprint names the parser after the template,
+    `vllm:<what differs>:<group>:<template>:<parser>`. vLLM's pages do this for Llama 4 Scout and
+    Maverick: `tool_chat_template_llama4_pythonic.jinja` with `llama4_pythonic` (lines 239-264) and
+    with `pythonic` (lines 517-520), both kept in `vllm_tool_templates.toml`.
 - **Consumers and `verify`.** Nothing changes by default. smg's tests, Symphony's fixture test and
   `verify` compare with `reference`, because SMG renders with the checkpoint's own template unless
   it is started with another.

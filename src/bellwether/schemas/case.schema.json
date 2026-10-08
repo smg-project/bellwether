@@ -2,25 +2,81 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/smg-project/bellwether/schemas/case.schema.json",
   "title": "bellwether case",
-  "description": "One fixture line: a case plus the reference result and each witness's result.",
+  "description": "One fixture line: a case plus the reference result, each second reference's and each witness's.",
   "type": "object",
   "required": ["id", "kind", "model", "reference"],
   "allOf": [
     {
-      "description": "a parse line carries the output's token ids and the text each one contributes",
-      "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
+      "description": "a parse line whose reference records the case carries the output's token ids and the text each one contributes",
+      "if": {
+        "properties": {"kind": {"const": "parse"}, "reference": {"$ref": "#/$defs/records_the_case"}},
+        "required": ["kind"]
+      },
       "then": {"required": ["output_ids", "output_pieces"]}
     },
     {
-      "description": "a round-trip parse line says which stop id ends its output",
+      "description": "a round-trip parse line whose reference records the case says which stop id ends its output",
       "if": {
         "properties": {
           "kind": {"const": "parse"},
-          "reference": {"properties": {"source": {"pattern": "^roundtrip(:.+)?$"}}, "required": ["source"]}
+          "reference": {
+            "properties": {"source": {"pattern": "^roundtrip(:.+)?$"}},
+            "required": ["source"],
+            "allOf": [{"$ref": "#/$defs/records_the_case"}]
+          }
         },
         "required": ["kind", "reference"]
       },
       "then": {"properties": {"reference": {"required": ["end_of_turn"]}}}
+    },
+    {
+      "description": "a line whose reference does not record the case is written for its second references, and carries none of the reference's output",
+      "if": {"properties": {"reference": {"not": {"$ref": "#/$defs/records_the_case"}}}, "required": ["reference"]},
+      "then": {
+        "required": ["second_references"],
+        "not": {"anyOf": [{"required": ["output_ids"]}, {"required": ["output_pieces"]}, {"required": ["chunk_plans"]}]}
+      }
+    },
+    {
+      "description": "a parse line's second reference comes from the round trip, and when it records the case it carries what the reference gives for its kind: the output's text, token ids, pieces and chunk plans, the message, the finish reason and the stop id that ends it",
+      "if": {"properties": {"kind": {"const": "parse"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "second_references": {
+            "additionalProperties": {
+              "properties": {"source": {"const": "roundtrip"}},
+              "if": {"$ref": "#/$defs/records_the_case"},
+              "then": {"required": ["text", "ids", "pieces", "chunk_plans", "message", "finish_reason", "end_of_turn"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "a render reference that records the case carries the prompt ids, and a render second reference, which comes from hf-template, carries the prompt ids and text",
+      "if": {"properties": {"kind": {"const": "render"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "reference": {"if": {"$ref": "#/$defs/records_the_case"}, "then": {"required": ["input_ids"]}},
+          "second_references": {
+            "additionalProperties": {
+              "properties": {"source": {"const": "hf-template"}},
+              "if": {"$ref": "#/$defs/records_the_case"},
+              "then": {"required": ["input_ids", "text"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "only a parse case can be not applicable",
+      "if": {"properties": {"kind": {"not": {"const": "parse"}}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "reference": {"not": {"required": ["not_applicable"]}},
+          "second_references": {"additionalProperties": {"not": {"required": ["not_applicable"]}}}
+        }
+      }
     }
   ],
   "additionalProperties": false,
@@ -42,6 +98,7 @@
     "reference": {
       "type": "object",
       "required": ["source"],
+      "allOf": [{"$ref": "#/$defs/result_or_reason"}],
       "properties": {
         "source": {"type": "string", "pattern": "^(vendor-code|hf-template|hf-tokenizer|roundtrip|vendor-verifier|response-template|engine)(:.+)?$"},
         "input_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}},
@@ -60,7 +117,43 @@
             "found_by": {"enum": ["turn", "next-message"]}
           }
         },
+        "rejected": {"$ref": "#/$defs/rejected"},
+        "not_applicable": {"$ref": "#/$defs/not_applicable"},
         "provenance": {"type": "object", "description": "oracle versions, HF revision, vendor file sha, bellwether commit"}
+      }
+    },
+    "second_references": {
+      "type": "object",
+      "description": "render, parse: the case through the reference's oracle with each tool chat template from vLLM's examples/ that vLLM's docs name for the checkpoint (src/bellwether/record/vllm_tool_templates.toml), in place of its own template; keyed by the template's file name",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^tool_chat_template_[a-z0-9_.]+\\.jinja$"},
+      "additionalProperties": {
+        "type": "object",
+        "required": ["source", "provenance"],
+        "additionalProperties": false,
+        "allOf": [{"$ref": "#/$defs/result_or_reason"}],
+        "properties": {
+          "source": {"enum": ["hf-template", "roundtrip"], "description": "the reference's oracle for the kind: hf-template for render, roundtrip for parse"},
+          "input_ids": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "render: the prompt token ids"},
+          "text": {"type": "string", "description": "render: the prompt text; parse: the output text"},
+          "ids": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "parse: the output token ids this template gives"},
+          "pieces": {"type": "array", "items": {"type": "string"}, "description": "parse: the text each output token contributes, as output_pieces"},
+          "chunk_plans": {"$ref": "#/properties/chunk_plans"},
+          "message": {"type": "object"},
+          "finish_reason": {"enum": ["stop", "length", "tool_calls", "content_filter"]},
+          "end_of_turn": {"$ref": "#/properties/reference/properties/end_of_turn"},
+          "rejected": {"$ref": "#/$defs/rejected"},
+          "not_applicable": {"$ref": "#/$defs/not_applicable"},
+          "provenance": {
+            "type": "object",
+            "description": "the template's vLLM commit and sha256, oracle versions, HF revision, bellwether commit",
+            "required": ["vllm_commit", "chat_template_sha256"],
+            "properties": {
+              "vllm_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "chat_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        }
       }
     },
     "witnesses": {
@@ -71,6 +164,37 @@
         "required": ["version"],
         "properties": {"version": {"type": "string"}, "image": {"type": "string"}}
       }
+    }
+  },
+  "$defs": {
+    "rejected": {"type": "string", "minLength": 1, "description": "why the oracle refuses the case; it records no result"},
+    "not_applicable": {"type": "string", "minLength": 1, "description": "parse: why the case cannot apply to the template (it renders no tool calls); it records no result"},
+    "records_the_case": {
+      "description": "a reference with a result: it gives no reason for recording none",
+      "not": {"anyOf": [{"required": ["rejected"]}, {"required": ["not_applicable"]}]}
+    },
+    "at_most_one_reason": {"not": {"required": ["rejected", "not_applicable"]}},
+    "gives_no_result": {
+      "description": "no result field: a reference that gives a reason records nothing",
+      "not": {
+        "anyOf": [
+          {"required": ["input_ids"]},
+          {"required": ["ids"]},
+          {"required": ["text"]},
+          {"required": ["pieces"]},
+          {"required": ["chunk_plans"]},
+          {"required": ["message"]},
+          {"required": ["finish_reason"]},
+          {"required": ["end_of_turn"]}
+        ]
+      }
+    },
+    "result_or_reason": {
+      "description": "a reference gives its result or one reason for recording none, never both; the rules by kind above say which result it gives",
+      "allOf": [
+        {"$ref": "#/$defs/at_most_one_reason"},
+        {"if": {"not": {"$ref": "#/$defs/records_the_case"}}, "then": {"$ref": "#/$defs/gives_no_result"}}
+      ]
     }
   }
 }
