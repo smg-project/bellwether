@@ -139,3 +139,30 @@ def test_the_largest_recorder_is_measured_from_the_children_that_ended():
     record = load("record_sources")
     subprocess.run([sys.executable, "-c", "held = b'x' * (64 << 20)"], check=True)
     assert record.largest_child_gb() >= 0.06
+
+
+def test_plain_sets_and_a_set_named_for_its_source_are_recorded_too(tmp_path):
+    record = load("record_sources")
+    files = {
+        ("render", "bfcl-simple.jsonl"): 10,
+        ("render", "bfcl-multiple.jsonl"): 10,
+        ("parse", "bfcl-simple.jsonl"): 8,
+        ("render", "common.jsonl"): 1,
+        ("parse", "common.jsonl"): 1,
+        ("render", "glaive-v2-00.jsonl.zst"): 5,
+    }
+    for (kind, name), size in files.items():
+        directory = tmp_path / "corpus" / kind
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / name).write_bytes(b"x" * size)
+    sets_toml = tmp_path / "sets.toml"
+    sets_toml.write_text("[render.common]\ncases = 1\n")
+    queue = record.queue(tmp_path / "corpus", ["common", "bfcl", "glaive-v2"], sets_toml)
+    assert [(kind, [record.set_name(path) for path in call]) for kind, call in queue] == [
+        ("render", ["bfcl-multiple", "bfcl-simple"]),
+        ("parse", ["bfcl-simple"]),
+        ("render", ["glaive-v2-00"]),
+        ("parse", ["common"]),
+    ]
+    with pytest.raises(SystemExit, match="no corpus set for comm under"):
+        record.queue(tmp_path / "corpus", ["comm"], sets_toml)
