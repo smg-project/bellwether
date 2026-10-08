@@ -1,0 +1,13 @@
+model    = "nvidia/Cosmos3-Super-Image2Video"
+revision = "580f3f28e33ba93c8d464768876da8c322619aad"
+tier     = 2
+group    = "cosmos3-super"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "6abd325f69b2fcc0ff316ef920beab2d53c829792c72b838c9c613aee2d7295b"
+"config.json"            = "d9480cb52b9e429ae93410f009b1f2a15e904b591676dbe6d711295f6a345a23"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7"
+"tokenizer_config.json"  = "c2da771801886ad9ae98181793ffd3dfb7f1af30f6f7c6a4e15d7dbba52e2399"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

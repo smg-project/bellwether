@@ -1,0 +1,13 @@
+model    = "allenai/Olmo-3.1-32B-Instruct"
+revision = "ac0587e4a7744a551c059d8cd17ba220bc940dae"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "49a944c9814e130bd3cc80a2420c55ff22e24a4e4ba97009aa60000909b5eac3"
+"config.json"             = "331570079e3e034283eb69b785325746e5e08618ca571d5a04b6216c915f20e4"
+"generation_config.json"  = "6e2d511249003e62968a9c92303b4f4ad8efb84e2adf29fc7ad1226dc368e8af"
+"merges.txt"              = "b6fe424e334903f7fb84d3a106d9730455f4744b9fe3c21ee136d97a00e72502"
+"special_tokens_map.json" = "78afb564e81264029b25f9caf24bda2521d5bdaeff5cd3fdbc01d3da2e8ce2f2"
+"tokenizer.json"          = "7738a25c46a6043a0e2e605138851baa450269ce9d800af6ca9bf6192e45510c"
+"tokenizer_config.json"   = "80fbc2a161419760bb8a84ed1d3b9550a2d68b7abd07a72706b8f5977e044b8d"
+"vocab.json"              = "d8eb44d0d51f5e39c9b14825ca8bd10a2500f99c438ca81d4462f0263acd3b53"

@@ -1,0 +1,11 @@
+model    = "tencent/HunyuanOCR"
+revision = "47644ecc4fc854efa4f505155158831f36773ee4"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "be3371395b9e67a8f981d86543eb5a93d132a1dc3f54058a2d75b4ed1efc73fe"
+"config.json"             = "f47faf6861aa626f448bf4724517ab8e6c8c5f302464f4da1fe71a98fb682c45"
+"generation_config.json"  = "454fac6e9d0ab73c88e0dd0d9f999f679b0dc12f88664f5d52e3167b0b5de9c0"
+"special_tokens_map.json" = "71442c8c43669f4cedd669f1700f89a741773c49aef55783fbd533f72f050c92"
+"tokenizer.json"          = "3e2ab46bcc5ed8bce013b245c6daecf19fa1d2a18f48a9c88a1f571dcbf7dfd3"
+"tokenizer_config.json"   = "804e8a7fb5a129afb19f6ad88c51c5d3c1aa643b6abb9536d10bcdcf633b4d74"

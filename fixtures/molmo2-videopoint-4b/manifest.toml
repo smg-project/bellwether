@@ -1,0 +1,15 @@
+model    = "allenai/Molmo2-VideoPoint-4B"
+revision = "7deb981c9a8ac97ef3d18fa72f894cfc33b64030"
+tier     = 2
+group    = "molmo2-4b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "8bc892fbf3933cf0c00794b0f0fa638ca22429db58d427f71ea953accabbf1e7"
+"chat_template.jinja"     = "ec66862fda57dc1aef90a21b2a0f64c18a280e2483206449bd251a73b8993101"
+"config.json"             = "de61a6bc373dee494588555ac134c89ee8ef1c629ac7c5719468784a8758fe06"
+"generation_config.json"  = "f244c448347fc11153234c8e7541e68893c4184d394b5b07165b6fa83481a373"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "a4922e884f1f6d82a2ff339c39b2b4e15c437dc85b87816e7c1504d5645e6cd8"
+"tokenizer.json"          = "95e80901c901584f416b8fd4349fd60022774b89ba4377626511f0562cc599f7"
+"tokenizer_config.json"   = "090037776ede9d6522fbac368c1ce9141518a461828eefac1ab8660bd904fa1e"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

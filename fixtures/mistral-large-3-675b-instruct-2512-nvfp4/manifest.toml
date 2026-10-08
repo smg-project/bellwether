@@ -1,0 +1,9 @@
+model    = "mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4"
+revision = "6f01426c721bd365f29a108f2389782e9671aab2"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "50e83596b32980e73aef954469b30e635fc497cfa1d367eb3377ba7878a5c0dd"
+"special_tokens_map.json" = "486a0ad6c426d698f63d5332a78923f0529789f6f0a32fbc86433cd7dcc14693"
+"tokenizer.json"          = "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1"
+"tokenizer_config.json"   = "f3a437d1214f6b61c8eae19d1256b0ebbf567793f6dcc1f63f4a30b829f85235"

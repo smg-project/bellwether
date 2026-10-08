@@ -1,0 +1,10 @@
+model    = "nvidia/Riva-Translate-4B-Instruct-v2"
+revision = "040d958b128018ff0bed2542a7b51005e9ea563c"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "44ff345241be02576c74a434f45cac495854abdd3fa542a574976dfa4b5cc173"
+"config.json"             = "73e7fa76b66cde49d39ea7e8426db68706513c468d903bae54b5478b688eef98"
+"special_tokens_map.json" = "4452b845ab9ca2afa863f59f1411a959e8a32bb4334e264b0e71d5d17dd4dcb9"
+"tokenizer.json"          = "b0240ce510f08e6c2041724e9043e33be9d251d1e4a4d94eb68cd47b954b61d2"
+"tokenizer_config.json"   = "26ab1e654158b484c413919acfb6ff0480b2dfdc7b2ad6e05f8216f010a9e6c3"

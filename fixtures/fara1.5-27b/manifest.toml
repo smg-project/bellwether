@@ -1,0 +1,12 @@
+model    = "microsoft/Fara1.5-27B"
+revision = "299c8406a6c6256d45ec200d1ac12b34c5599d9b"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "da21c9e3edabfac1433ec60fdc006bee19c4c3731b40c0b0f9fb0b5e338562be"
+"merges.txt"             = "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "0a4aac55e24b1424b7b04b187b1139aa2e06516e2fdf561d21d0ffe10394d570"
+"vocab.json"             = "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"

@@ -1,0 +1,10 @@
+model    = "mistralai/Mistral-Medium-3.5-128B"
+revision = "22b2b868a15677cfa6061277ed2f653d1349a9ab"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "68827dcf5d4e50e91db5e7b8b8bc4f0d477a5a2cf5cbcb6eca8b22b0751a8686"
+"config.json"            = "4612a7231d10fbc5c6aec94da10f1d5e489e96986a911df7504514c07f22cc54"
+"generation_config.json" = "4bb7741954ffc0dbe810e45849d1c40db1b5939876e8bb3300850311acafb61f"
+"tokenizer.json"         = "2ba5b3330fd84d5376fcca797cfb3b42eee6241ce23e3271e6fb2a115a8751bd"
+"tokenizer_config.json"  = "4fe76608a2ebdfcaac2eb26efa487616d3335c9b1855a3fabaf35d476028b611"

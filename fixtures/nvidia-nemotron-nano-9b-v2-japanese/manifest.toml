@@ -1,0 +1,11 @@
+model    = "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese"
+revision = "3979dd16634988c34cc3bd911583c51e6a731d10"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "dd617e596ae954cac585ba2c5e972af5f0b917ea7e6c6d74b63c2f67c24ece9e"
+"config.json"             = "2397c77308fe6c71fd7ccb7b513da545dc6bc5d9ca8dfdb00367b219154b2851"
+"generation_config.json"  = "e68d32e66e943f6efd627f566e814d5029ae3c2951c71dbe64e3ad1827ca466d"
+"special_tokens_map.json" = "2a4d2e7403546286e5d75f5b6b3c197490be67fb1e2118e5c60ad5c26e6668b1"
+"tokenizer.json"          = "3277c00fe5fb3963b3cb7c07b7f183722d2af4d775a4aea7cfb3684d7cccbc2f"
+"tokenizer_config.json"   = "1f7d8db5ee68b084bf9c79dd43db8a675c8a656e766c59ad8e0f27b7f266c6e3"

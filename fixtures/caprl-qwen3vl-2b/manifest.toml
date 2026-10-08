@@ -1,0 +1,15 @@
+model    = "internlm/CapRL-Qwen3VL-2B"
+revision = "b838cec8b6c4791ed6169d12db21db0b47bb70e5"
+tier     = 2
+group    = "caprl-qwen3vl-4b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
+"chat_template.jinja"     = "3636d0f0bd6bef02654cdffdc447b79cb2cef8ab02cc75267345946291a489e4"
+"config.json"             = "835534592b6adc7e444776766ada41d708f32ee4d139d11ce982094024880049"
+"generation_config.json"  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+"tokenizer.json"          = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+"tokenizer_config.json"   = "355f2b4e5bad7b01f11ef6cb68ebc176f61b95c3276092ea225b1bea0e01e95c"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

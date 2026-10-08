@@ -1,0 +1,12 @@
+model    = "allenai/Olmo-3-7B-Think-SFT"
+revision = "6ff857587e040d6d523a3d5f3a56e918f5401d66"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "331570079e3e034283eb69b785325746e5e08618ca571d5a04b6216c915f20e4"
+"generation_config.json"  = "47e4fc550b98b250996b108f795f304761994758563c8704ac9a405742678b7f"
+"merges.txt"              = "b6fe424e334903f7fb84d3a106d9730455f4744b9fe3c21ee136d97a00e72502"
+"special_tokens_map.json" = "8abae158f82012899936754210d899b34090847e083f6ba6d12e357bf0e85d19"
+"tokenizer.json"          = "ae12cb7a47a48bba7131225fb776a7c1c138747986affea7902b5d9966a49891"
+"tokenizer_config.json"   = "768461353d27a100fe02df01fc2a046fa159217856046eb94d59578838dea5c0"
+"vocab.json"              = "ab4870ea01f3e9de5c4aaab9a6fa89657246d5da122f0375b66dbfd5a1ea0481"

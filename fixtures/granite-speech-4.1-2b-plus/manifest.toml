@@ -1,0 +1,10 @@
+model    = "ibm-granite/granite-speech-4.1-2b-plus"
+revision = "1454e6e1e33845ca9280ff65f52cf1141ba6e6e2"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "b72e216f06b94afdc7cce509b718a6314abc47c281cbd90d405a5c58786da32e"
+"config.json"            = "f7a58a989a77cef4a12a663617e998afe3d739b6c26b9aaf0e94088a8765f98e"
+"generation_config.json" = "9504c956684ec7777626255daf83b1c6ca6e4dc2f18fe312e79990bf1e27f5a2"
+"tokenizer.json"         = "2feb859bd7123f07f2fbfb6e21c6768f53a945a152745d093e3f52d920ef6735"
+"tokenizer_config.json"  = "bb3dace17d6256c33b83f4acef4db77771c202497c842c2276e794496e10ba1f"

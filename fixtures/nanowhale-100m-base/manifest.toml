@@ -1,0 +1,10 @@
+model    = "HuggingFaceTB/nanowhale-100m-base"
+revision = "8ea74cc04bebfe7feeec74b29018884eec0265d3"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "5b36e3f50d9941012ae66d0496b8a76ac0401448ab7d3f6e4ed092547d052ed1"
+"config.json"            = "848092031ced4ccd3c9973864456d36440ffab3486893c100719e5ce9e953658"
+"generation_config.json" = "48a3baa5d85d5760b8758a4938960aa7a53fdbce7d0e02a2abe8b060af545540"
+"tokenizer.json"         = "8421075aceec0741baf15179b6c337f443f9029e53ea88d8c1e909dd0d69b70b"
+"tokenizer_config.json"  = "f829b42325608e714d58da87aa1f5ebf9cc82e3dd6a93eb8811a13d9d03e5a12"

@@ -1,0 +1,10 @@
+model    = "LGAI-EXAONE/EXAONE-4.5-33B"
+revision = "570aa4b15a4f45ba1133072b45f50198f6e3b4fd"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "e4ece7acc79ba82121d4d57791fb7ecb796e39185087197377da5d2286bec0e5"
+"config.json"            = "0a79a05faa63536f2020e12b73dbc6cbd4867c77700a3a6348920e180235f5e4"
+"generation_config.json" = "8ad691740735143802044aca23751ca4ba445d64a47934cb8cee9b4e9a59d85f"
+"tokenizer.json"         = "0bd798efa30739e209d51f36cfc2f0a636711e37ad9d69b77e4e5c8ca5f09fab"
+"tokenizer_config.json"  = "41fd7d740786df4f0a2edbe58d74341c4b83556b185b698e5b4d177a56e7b5e9"

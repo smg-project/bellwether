@@ -1,0 +1,11 @@
+model    = "zai-org/WebVIA-Agent"
+revision = "d6ee0ce156bc194a4f9ddcd1c4827544321c9db2"
+tier     = 2
+group    = "glm-4.1v-9b-thinking"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "847603d3ed14387a2b45c197f8d07ddee0f9938051549c727cbc894facfea78b"
+"config.json"            = "2a4cdcff048ff2e8abdaa701065e8d0123c0cb0ab084cb0b6c739736463180a4"
+"generation_config.json" = "98048489726ae42d166af31f710bafba6bff3f664c3dfe27a0f802a60c704a3b"
+"tokenizer.json"         = "76ebeac0d8bd7879ead7b43c16b44981f277e47225de2bd7de9ae1a6cc664a8c"
+"tokenizer_config.json"  = "468e400c12d54be1b1b0e008fa5ee9382c8c9ef29a5dd0b5093421ef261935ed"
