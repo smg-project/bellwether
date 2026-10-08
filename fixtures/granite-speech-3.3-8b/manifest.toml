@@ -1,0 +1,14 @@
+model    = "ibm-granite/granite-speech-3.3-8b"
+revision = "5670dcfae4a296e6993ac53eb25f638c6aaa54d0"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "1539d9fee5f730b004cf2d5172d603f7a16d18d6b9f4f844da5c0e5588d7d65f"
+"chat_template.jinja"     = "14aabd581fb85866b2b27868be16a40b573286b2e32250cd2e0dbcb607dcd4d1"
+"config.json"             = "ce2191380d0b9aadb97b7469f743c456ca92cec10b6ed7ebcc9645608889e3fd"
+"generation_config.json"  = "9c8b213e1870b271c49372a9f6060492f459afe509474429614716f03ad0d9f9"
+"merges.txt"              = "303127a244b0078878156c17229f36d11b7a3a3f8e47b7cfdbb304ff46be5030"
+"special_tokens_map.json" = "21ce694081bb9ae1bd4bc64549e72e0799ebb74705e6b650e3585d85b71ebdc1"
+"tokenizer.json"          = "85731be449eb448aa5a383895a6a884659553ce79d4c478b6a661c566859b40f"
+"tokenizer_config.json"   = "e5c80e617e26c2e2407cabf3485768a0cf98e4be2dbf2c731b44cc0e5aa2945b"
+"vocab.json"              = "80ab859339a2525fdfbda14bc39df02dffb824aefdaf86426217bbb146d17e01"

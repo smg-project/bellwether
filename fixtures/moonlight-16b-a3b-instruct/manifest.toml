@@ -1,0 +1,12 @@
+model    = "moonshotai/Moonlight-16B-A3B-Instruct"
+revision = "4e735b07a89f73647dfab71ab91b840f362ede5b"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"               = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"configuration_deepseek.py" = "54f29dd0d56e9a13f639c703e524daa71794e360050012aea3788ad7cfc38b17"
+"generation_config.json"    = "50ea3ebb0c29a2e837be3be830ca31e491021ba69664344fbc82c49bbd887b73"
+"modeling_deepseek.py"      = "5b1a8502c42e40a2b7a41a881d9f4d69c5f33294cb8fe4256c593d6979ebfea6"
+"tiktoken.model"            = "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103"
+"tokenization_moonshot.py"  = "11b6c72b07381146bbde5e987e927b134a5a1a7e22741693024237b53dd23557"
+"tokenizer_config.json"     = "566eff6d3b862587c620edb402dc76417c582605c79e2c9a4bca333a73f44fcb"

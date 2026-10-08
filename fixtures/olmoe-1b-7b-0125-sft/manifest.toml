@@ -1,0 +1,10 @@
+model    = "allenai/OLMoE-1B-7B-0125-SFT"
+revision = "6f7a5b02aa069fdcb8d0cb6b837b9905a3d995d7"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "a02f96215f94484a7cf847b3bd2c5674a5e27edad8295f441e30d356ed24addd"
+"generation_config.json"  = "33cbaebd02858e633887743d52354413dc253e0753ecc36b0e29660eae33684a"
+"special_tokens_map.json" = "f9d45be58536a0fa36e01bf0d6f6c36c6200d2974f48b6e8ad7d28f68ee9b9da"
+"tokenizer.json"          = "8e2c49673774cc96724c2b8e92327a32f99e821d9baf33ef789ac5811736f2e0"
+"tokenizer_config.json"   = "6b31e8ac577b9567427518d28febfa31c78df27aca20c8cb8cc09333ca495d08"

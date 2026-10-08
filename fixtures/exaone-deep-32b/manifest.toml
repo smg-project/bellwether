@@ -1,0 +1,13 @@
+model    = "LGAI-EXAONE/EXAONE-Deep-32B"
+revision = "4e9a4c20b6c3f9093777bfe6a98b2be508abb919"
+tier     = 3
+group    = "exaone-deep-7.8b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "3b550ce0ffd998e4c28a1215b5bf275f543eb686e992fc2058491b1ccb91e0c4"
+"generation_config.json"  = "bf009c959e0c25e24e348810aa906ae32b4c5de41618b6ef3867435ab2f06fc4"
+"merges.txt"              = "cec041befc96a8eac947c36940412fa22412458824e822d9c5d60f82b0906970"
+"special_tokens_map.json" = "ced989581d62fbb18d1ed3bb54cf3556f865b1fd751faa164faf4d4fac2337dd"
+"tokenizer.json"          = "7c7507fef57dd4daa4c37103fa656a793748e4cbceb03f808ef292d0324aab10"
+"tokenizer_config.json"   = "f2b1b01a9ddbfb9f9414d2cb7cca3b4a9948147f3f2c721eb6b2a2fa7a2c8e85"
+"vocab.json"              = "b67c86d647de8f3bda7da2497a7fa107a83d0b3801dc36eb3c7bb16362801db6"

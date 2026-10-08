@@ -1,0 +1,13 @@
+model    = "moonshotai/Kimi-K2-Instruct"
+revision = "fd1984e2b7a3350dbf7305fe73a4ede25c14de50"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"       = "39e8c195b474c1a4148046f41fedd177b2ff8f420fa376e52fcdddb829e8f0c5"
+"config.json"               = "dfd383c2ec5e079e122458b9ddbeb26bc8bf64ac4e421088c08ba07aa82904f1"
+"configuration_deepseek.py" = "54f29dd0d56e9a13f639c703e524daa71794e360050012aea3788ad7cfc38b17"
+"generation_config.json"    = "563cecc538917aa08d5a4d59ef67186ddbfcd65db1e41458ef422aa463cf4d54"
+"modeling_deepseek.py"      = "ce753fc9076ce13ce9557e680e2f5bd68ae8929a8225772968a9a22a1d17b7d4"
+"tiktoken.model"            = "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103"
+"tokenization_kimi.py"      = "b52cbff687ee5b32c8c0551da9974c678d39be0f3c890d53727888557b850c1f"
+"tokenizer_config.json"     = "5ba77d5822137ac3cb9337d2b84561d10425562cf8b8f2c74c91a832516a778d"

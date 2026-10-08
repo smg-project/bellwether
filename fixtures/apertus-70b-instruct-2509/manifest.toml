@@ -1,0 +1,11 @@
+model    = "swiss-ai/Apertus-70B-Instruct-2509"
+revision = "0f2767662a013c0fb631079cea883155252bc3b6"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "56f72c27fa2e565312a830b7315a455c79fb452fdbe7a5b7595d8a094f282b07"
+"config.json"             = "79422e3fe45066213bbf71d50cd293d29fa63cf1fab1d7605a1850cb24a4e9b1"
+"generation_config.json"  = "dd1fd499fa58138a07bcfef87f957adacb63f5ecf1a8db060254657ff1fe2a0c"
+"special_tokens_map.json" = "b745dc7e6f9f1ef88d962c2cd5f4bd7edb2ce573059525d5205a6934b88b3b77"
+"tokenizer.json"          = "bb201fb226cde11f66c3cf51c5344fb37b1611f00c21e75c324546d854eff2e1"
+"tokenizer_config.json"   = "b89e07508603d6e1f2c8642f366c2469063c3eddae0585f1e67934ee98498ab1"

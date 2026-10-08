@@ -1,0 +1,11 @@
+model    = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
+revision = "b6648636ddc906688974282de6e7a243395f5423"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "b4bb2b3167994b1bfae42fb74d7166f94340bbea2d9dba3f2591e3261adcfb4e"
+"config.json"             = "446831c95ae61d41d042157a67490f3e5cf020ac23e202c9535acb369f479b80"
+"generation_config.json"  = "dab331a1d2869ac6942e2bfe205873d11b431bbd28b537a660a538cca5641283"
+"special_tokens_map.json" = "d1ab5d294abec0a58924f96e33d88030da87018c02012d6c797426dbd5e4ea0d"
+"tokenizer.json"          = "b641f1db7e5e759ddf0b633366a8cc2d318f00d1471176a5ea0bb9449c583029"
+"tokenizer_config.json"   = "a49c8807cc5fbd754e183ab549273477980f4ec24d2f80e3c5f52e4a354b0e0d"

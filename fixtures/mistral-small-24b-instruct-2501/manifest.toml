@@ -1,0 +1,10 @@
+model    = "mistralai/Mistral-Small-24B-Instruct-2501"
+revision = "9527884be6e5616bdd54de542f9ae13384489724"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "4784f5e393ed1be452a813c4e38843b021180513790af359b3c2289d463e50b9"
+"generation_config.json"  = "c073f5002fe4a7ca5e9624bd94f442afeff4e9a00b2fd5f4ed6678651d8b84a3"
+"special_tokens_map.json" = "5bc5d1c106bf86895473568ef5211f3fde8415e6fdee039223d6db8ca52cbe01"
+"tokenizer.json"          = "b76085f9923309d873994d444989f7eb6ec074b06f25b58f1e8d7b7741070949"
+"tokenizer_config.json"   = "85090a231c4b1432c95cf62d5857777df08c0939fc698bf89b91ccc96f92400e"

@@ -1,0 +1,19 @@
+model    = "JetLM/SDAR-4B-Chat-b32"
+revision = "d4dbd3439d089b843094f9b66e76088f0c2545dd"
+tier     = 3
+group    = "sdar-1.7b-chat"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"          = "6e81b0b78e49ced21e68b7ed551a29afc3bde018b06df356692c4df94f753d93"
+"chat_template.jinja"        = "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"
+"config.json"                = "32017e5a2205bc77d3986c42eee3aa3fb0c8d69942fc4620f8ac23b133cc2129"
+"configuration_sdar.py"      = "eb2830b7c5841c05ad4450b8b15a968703afc890e432e12f2b0f1eb1625720c6"
+"generation_config.json"     = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"                 = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"modeling_sdar.py"           = "1b274a20da0952ea3f2d07274669da8a94a70f6c3c1614366b4d8e5128c9eb7a"
+"special_tokens_map.json"    = "8d7a2b508e7325a93b5cc9e6908397ad8865df49bed7af20ff8d90b57fabff7b"
+"tokenization_qwen2.py"      = "ce10fa3509652ad56a39b62dbafddb5441db1916f3b3525c7f2d5a302e4e6be4"
+"tokenization_qwen2_fast.py" = "958d73f75598d7df843b36cf124068d471af9d76d17fe38e2fa8a0b46157bdb1"
+"tokenizer.json"             = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"      = "96d86b69328269b178513cfee56d66d90f26a93a3ee8c2444dfbae4df7d07403"
+"vocab.json"                 = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
