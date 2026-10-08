@@ -1,0 +1,10 @@
+model    = "tencent/SongPrep-7B"
+revision = "6edc795084e2c564d721a5317bc17fea1226785b"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"           = "1bf868d9b0c54629436587f4409a987cf626e191e714e9b1ae395f4a5ebbc8cb"
+"merges.txt"            = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"        = "f7c9b2dba4a296b1aa76c16a34b8225c0c118978400d4bb66bff0902d702f5b8"
+"tokenizer_config.json" = "80d64fccf954f022eb43b7425eb45a133cbb92c76a5f24d4cea6dbe3d45548d9"
+"vocab.json"            = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

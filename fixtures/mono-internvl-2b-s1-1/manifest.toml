@@ -1,0 +1,20 @@
+model    = "OpenGVLab/Mono-InternVL-2B-S1-1"
+revision = "eacbf3c13d0ecc138c24298298fa99369515a72c"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"              = "df59e170102f8d19d3e186cc91c81006c9822ea9fe8ce2b68e7be77195c01db3"
+"config.json"                    = "11b2f47518762bbe62c9556a3700d91555320bbe8ad11185ed688889f25a625f"
+"configuration_intern_patch.py"  = "9894edf89eff12c54c82ce3d24adaf2d847762a484f69dc6099faf105ab44382"
+"configuration_internlm2.py"     = "9f9e14d64be7b81068e8421fd27e1c466b3fb6aeb67725ca328e56083c3f7a60"
+"configuration_internvl_chat.py" = "da7224da579a3c487a4b93103c42246e404340645060df46debc232198963acc"
+"conversation.py"                = "d6d0a07bc8bafcc075168a45f2b0cc1935239deb37a760ad71d93b350a6996e0"
+"generation_config.json"         = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"modeling_intern_patch.py"       = "ec5feaea3e1ad3d034f1de81dcc181966e4b47c08c9e046e97a8cbae4b499993"
+"modeling_internlm2_ve.py"       = "57418ba1a808a28e277a24c249f14fb25b14fa815b3b9e768b6f302ebcc3be7d"
+"modeling_internvl_chat.py"      = "da41c876a4694dffa11b8fbb620cebfca4af83c921071fd389decb6677454708"
+"special_tokens_map.json"        = "8cb729e6fd4c29e8c5be65cb51128735cea0ab56606a186cf8cbb30123c72eae"
+"tokenization_internlm2.py"      = "e548dc777a1def2f5339cfe12de8da2d12500d664e3dafa5c585c407e4b806fa"
+"tokenization_internlm2_fast.py" = "b6dc75cb1a276a897190a003b97a65b13b68b948d64646df67e7f18392dfbb34"
+"tokenizer.model"                = "f868398fc4e05ee1e8aeba95ddf18ddcc45b8bce55d5093bead5bbf80429b48b"
+"tokenizer_config.json"          = "2a0e30fb556e25b8255729fcb67db4e0e1a265e3fb177d9b09316f7c665f31f7"

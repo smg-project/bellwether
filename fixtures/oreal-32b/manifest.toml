@@ -1,0 +1,14 @@
+model    = "internlm/OREAL-32B"
+revision = "332a77920c83a0c395f54b8703b148696cfd0921"
+tier     = 3
+group    = "oreal-7b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "bf5ff45da3641920b1e9ece8085cfdf2aac8fdee9712e604fbee31336398df5c"
+"config.json"             = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
+"generation_config.json"  = "6a0e9d3995eb865d9199822dab9faf430814a892404364b3e79130a5f0c73422"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "6676f091c8bc4d1b50146427cfde92073402866b87b6e39223227931b70083e9"
+"tokenizer.json"          = "026ac34f4b374b0428b35f8e347e373191e7a8e4f4db599992f1442b695fd818"
+"tokenizer_config.json"   = "3232247b2852940fa741f729579198360b7b0013bb799b10a411da79d4d4de91"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

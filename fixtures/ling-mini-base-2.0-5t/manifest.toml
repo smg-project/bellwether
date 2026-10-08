@@ -1,0 +1,11 @@
+model    = "inclusionAI/Ling-mini-base-2.0-5T"
+revision = "be7df3fddcaabd8b4de9b3a3bc2ca7b777fbd187"
+tier     = 3
+group    = "ling-mini-base-2.0"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "fbce83b434d146e4dca60ba96b9353c7abe16ff379534b4d6e48ac5ec7841728"
+"generation_config.json"  = "15da477b82d3ac6174f0906694209c4bca8903dc3b5fe92cc50ce90d35113326"
+"special_tokens_map.json" = "f1fa4f8b8c24126a0c2a5d9b2de0fee32abbddf22f48c068e5cf42bc0a9b68ab"
+"tokenizer.json"          = "23895938c755ebef359350a758831dc230a481428155d0f50a236d572e860b21"
+"tokenizer_config.json"   = "37014fdc1776c484e805dd9aad4294345e0492203b647513a82b4d68875f41a4"

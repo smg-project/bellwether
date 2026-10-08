@@ -1,0 +1,11 @@
+model    = "nm-testing/pixtral-12b-FP8-dynamic"
+revision = "6627e5c1844832bf50e92d2dcafc5bbdb32798ed"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"      = "77c0da89cc54f6b6b47379969460f3d7929f1c518c77b14825e1fb7555061a6d"
+"config.json"             = "f52ccc5a9029fb268aafa1e5410e9e2b370904fe0af45b07371f1377c88ce70b"
+"generation_config.json"  = "c073f5002fe4a7ca5e9624bd94f442afeff4e9a00b2fd5f4ed6678651d8b84a3"
+"special_tokens_map.json" = "6fa06efa2785e450051989a6f8fb4416b10149ded485ddd3f127a40734f5cfd0"
+"tokenizer.json"          = "fcdf3e6b96371b9a5c8673bdf2f1bc838b994b73a6fa995dca62196346aaddb5"
+"tokenizer_config.json"   = "54b250f5bfc10676eb205e082624d74d04119682fd2a6179431584ba03140bb3"

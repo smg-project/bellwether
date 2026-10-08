@@ -1,0 +1,14 @@
+model    = "BAAI/OpenSeek-Small-v1-Baseline"
+revision = "4d55f9237fd95a1074f45f01d61496a6a0de823e"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"               = "fb0aec6526ed9dfc7a81911576d324dfe33ae3240e5bd721d110ec3802e3b4be"
+"configuration_deepseek.py" = "6f5f0b99944a79ff5b2cd3d65ef3c532d045e5d919fae3cd5a732592c0cbb465"
+"generation_config.json"    = "91fb14e3500c52b9ab71cc9270c3a8421b5ade9580ed0b16716eca62cb6b2b93"
+"modeling_deepseek.py"      = "5b1a8502c42e40a2b7a41a881d9f4d69c5f33294cb8fe4256c593d6979ebfea6"
+"qwen.tiktoken"             = "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186"
+"qwen_generation_utils.py"  = "f223e0f1bb987fdb93b7cf80e046d96e9e910650103ef2f136eb04887324de34"
+"special_tokens_map.json"   = "79524fc72e5b290f052f183cabc9a48d1812eda332ad6916bbd21c614d1ed64a"
+"tokenization_qwen.py"      = "c9bbb7710bacfaa323d48b8414643d8d7893d174f85f65e83fbc363de271b69a"
+"tokenizer_config.json"     = "040facbe4a798a00f46f8594546a64ad5d4eac1d731755b050b64f02f1b3218d"

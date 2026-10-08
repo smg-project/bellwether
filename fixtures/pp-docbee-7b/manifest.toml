@@ -1,0 +1,12 @@
+model    = "PaddlePaddle/PP-DocBee-7B"
+revision = "486c0c8265d6dae4523c9964c0cb0dc94d5a1285"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "46bb69163518fe1a0a2f788b64d88e8e28f6f4332f0d3c3094c9524a310376fa"
+"config.json"             = "7137b1c66a417253c50a961b9959b4c9045d119cc37c96e8b385f335020a6243"
+"generation_config.json"  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"              = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"special_tokens_map.json" = "f04e6557e1af322f611c48cf2a3788b6a71b6deebe6178a01b3787f439cbe819"
+"tokenizer_config.json"   = "14131cf77f1eae23f5b7935633d3820af0805bfee994f6a2f14f22b21ecdf726"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

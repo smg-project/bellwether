@@ -1,0 +1,8 @@
+model    = "arcee-ai/DeepSeek-R1-bf16"
+revision = "c5eb2865f7ebee4e8ac790571e01bfbf0b60b214"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"           = "575821ef614db1c53529bebf63e8e2742bea0ac680d856ddc5acf52dccfb0b79"
+"tokenizer.json"        = "ecb6f9fc369894346f0511f4074ca75cee5cd5f3b06d02f1ba35fcd39f8e121d"
+"tokenizer_config.json" = "024d72dd3bd690796fce311ff76f5e8a2cf564b81cdde859ba0891aa8a6d955f"

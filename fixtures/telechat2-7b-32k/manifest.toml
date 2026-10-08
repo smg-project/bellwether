@@ -1,0 +1,13 @@
+model    = "Tele-AI/TeleChat2-7B-32K"
+revision = "e82932bf48391c89242fd7e28730c5e8a7992509"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"                = "db66419467f0e7a2d87b6e241a403414a7735deee64bad0687816f634fe14623"
+"configuration_telechat2.py" = "858cff90c22f03b8f5e2967198e3c320c422e70fefdaddec6da1a4095e1aedff"
+"generation_config.json"     = "1fe0904792688508097442fed4b9beed2a9770c480cb1db8efdd0807b8b3c51f"
+"generation_utils.py"        = "fd71d4a2c5695793f96c483a1ad8f34b91191947dbf293ce94b95cad09d42411"
+"modeling_telechat2.py"      = "671521815903e02d118e1e00f76558d59f065a0f97dda47cb03e1b8d2b85f12e"
+"tokenization_telechat2.py"  = "c22c7c97ebfa3a53feb4e3e147624a5aaffee3be68fd3ddf691f8909d45b1bce"
+"tokenizer.model"            = "a7a5b465bbc9465b214e0962076c1170783a8ee88fb01454b0c33609bd3cf954"
+"tokenizer_config.json"      = "473b087be9c4d35bdd472a0e329b71ff58a0dee8b1b934cba8d41951269e1c9c"

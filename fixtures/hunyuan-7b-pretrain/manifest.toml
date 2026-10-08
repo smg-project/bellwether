@@ -1,0 +1,9 @@
+model    = "tencent/Hunyuan-7B-Pretrain"
+revision = "296c34321929a729b19adf1a1ba6507ffa1f16b1"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"            = "37423d6adec3ab0842a4298de2e6e646997c711adb30ade05e9f5481841bb9f8"
+"generation_config.json" = "94b27992232e29b6f921e0afabbccae66aa36a204123652f0818b4b7a1175cfb"
+"hy.tiktoken"            = "51e1bf20514dc78d5496f9b791af3127eadcc906c830184bf954d5b11d60573f"
+"tokenizer_config.json"  = "fef31ed9cd2c43ffd165821de892e887d12fe878912a64f5d41441ec82764329"
