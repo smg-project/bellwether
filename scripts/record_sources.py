@@ -45,6 +45,10 @@ SUFFIX = ".jsonl.zst"
 # all, tau2's 22 about 4.9 GB and SWE-Hero's 14 about 7.4 GB.
 SETS_PER_CALL = {"glaive-v2": 71, "tau2": 4, "swehero": 1}
 RECORDED = re.compile(r": (\d+) cases recorded")
+# Files an oracle looks up by name beside the oracle inputs, such as the parse oracle's generation config for the end
+# of turn. Offline, a file the checkpoint does not ship must be known to be absent: the Hub's answer marks it so in
+# the cache (``.no_exist``), and the commit's file list alone does not.
+PROBED = ("config.json", "generation_config.json", "chat_template.json", "tokenizer_config.json")
 PRINT = threading.Lock()
 
 
@@ -116,10 +120,19 @@ def say(message: str) -> None:
 
 def fetch_inputs(model: str, revision: str) -> None:
     """The checkpoint's oracle inputs at ``revision`` into the Hugging Face cache, with the commit's file list, which
-    the recorder needs to tell a file the checkpoint does not ship from one the cache lacks when it runs offline."""
+    the recorder needs to tell a file the checkpoint does not ship from one the cache lacks when it runs offline; then
+    each ``PROBED`` file, so one the checkpoint does not ship is marked absent there."""
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import EntryNotFoundError
+
     from bellwether.inputs import checkpoint_dir
 
     say(f"{model} at {revision[:8]}: oracle inputs in {checkpoint_dir(model, revision)}")
+    for name in PROBED:
+        try:
+            hf_hub_download(model, name, revision=revision)
+        except EntryNotFoundError:
+            say(f"{model} at {revision[:8]}: no {name}, marked absent")
 
 
 def record(slug: str, model: str, kind: str, call: list[Path], fixtures: Path, failures: list[str]) -> None:
