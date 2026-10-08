@@ -250,6 +250,23 @@ def test_the_hub_list_holds_the_registries_checkpoints_and_the_organizations_cha
     ]
 
 
+def test_the_hub_list_takes_the_organizations_only_smg_names_too() -> None:
+    # sbintuitions publishes Sarashina, which SMG's own sarashina parser names and no engine registry does.
+    listings = {**LISTINGS, "sbintuitions": [listed("sbintuitions/sarashina2.2-3b-instruct-v0.1", date(2025, 3, 4))]}
+    models = {
+        **MODELS,
+        "sbintuitions/sarashina2.2-3b-instruct-v0.1": details(
+            "sbintuitions/sarashina2.2-3b-instruct-v0.1", date(2025, 3, 4), 7, ("LlamaForCausalLM",)
+        ),
+    }
+    # An engine registers the architecture without naming any of its checkpoints, as with Sarashina's Llama.
+    entries = [*ENTRIES, Entry("vllm", "LlamaForCausalLM", TEXT, True, False, ())]
+    hub = FakeHub(listings, models)
+    rows = hub_rows(entries, hub, BUILT, served=SGLANG_CODE)
+    assert "sbintuitions" in hub.listed
+    assert "sbintuitions/sarashina2.2-3b-instruct-v0.1" in [row.model for row in rows]
+
+
 def test_each_row_pins_the_hubs_sha_and_says_why_nothing_can_be_recorded_yet() -> None:
     rows = {row.model: row for row in build()[0]}
     assert rows["Qwen/Qwen3-8B"] == Row(
@@ -272,7 +289,7 @@ def test_a_renamed_checkpoint_is_one_row_under_the_hubs_id() -> None:
 
 def test_only_the_registries_organizations_are_listed_and_ruled_out_listings_cost_no_call() -> None:
     _, hub, log = build()
-    assert hub.listed == ["Qwen", "example", "google", "openai-community", "xverse", "zai-org"]
+    assert hub.listed == ["Qwen", "example", "google", "openai-community", "sbintuitions", "xverse", "zai-org"]
     never_asked = {"Qwen/Qwen3-8B-FP8", "Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen3-Embedding-8B", "lmsys/gpt-oss-20b-bf16"}
     assert not never_asked & set(hub.asked)
     assert "openai/gpt-oss-20b" not in hub.asked
@@ -344,7 +361,7 @@ def test_the_organization_of_an_extra_that_is_a_real_checkpoint_is_listed_and_te
     entries = [Entry("vllm", "LlamaForCausalLM", TEXT, True, False, ("meta-llama/Llama-3.2-1B-Instruct", *extras))]
     hub = FakeHub({}, {})
     hub_rows(entries, hub, BUILT)
-    assert hub.listed == ["NousResearch", "meta-llama"]
+    assert hub.listed == ["NousResearch", "meta-llama", "sbintuitions"]
 
 
 def test_a_registry_entry_that_names_no_checkpoint_is_a_row_under_its_name() -> None:
@@ -443,7 +460,7 @@ def test_a_listed_checkpoint_or_organization_the_hub_fails_on_is_logged_and_the_
     assert [row.model for row in rows] == ["Qwen/Qwen3-8B", "Qwen/Qwen3-14B", "xverse/XVERSE-MoE-A36B"]
     assert "Qwen/Qwen3-32B: left out, hub-error-502" in log
     assert "xverse: not listed, hub-error-500" in log
-    assert hub.listed == ["Qwen", "xverse"]
+    assert hub.listed == ["Qwen", "sbintuitions", "xverse"]
 
 
 def test_sglangs_draft_and_pooling_heads_and_what_vllm_files_elsewhere_register_nothing() -> None:
@@ -503,4 +520,5 @@ def test_the_organizations_listed_are_those_of_each_architectures_example_not_of
     hub = FakeHub({}, {name: details(name, date(2025, 1, 1), 1, ("MixtralForCausalLM",)) for name in names})
     rows = hub_rows(entries, hub, BUILT)
     assert {row.model for row in rows} == set(names)  # an extra is still a row
-    assert hub.listed == ["mistralai", "thinkingmachines"]  # a default that is a copy still names its publisher
+    assert hub.listed == ["mistralai", "sbintuitions", "thinkingmachines"]  # a default that is a copy still names its
+    # publisher
