@@ -520,5 +520,5 @@ def test_the_organizations_listed_are_those_of_each_architectures_example_not_of
     hub = FakeHub({}, {name: details(name, date(2025, 1, 1), 1, ("MixtralForCausalLM",)) for name in names})
     rows = hub_rows(entries, hub, BUILT)
     assert {row.model for row in rows} == set(names)  # an extra is still a row
-    assert hub.listed == ["mistralai", "sbintuitions", "thinkingmachines"]  # a default that is a copy still names its
-    # publisher
+    # A default that is a copy still names its publisher.
+    assert hub.listed == ["mistralai", "sbintuitions", "thinkingmachines"]
