@@ -64,14 +64,42 @@ jobs:
       - run: uv run ruff format --check .
       - name: Benchmark sets are committed as Git LFS pointers
         run: git lfs fsck --pointers
-      - name: Fetch the benchmark sets this pull request changes
+      # The tests read a pull request's new benchmark sets whole, which takes about an hour for 9 GB. A set's check
+      # depends only on its bytes, which its pointer names by sha256 and size, and on the checking code. So a run
+      # that passed on the same pointers with the same code earlier in the same pull request (before a rebase, say)
+      # leaves nothing to fetch, and the tests skip the sets they find as pointers.
+      - name: The benchmark sets this pull request changes
+        id: changed
         if: github.event_name == 'pull_request'
         shell: bash
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
+          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- 'fixtures/**/*.jsonl.zst' | sort > "$RUNNER_TEMP/changed.txt"
+          pointers=$(xargs -r -a "$RUNNER_TEMP/changed.txt" cat | sha256sum | cut -c1-64)
+          echo "count=$(wc -l < "$RUNNER_TEMP/changed.txt")" >> "$GITHUB_OUTPUT"
+          echo "key=checked-sets-$pointers-${{ hashFiles('src/**', 'tests/**', 'uv.lock') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: checked
+        if: github.event_name == 'pull_request' && steps.changed.outputs.count != '0'
+        with:
+          path: .checked-sets
+          key: ${{ steps.changed.outputs.key }}
+      - name: Fetch the benchmark sets this pull request changes
+        if: github.event_name == 'pull_request' && steps.changed.outputs.count != '0' && steps.checked.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           # 400 paths per pull keeps each --include argument well under Linux's 131,072-byte cap.
-          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- 'fixtures/**/*.jsonl.zst' \
-            | xargs -r -n 400 sh -c 'git lfs pull --include "$(printf "%s," "$@" | sed "s/,$//")" --exclude ""' sh
+          xargs -r -n 400 -a "$RUNNER_TEMP/changed.txt" sh -c 'git lfs pull --include "$(printf "%s," "$@" | sed "s/,$//")" --exclude ""' sh
       - run: uv run pytest -q
+      # Saved only after the tests passed with the sets fetched.
+      - name: Remember the sets this run checked
+        if: github.event_name == 'pull_request' && steps.changed.outputs.count != '0' && steps.checked.outputs.cache-hit != 'true'
+        run: cp "$RUNNER_TEMP/changed.txt" .checked-sets
+      - uses: actions/cache/save@v6
+        if: github.event_name == 'pull_request' && steps.changed.outputs.count != '0' && steps.checked.outputs.cache-hit != 'true'
+        with:
+          path: .checked-sets
+          key: ${{ steps.changed.outputs.key }}
