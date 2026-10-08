@@ -1,0 +1,131 @@
+name: record
+
+# Records corpus sources for checkpoint groups on the organization's CPU runners (the smg-org-runner-cpu scale set), one
+# job per group, and pushes each group's new fixture sets to a branch of its own, record/<slug>/<run id>, with the
+# job's own token; pull requests are put together from those branches afterwards, so the sets' Git LFS objects go from
+# the runners to GitHub once. Started by hand only: the runners are the organization's, and this repository is public.
+on:
+  workflow_dispatch:
+    inputs:
+      groups:
+        description: Group slugs to record, separated by spaces; empty for every group with a manifest
+        required: false
+        default: ""
+      sources:
+        description: Corpus sources to record, separated by spaces
+        required: false
+        default: glaive-v2 tau2 swehero
+      jobs:
+        description: Recorder calls at once in each group's job (the runner pods have 16 GiB)
+        required: false
+        default: "3"
+      max-parallel:
+        description: Groups at once
+        required: false
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+      count: ${{ steps.plan.outputs.count }}
+      corpus-key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: plan
+        env:
+          SLUGS: ${{ inputs.groups }}
+          SOURCES: ${{ inputs.sources }}
+        run: |
+          for source in $SOURCES; do
+            ls corpus/*/"$source"-*.jsonl.zst > /dev/null 2>&1 || { echo "::error::no corpus set for $source"; exit 1; }
+          done
+          python3 scripts/record_plan.py $SLUGS >> "$GITHUB_OUTPUT"
+      # The sources' corpus sets, fetched from Git LFS once into a cache every group's job restores: Git LFS bandwidth
+      # is metered, a cache restore is not.
+      - id: key
+        env:
+          SOURCES: ${{ inputs.sources }}
+        run: echo "key=record-corpus-$(echo $SOURCES | tr ' ' '+')-${{ hashFiles('corpus/**/*.jsonl.zst') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: corpus
+        with:
+          path: .git/lfs/objects
+          key: ${{ steps.key.outputs.key }}
+      - if: steps.corpus.outputs.cache-hit != 'true'
+        env:
+          SOURCES: ${{ inputs.sources }}
+        run: |
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,' "$source"; done)
+          git lfs fetch --include "${include%,}"
+
+  record:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: record ${{ matrix.group.slug }}
+    runs-on: smg-org-runner-cpu
+    timeout-minutes: 720
+    permissions:
+      contents: write  # the push of record/<slug>/<run id>
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    env:
+      SLUG: ${{ matrix.group.slug }}
+      SOURCES: ${{ inputs.sources }}
+      JOBS: ${{ inputs.jobs }}
+      BRANCH: record/${{ matrix.group.slug }}/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      # The runner image has neither. actions/cache keys an entry by its compression too, so the restore below finds
+      # the entry the plan job saved with zstd only where zstd is installed.
+      - name: Git LFS and zstd
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git-lfs zstd
+          git lfs install --local
+      # A job run again (Re-run failed jobs) carries on from what its earlier attempt pushed: the sets sets.toml lists
+      # are not recorded again, and the new commit goes on top. The fixture sets stay pointers (.lfsconfig).
+      - name: Carry on from an earlier attempt
+        run: |
+          set +e; git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; found=$?; set -e
+          case $found in
+            0) git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+               git checkout -q --detach "refs/remotes/origin/$BRANCH"
+               git log -1 --format='carrying on from %h: %s' ;;
+            2) echo "first attempt" ;;
+            *) exit "$found" ;;
+          esac
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - uses: actions/cache/restore@v6
+        with:
+          path: .git/lfs/objects
+          key: ${{ needs.plan.outputs.corpus-key }}
+          fail-on-cache-miss: true
+      - name: The sources' corpus sets
+        run: |
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,' "$source"; done)
+          git lfs pull --include "${include%,}"
+      - name: Record
+        id: record
+        run: uv run --frozen python scripts/record_sources.py "$SLUG" --sources $SOURCES --jobs "$JOBS"
+      # Whatever was recorded goes up, a crashed call or a cancelled job included. These commits stay on record/
+      # branches and carry no sign-off: the pull requests that bring the sets to main are made from the files, as their
+      # author's own signed-off commits.
+      - name: Push the group's sets to its branch
+        if: always() && steps.record.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          git add "fixtures/$SLUG"
+          if git diff --cached --quiet; then echo "nothing new for $SLUG"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "record $SLUG: $SOURCES (run ${{ github.run_id }}, attempt ${{ github.run_attempt }})"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          git show --stat --format= HEAD | tail -1
