@@ -1,0 +1,10 @@
+model    = "inclusionAI/SingGuard-0.8b"
+revision = "1dc748ecbd06aaa6d61eca5cf75edb24a0ffb0c5"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "707788c69f6c691728041ca018a90f967c53cd57d94e2c85f94b152d3d7fff7b"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "f7e2a22dde2a1fe2cf059cbc9b3c0d5e1bed3cca01541b7d0c8b4c55878f4b1d"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "0a6ac5494d0bdd9c8236788208e85d960092f50db458f8981085f1f5c600290d"

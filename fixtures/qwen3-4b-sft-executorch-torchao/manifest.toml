@@ -1,0 +1,10 @@
+model    = "imdatta0/qwen3_4b_sft_executorch-torchao"
+revision = "c7cc03487d3121f711de4d76df459e5c18dc6fb3"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "29182b952267775d40578652f19b0289ee629a4639feb2fcad52a930737d5f76"
+"config.json"            = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
+"generation_config.json" = "4670c36f3336df26268b43713cbec5e1d3d8a47d293a45602ff388ef19e4342f"
+"tokenizer.json"         = "05aaaec426bceaf2612efa53e0977073a6016f19e92c6207c516bc9143ca87c0"
+"tokenizer_config.json"  = "a23b36c97551b9584a178d38f04b5dcd331b455c46506a09f8556666dac5132b"

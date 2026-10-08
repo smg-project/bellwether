@@ -1,0 +1,10 @@
+model    = "tencent/ContextPilot-E4B"
+revision = "a7ba41c18ddcd334f23f63ef7a608ca46bfe3aa4"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "2f1b4d75d067bae3fe44e676721c7f077d243bc007156cb9c2f8b5836613d082"
+"config.json"            = "285a6691775003b5c39879f47808f79fb5bb631c52df2bffb914ec7990fc3173"
+"generation_config.json" = "4468e1ab38c047b3c98169b95cd9cc3a5751fb3bfbfca697558d3b67f3408a0c"
+"tokenizer.json"         = "a2619fe11b50dbed06ac443c51d757b354d0b62d64baa514404d4e84e6713519"
+"tokenizer_config.json"  = "1483ea07fd156ebf34f605991a81e6aa8c78579545c91b7b282c63668fbfeb17"

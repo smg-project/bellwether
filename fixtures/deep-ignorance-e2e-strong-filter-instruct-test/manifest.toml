@@ -1,0 +1,12 @@
+model    = "EleutherAI/deep-ignorance-e2e-strong-filter-instruct-test"
+revision = "706c6b16f6934c980230162c1e46d97868de387b"
+tier     = 2
+group    = "deep-ignorance-unfiltered-instruct-test"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "fe689ffbd6a4e2d0532d7480696b065b10e0e1eff3f9b9fc4bea415761e4bf4a"
+"config.json"             = "dc242c0c6bf03760b7b08cafcb5d5fa4e10d0f32e994670baed38e3731edd345"
+"generation_config.json"  = "e9c552e53ae485923469a193adf044c1681c4e2fba2482f60bc4af9dfec0c36d"
+"special_tokens_map.json" = "10b8c8852c1e1f70b54d9aff61728408c28971c0e97a6c5a7b2debbd1d3e9c0c"
+"tokenizer.json"          = "d4c0d99d84af59e9126913fafe5210822963e9a3065ee43e6833b358b0c2f825"
+"tokenizer_config.json"   = "7e7f486a2f85c693e38bb52579389d6dfecb703d030c798c16a9f45806905986"

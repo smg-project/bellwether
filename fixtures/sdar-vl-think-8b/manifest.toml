@@ -1,0 +1,20 @@
+model    = "JetLM/SDAR-VL-Think-8B"
+revision = "406191b0b32b09f9c257df0e6e94c37bf5770b59"
+tier     = 2
+group    = "sdar-vl-instruct-8b"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"                       = "321e1bf30087d5b410aa5b76677941f614da428e5da1085a6523f121ecf23e68"
+"chat_template.jinja"                     = "797275b2550d1ebf319871b8f0e4066f534669539c6f670d33c6aa3f5e873cbc"
+"config.json"                             = "e749bfc369115eac80e2127ae2b535118ef32a1f8f5aae5c7847c76340b3110a"
+"configuration_llava_onevision.py"        = "82f9be2f463328fad5f637d03d889492951749a56d57c25290957681ebae0291"
+"configuration_sdar.py"                   = "eb2830b7c5841c05ad4450b8b15a968703afc890e432e12f2b0f1eb1625720c6"
+"fused_linear_diffusion_cross_entropy.py" = "0779ba8cceb9903c7e8684cc55ad026b92e7be7e0aa7d2667288a3292a706585"
+"generation_config.json"                  = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"                              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"modeling_llava_onevision.py"             = "0cb9989e3391d93db01b1d26de95a4cc4fe5165789bbd47015224a8796222ec1"
+"modeling_sdar.py"                        = "23b816684dcb26de64814b8674133179bdd60eeec6e1fa979d1fcb5a9ce46ca3"
+"special_tokens_map.json"                 = "8f53fa0c50b74bf0b53321ba9b500465b32e8e24b8a43d69b59f21b8a4c005a6"
+"tokenization_qwen2.py"                   = "ce10fa3509652ad56a39b62dbafddb5441db1916f3b3525c7f2d5a302e4e6be4"
+"tokenizer_config.json"                   = "a6fe81cbc5bdc6aa86ce1bec376f9d755713d0b0231a6075e102d9c8e95ead6f"
+"vocab.json"                              = "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d"

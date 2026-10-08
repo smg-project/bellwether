@@ -1,0 +1,11 @@
+model    = "microsoft/HARC-Llama-3.1-8B-Instruct"
+revision = "c6f259492584684291e40413b698a2e4464f3899"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "e10ca381b1ccc5cf9db52e371f3b6651576caee0a630b452e2816b2d404d4b65"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "228a7438adda24be38305b9a20bf6b27cc0cdbcaa36bd012fa27a4bc42ba376a"
+"special_tokens_map.json" = "208d307467cabecb563e033fdb478b7c11a1bc6eca9a9c761bf6a303ccfce4c1"
+"tokenizer.json"          = "13574c77ca1d572525cfa7caac46cee99309100524dad568a7ef85ae383df39f"
+"tokenizer_config.json"   = "b3e7c46bfeea08c0c217c260613b6a1dcc8040b952cacd3b8902e629d3dc5876"

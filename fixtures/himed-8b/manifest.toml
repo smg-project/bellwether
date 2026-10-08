@@ -1,0 +1,11 @@
+model    = "FreedomIntelligence/HiMed-8B"
+revision = "0573f67b2de94c1e7d0eeff6c75d9536b0e58a35"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "e10ca381b1ccc5cf9db52e371f3b6651576caee0a630b452e2816b2d404d4b65"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "228a7438adda24be38305b9a20bf6b27cc0cdbcaa36bd012fa27a4bc42ba376a"
+"special_tokens_map.json" = "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec"
+"tokenizer.json"          = "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b"
+"tokenizer_config.json"   = "d37fab177a7e7078f4911237bd6871b98a7beb36a6f52296ce4f919e248ccac2"

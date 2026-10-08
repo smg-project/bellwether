@@ -1,0 +1,13 @@
+model    = "xlangai/VideoAgentTrek-CUA-7B"
+revision = "bc92e210b374b1c617258dd0b2b36b9a3b8b518c"
+tier     = 2
+group    = "skycaptioner-v1"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"     = "4ba01a2d7899915c5194ec5afed2e3d71752bc7b40b564a239c2466d77e86692"
+"config.json"            = "0d76832488b8dc90a9406c354207ed692ccec4daeff738afce319af006b63613"
+"generation_config.json" = "7c21ad7edddca3978395226a08b102905092d7ffa0c45e4a3e88a271f553fc87"
+"merges.txt"             = "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+"tokenizer.json"         = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+"tokenizer_config.json"  = "7d0fc4691628c9f6b0c77f8138a80517896a307e074dd5ac87e279ea85515774"
+"vocab.json"             = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

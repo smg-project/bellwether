@@ -1,0 +1,13 @@
+model    = "allenai/BAR-2x7B-Base"
+revision = "80987e28715dd704a52e308225e12142d749dae1"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "153280e3ff55d19da1398bdb3914ee2a51b80429bfaedde11d7d216c39db80f3"
+"config.json"             = "419c9b6997c116f1a6398c43465717f0eb987409095646d3aac848852983554b"
+"generation_config.json"  = "47e4fc550b98b250996b108f795f304761994758563c8704ac9a405742678b7f"
+"merges.txt"              = "b6fe424e334903f7fb84d3a106d9730455f4744b9fe3c21ee136d97a00e72502"
+"special_tokens_map.json" = "4cb2b52960bababa8ec27153831e405ef7811e3fad1226106e09c28e715cfb21"
+"tokenizer.json"          = "73fd5254624f39a88e3faac6a8e11300fc3c735ed37880d4f4f08db898eaecca"
+"tokenizer_config.json"   = "ffa5b2cfee6e73d5dc0a7d3b7e02eb6ed60a491dd782f2bd8ad2b4659b2aafc6"
+"vocab.json"              = "9e14712c91b37c7aab74b1306baa46ac342d620637a4b44523cdc3aec7d24195"

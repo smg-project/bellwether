@@ -1,0 +1,13 @@
+model    = "microsoft/paza-Phi-4-multimodal-instruct"
+revision = "1e78f4f84fd8a92f132295a32e5cb71b5321dcab"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "d4f2aceb0f20b71dd1f4bcc7e052e4412946bf281840b8f83d39f259571af486"
+"config.json"             = "158334d6d6322e2194cbe265ecbec89830b8b0f647926b5b7f34263f976c59d7"
+"generation_config.json"  = "0d7137e399883f7e7dab6ccbdb3ae57e2abe5f6962035a16449a0a74a109e3c6"
+"merges.txt"              = "856ce61180bb689282eed6b3a6838bb1f438399be23aefe9d20eb379791fb4ad"
+"special_tokens_map.json" = "aff38493227d813e29fcf8406e8e90062f1f031aa47d589325e9c31d89ac7cc3"
+"tokenizer.json"          = "4c1b9f641d4f8b7247b8d5007dd3b6a9f6a87cb5123134fe0d326f14d10c0585"
+"tokenizer_config.json"   = "b3e4d50946ff1813e77c69f6c8baadba0ebe0d44dfbe902095ab654ba1282361"
+"vocab.json"              = "6cb65a857824fa6615bb1782d95d882617a8bbce1da0317118586b36f39e98bd"

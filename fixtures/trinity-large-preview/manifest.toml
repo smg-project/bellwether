@@ -1,0 +1,11 @@
+model    = "arcee-ai/Trinity-Large-Preview"
+revision = "d8e126719c8bf2b3ac5a3551bd1f07fcee767a90"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "edff6190f14a2103027f8e0ab717f0e29a3ca58a47230d7628bcffb3e7f120ef"
+"config.json"             = "758a0063d087df819a27a48270ef4cc799f810c19301b165d6aaf4b1bb9a48ee"
+"generation_config.json"  = "a4e564df9a1fef910bafae95755f5e038bed5bf8d38cf4ab75e8becf29edc850"
+"special_tokens_map.json" = "c82f6489f79fddeba92ca459e172c237df2245bfc773302bc19725416c65038d"
+"tokenizer.json"          = "4d864fe0d9c300d44c54006f5960548946d507d8ec05a082a3bff3e49de58208"
+"tokenizer_config.json"   = "2f0dbb87667b9c94b3f205ea61fca0752fd02c0eefa20153faea6627aef2c67c"

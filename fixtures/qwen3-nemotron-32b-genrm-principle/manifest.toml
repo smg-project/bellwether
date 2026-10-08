@@ -1,0 +1,14 @@
+model    = "nvidia/Qwen3-Nemotron-32B-GenRM-Principle"
+revision = "9fd58dd68f50bfd03fc1cd95f1413a8457eda5ab"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"added_tokens.json"       = "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
+"chat_template.jinja"     = "a5467c80710702d7c4ffd65b3a7402768b24b81369ae741750e339850a6090f7"
+"config.json"             = "9b7728ead4a0106331ff2688b0eca40619af8f48e5ccb89270c6623f6420aab0"
+"generation_config.json"  = "94cd82084f9e10a4b69f3a7f49eda69763d162321a1f6a6b2c0c9290984361ad"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+"tokenizer.json"          = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+"tokenizer_config.json"   = "c9200c1fd420850c867f424be9b747d78a20a669dbdf82dbc7a72456bdd3f911"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

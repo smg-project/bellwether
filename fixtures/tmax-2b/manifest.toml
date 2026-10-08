@@ -1,0 +1,10 @@
+model    = "allenai/tmax-2b"
+revision = "39227cc1b9d221c53140e56a66094d84d115d579"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "340698c97c859f379c322ad11a39425746076d34ee81bf659348504b37e6cc66"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "25e545c9bbc8dbe4ba86741aad19b266c1eda469b42261c60358192b5580fe2a"
