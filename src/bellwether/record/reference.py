@@ -23,6 +23,14 @@ the vendor's class: ``AutoTokenizer`` builds the config first, which needs that 
 never runs it outside the sandbox. Then the class ``tokenizer_config.json`` names is loaded as ``AutoTokenizer``
 would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Neither applies with ``vendor_code``: the vendor's class
 loads as the checkpoint names it, and renders with its own template or none (Kimi-K3's).
+
+The ids of the rendered text come from the checkpoint's ``tokenizer.json`` itself, read with ``tokenizers``, when
+the checkpoint ships one and the vendor's code is not in use: that file is the vendor's shipped encoder. A
+transformers tokenizer class may install its own pre-tokenizer over the file's (``Qwen2Tokenizer`` splits with a
+pattern that has no ``\\p{M}``, the Qwen3.5-generation ``tokenizer.json`` keeps combining marks with their letters),
+and the ids then differ on scripts with combining marks although the text is the same. A checkpoint without
+``tokenizer.json`` (a tiktoken or SentencePiece vocabulary) is encoded by the transformers tokenizer, as before.
+The provenance names the encoder (``encoder``).
 """
 
 from __future__ import annotations
@@ -52,6 +60,7 @@ class HfTemplateOracle:
             kwargs["trust_remote_code"] = True
         self.vendor_code = vendor_code
         self.tokenizer = load_tokenizer(model, revision, kwargs)
+        self.encoder = None if vendor_code else checkpoint_encoder(model, revision)
         template = self.tokenizer.chat_template
         if template is None and not vendor_code:
             template = processor_template(model, revision)
@@ -76,8 +85,11 @@ class HfTemplateOracle:
         }
         messages = request["messages"]
         text = self.tokenizer.apply_chat_template(messages, tokenize=False, **kwargs)
-        encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
-        ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
+        if self.encoder is not None:
+            ids = self.encoder.encode(str(text), add_special_tokens=False).ids
+        else:
+            encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
+            ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
         return Rendered([int(i) for i in ids], str(text))
 
     def provenance(self) -> dict:
@@ -91,6 +103,11 @@ class HfTemplateOracle:
             "tokenizers": tokenizers.__version__,
             "jinja2": jinja2.__version__,
             "tokenizer_class": type(self.tokenizer).__name__,
+            "encoder": (
+                "tokenizers:tokenizer.json"
+                if self.encoder is not None
+                else f"transformers:{type(self.tokenizer).__name__}"
+            ),
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
         }
         if self.vendor_code:
@@ -115,6 +132,18 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
             if tokenizer_class is not None:
                 return tokenizer_class.from_pretrained(model, **kwargs)
     return AutoTokenizer.from_pretrained(model, **kwargs)
+
+
+def checkpoint_encoder(model: str, revision: str):
+    """The checkpoint's ``tokenizer.json`` as a ``tokenizers.Tokenizer``, the vendor's shipped encoder, or None when
+    the checkpoint ships none (a tiktoken or SentencePiece vocabulary). Read from the checkpoint's directory, which
+    holds every oracle input the checkpoint ships, so a checkpoint without the file needs no absence marker."""
+    from tokenizers import Tokenizer
+
+    from ..inputs import checkpoint_dir
+
+    path = checkpoint_dir(model, revision) / "tokenizer.json"
+    return Tokenizer.from_file(str(path)) if path.is_file() else None
 
 
 def vendor_config(model: str, revision: str) -> bool:
