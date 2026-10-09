@@ -252,6 +252,24 @@ def test_reference_oracle_renders_the_checkpoint_template_and_its_ids(tiny_model
     assert provenance["oracle"] == "transformers.apply_chat_template"
     assert len(provenance["chat_template_sha256"]) == 64
     assert provenance["tokenizer_class"] == type(oracle.tokenizer).__name__
+    assert provenance["encoder"] == "tokenizers:tokenizer.json"
+
+
+def test_reference_ids_follow_the_checkpoints_tokenizer_json_not_the_class(tiny_model):
+    """A transformers tokenizer class may put its own pre-tokenizer over the file's (Qwen2Tokenizer does); the
+    reference's ids are the file's."""
+    from tokenizers import Tokenizer, pre_tokenizers
+
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    request = {"messages": [user("What is the capital of France?")]}
+    from_file = Tokenizer.from_file(str(tiny_model / "tokenizer.json"))
+    before = oracle.render(request)
+    assert before.input_ids == from_file.encode(before.text, add_special_tokens=False).ids
+    # The class's own split, as a tokenizer class installs one: the transformers tokenizer now encodes
+    # differently, the reference does not.
+    oracle.tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    assert oracle.tokenizer.encode(before.text, add_special_tokens=False) != before.input_ids
+    assert oracle.render(request).input_ids == before.input_ids
 
 
 def test_reference_oracle_passes_template_kwargs_tools_and_continuation_through(tiny_model):
