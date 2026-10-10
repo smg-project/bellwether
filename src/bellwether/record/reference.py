@@ -24,6 +24,12 @@ never runs it outside the sandbox. Then the class ``tokenizer_config.json`` name
 would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Neither applies with ``vendor_code``: the vendor's class
 loads as the checkpoint names it, and renders with its own template or none (Kimi-K3's).
 
+The template gets each message's content in the format vLLM selects for the template from its source
+(``content_format``: a template that loops over a message's content takes a list of typed parts, and string content
+reaches it as a one-item text part list; every other template takes the string), so a template whose two branches
+differ is rendered as the engine renders it for the request as sent, which stays recorded unchanged. The provenance
+names the format.
+
 The ids of the rendered text come from the checkpoint's ``tokenizer.json`` itself, read with ``tokenizers``, when
 the checkpoint ships one and the vendor's code is not in use: that file is the vendor's shipped encoder. A
 transformers tokenizer class may install its own pre-tokenizer over the file's (``Qwen2Tokenizer`` splits with a
@@ -41,6 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import vendor
+from .content_format import ContentFormat, detect_content_format, in_content_format
 
 SOURCE = "hf-template"
 
@@ -49,6 +56,7 @@ SOURCE = "hf-template"
 class Rendered:
     input_ids: list[int]
     text: str
+    content_format: ContentFormat
 
 
 class HfTemplateOracle:
@@ -83,14 +91,25 @@ class HfTemplateOracle:
             "continue_final_message": continue_final,
             **dict(request.get("chat_template_kwargs") or {}),
         }
-        messages = request["messages"]
+        content_format = self.content_format(request.get("tools"))
+        messages = in_content_format(request["messages"], content_format)
         text = self.tokenizer.apply_chat_template(messages, tokenize=False, **kwargs)
         if self.encoder is not None:
             ids = self.encoder.encode(str(text), add_special_tokens=False).ids
         else:
             encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
             ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
-        return Rendered([int(i) for i in ids], str(text))
+        return Rendered([int(i) for i in ids], str(text), content_format)
+
+    def content_format(self, tools: list | None) -> ContentFormat:
+        """The content format vLLM selects for the template transformers applies to a request with ``tools`` (a
+        checkpoint with named templates has one for requests with tools); "string" when the tokenizer resolves no
+        template, as a vendor's class that renders its own format."""
+        try:
+            template = self.tokenizer.get_chat_template(None, tools=tools)
+        except Exception:
+            return "string"
+        return detect_content_format(template) if isinstance(template, str) else "string"
 
     def provenance(self) -> dict:
         import jinja2

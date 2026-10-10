@@ -207,7 +207,8 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
                 "source": vendor.SOURCE if oracle.vendor_code else RENDER_SOURCE,
                 "input_ids": rendered.input_ids,
                 "text": rendered.text,
-                "provenance": provenance,
+                # The content format is the template's, resolved per request, so it is the line's, not the run's.
+                "provenance": {**provenance, "content_format": rendered.content_format},
             },
         }
         return line, False
