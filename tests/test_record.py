@@ -1,3 +1,4 @@
+import copy
 import fcntl
 import hashlib
 import json
@@ -22,6 +23,7 @@ from bellwether.inputs import oracle_inputs
 from bellwether.manifest import find_manifest, load_manifest, load_manifests, slug_for
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
+from bellwether.record.content_format import detect_content_format, in_content_format
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle
@@ -283,6 +285,147 @@ def test_reference_oracle_passes_template_kwargs_tools_and_continuation_through(
         {"messages": [user("Finish."), {"role": "assistant", "content": "The quick"}], "continue_final_message": True}
     )
     assert continued.text.endswith("<|im_start|>assistant\nThe quick")
+
+
+def parts_template(marker: str = "|") -> str:
+    """A template of the "openai" content format: it loops over a message's content and writes a marker after every
+    part, so a string and a one-item text part list render differently; a tool result is written through its string
+    branch."""
+    return (
+        "{%- for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' }}"
+        "{%- if m['content'] is string %}{{ m['content'] }}"
+        "{%- else %}{%- for part in m['content'] %}{{ part['text'] + '" + marker + "' }}{%- endfor %}{%- endif %}"
+        "{{ '<|im_end|>\\n' }}{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+@pytest.fixture(scope="session")
+def parts_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    return tiny_variant(tiny_model, tmp_path_factory, "parts-chat", parts_template())
+
+
+def test_reference_hands_an_openai_format_template_string_content_as_a_text_part_list(parts_model):
+    """vLLM reads from a template's source which content format it takes and hands an "openai"-format template string
+    content as ``[{"type": "text", "text": ...}]``; the reference renders the same way, so what is recorded is the
+    template's parts branch, the prompt the engine builds for the request."""
+    oracle = HfTemplateOracle(str(parts_model), "local")
+    rendered = oracle.render({"messages": [user("Hi")]})
+    assert rendered.text == "<|im_start|>user\nHi|<|im_end|>\n<|im_start|>assistant\n"
+    assert rendered.content_format == "openai"
+    assert rendered.input_ids == oracle.tokenizer.encode(rendered.text, add_special_tokens=False)
+
+
+def test_reference_hands_a_string_format_template_the_content_as_the_request_gives_it(tiny_model):
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    rendered = oracle.render({"messages": [user("Hi")]})
+    assert rendered.text == "<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n"
+    assert rendered.content_format == "string"
+
+
+def test_a_tool_result_keeps_its_string_in_the_openai_format(parts_model):
+    """The engine joins a tool result's text parts back into one string, so a tool message's string is left alone."""
+    tool = {"role": "tool", "content": "sunny", "tool_call_id": "1"}
+    rendered = HfTemplateOracle(str(parts_model), "local").render({"messages": [user("Hi"), tool]})
+    assert (
+        rendered.text == "<|im_start|>user\nHi|<|im_end|>\n<|im_start|>tool\nsunny<|im_end|>\n<|im_start|>assistant\n"
+    )
+
+
+def test_record_writes_each_lines_content_format_in_its_provenance(tmp_path, parts_model):
+    rc, out_dir = record(tmp_path, parts_model, ("common", [{"name": "a", "request": {"messages": [user("Hi")]}}]))
+    assert rc == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/render/a"]
+    assert line["reference"]["text"] == "<|im_start|>user\nHi|<|im_end|>\n<|im_start|>assistant\n"
+    assert line["reference"]["provenance"]["content_format"] == "openai"
+    assert line["request"] == {"messages": [user("Hi")]}
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        # a loop over a message's content, the message a loop variable over messages
+        ("{% for m in messages %}{% for p in m['content'] %}{{ p.text }}{% endfor %}{% endfor %}", "openai"),
+        # through a filter
+        (
+            "{% for m in messages %}{% for p in m.content | selectattr('type', 'equalto', 'text') %}{{ p.text }}"
+            "{% endfor %}{% endfor %}",
+            "openai",
+        ),
+        # over a variable assigned from messages, and through a slice
+        (
+            "{% set msgs = messages %}{% for m in msgs %}{% for p in m.content[1:] %}{{ p.text }}{% endfor %}"
+            "{% endfor %}",
+            "openai",
+        ),
+        # a macro parameter the template fills with a message's content, by position
+        (
+            "{% macro turn(role, body) %}{% for p in body %}{{ p.text }}{% endfor %}{% endmacro %}"
+            "{% for m in messages %}{{ turn(m.role, m.content) }}{% endfor %}",
+            "openai",
+        ),
+        # and by keyword
+        (
+            "{% macro turn(body) %}{% for p in body %}{{ p.text }}{% endfor %}{% endmacro %}"
+            "{% for m in messages %}{{ turn(body=m.content) }}{% endfor %}",
+            "openai",
+        ),
+        # outside any macro, a loop over a variable named content
+        (
+            "{% for m in messages %}{% set content = m.content %}{% for p in content %}{{ p.text }}{% endfor %}"
+            "{% endfor %}",
+            "openai",
+        ),
+        # the content written as it is
+        ("{% for m in messages %}{{ m.content }}{% endfor %}", "string"),
+        # a type test, a length filter or an index on the content is not a loop over it
+        ("{% for m in messages %}{% if m.content is string %}{{ m.content }}{% endif %}{% endfor %}", "string"),
+        ("{% for m in messages %}{{ m.content | length }}{{ m.content[0] }}{% endfor %}", "string"),
+        # a loop inside a macro over a parameter the template never fills with a message's content
+        (
+            "{% macro items(xs) %}{% for x in xs %}{{ x }}{% endfor %}{% endmacro %}"
+            "{% for m in messages %}{{ items(m.tool_calls) }}{% endfor %}",
+            "string",
+        ),
+        # a template that does not parse: the engine's default
+        ("{% for m in messages %}{% for p in m.content %}{{ p }}{% endfor %}", "string"),
+        # a loop target that is not a plain name, where the engine's walk asserts one: its default
+        ("{% for m in messages %}{% for a, b in m.content %}{{ a }}{% endfor %}{% endfor %}", "string"),
+    ],
+)
+def test_content_format_detection_follows_the_engines_rule(template, expected):
+    assert detect_content_format(template) == expected
+
+
+def test_messages_in_the_openai_format_are_what_the_engine_hands_the_template():
+    messages = [
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": [{"type": "text", "text": "Hi", "cache_control": {"type": "ephemeral"}}, "there"]},
+        {"role": "assistant", "content": None, "tool_calls": [weather_call()]},
+        {"role": "assistant", "tool_calls": [weather_call()]},
+        {"role": "tool", "content": "sunny", "tool_call_id": "1"},
+    ]
+    before = copy.deepcopy(messages)
+    assert in_content_format(messages, "openai") == [
+        {"role": "system", "content": [{"type": "text", "text": "Be brief."}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Hi", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "there"},
+            ],
+        },
+        {"role": "assistant", "content": [], "tool_calls": [weather_call()]},
+        {"role": "assistant", "content": [], "tool_calls": [weather_call()]},
+        {"role": "tool", "content": "sunny", "tool_call_id": "1"},
+    ]
+    assert in_content_format(messages, "string") == messages
+    assert messages == before
+
+
+def test_a_media_part_is_rejected_since_the_reference_cannot_resolve_it():
+    with pytest.raises(ValueError, match="image_url"):
+        in_content_format([{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}], "openai")
 
 
 def record(

@@ -195,6 +195,10 @@ needs a model (the maintainer, 2026-10-06, #23):
 - **Hugging Face:** the checkpoint's own published files.
   - transformers' `apply_chat_template` with the checkpoint's tokenizer and template gives the
     prompt ids for render and, through the round trip, the output text, ids and pieces for parse.
+    A message's content is handed to the template in the format vLLM selects for it from the
+    template's source (`record/content_format.py`): a template that loops over a message's content
+    gets string content as a one-item text part list, as `vllm serve` gives it; every other template
+    gets the string. The request stays recorded as sent; the provenance names the format.
   - A checkpoint whose prompt format or tokenizer is the vendor's own code is rendered by that code
     instead: an encoder in place of a chat template (DeepSeek V3.2 and V4, Mistral's
     `mistral-common` checkpoints) or a custom tokenizer class (Kimi-K3). That is the vendor-code

@@ -261,7 +261,9 @@ ones its manifest lists, naming the files that differ.
 
 Finds the manifest whose `model` is the given id (`fixtures/qwen3-8b/manifest.toml`), runs every
 case under `corpus/render/` through the checkpoint's own chat template at the pinned revision
-(`transformers.apply_chat_template`), and writes `fixtures/qwen3-8b/render/<set>.jsonl`, or
+(`transformers.apply_chat_template`, each message's content in the format vLLM selects for the
+template: a one-item text part list for a template that loops over the content, else the string),
+and writes `fixtures/qwen3-8b/render/<set>.jsonl`, or
 `<set>.jsonl.zst` in Git LFS for an imported set (`corpus/README.md`), with each set's counts and
 plain-content sha256 in `fixtures/qwen3-8b/sets.toml`. `--set NAME` records only the named sets. Per
 case the file holds the request, the prompt token ids, the rendered text and the oracle versions. A
