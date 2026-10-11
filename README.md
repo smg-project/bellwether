@@ -140,6 +140,10 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [laguna-xs.2](fixtures/laguna-xs.2/sets.toml) | poolside/Laguna-XS.2 @ a397bde0 | 1 | 3 | 27161 | 41372 | 10518 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [lfm2.5-1.2b-instruct](fixtures/lfm2.5-1.2b-instruct/sets.toml) | LiquidAI/LFM2.5-1.2B-Instruct @ 0f604ada | 2 | 2 | 27421 | 54418 | 10092 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [ling-3.0-flash](fixtures/ling-3.0-flash/sets.toml) | inclusionAI/Ling-3.0-flash @ ef06d91f | 2 | 3 | 27161 | 54195 | 10575 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [llama-3.1-nemotron-8b-ultralong-1m-instruct](fixtures/llama-3.1-nemotron-8b-ultralong-1m-instruct/sets.toml) | nvidia/Llama-3.1-Nemotron-8B-UltraLong-1M-Instruct @ fa3a10b9 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [llama-3.1-nemotron-8b-ultralong-2m-instruct](fixtures/llama-3.1-nemotron-8b-ultralong-2m-instruct/sets.toml) | nvidia/Llama-3.1-Nemotron-8B-UltraLong-2M-Instruct @ 243daed3 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [llama-3.1-nemotron-8b-ultralong-4m-instruct](fixtures/llama-3.1-nemotron-8b-ultralong-4m-instruct/sets.toml) | nvidia/Llama-3.1-Nemotron-8B-UltraLong-4M-Instruct @ 02ae0431 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [llama-3.1-nemotron-safety-guard-8b-v3](fixtures/llama-3.1-nemotron-safety-guard-8b-v3/sets.toml) | nvidia/Llama-3.1-Nemotron-Safety-Guard-8B-v3 @ 8fdc246b | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [llama-xlam-2-8b-fc-r](fixtures/llama-xlam-2-8b-fc-r/sets.toml) | Salesforce/Llama-xLAM-2-8b-fc-r @ a0efe39a | 1 | 3 | 38440 | 40529 | 9 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [llava-1.5-7b-hf](fixtures/llava-1.5-7b-hf/sets.toml) | llava-hf/llava-1.5-7b-hf @ b234b804 | 1 | 3 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [mimo-v2.5](fixtures/mimo-v2.5/sets.toml) | XiaomiMiMo/MiMo-V2.5 @ 63651580 | 2 | 2 | 27160 | 54181 | 10590 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
@@ -148,6 +152,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [minimax-m2.7](fixtures/minimax-m2.7/sets.toml) | MiniMaxAI/MiniMax-M2.7 @ d494266a | 1 | 3 | 27161 | 12821 | 10427 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [minimax-m3](fixtures/minimax-m3/sets.toml) | MiniMaxAI/MiniMax-M3 @ f0e1c1e0 | 1 | 1 | 27161 | 54180 | 10590 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [mistral-7b-instruct-v0.3](fixtures/mistral-7b-instruct-v0.3/sets.toml) | mistralai/Mistral-7B-Instruct-v0.3 @ c170c708 | 1 | 3 | 27154 | 0 | 10359 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
+| [mistral-small-24b-instruct-2501](fixtures/mistral-small-24b-instruct-2501/sets.toml) | mistralai/Mistral-Small-24B-Instruct-2501 @ 9527884b | 1 | 3 | 238488 | 184972 | 533009 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [muse-glimmer-30b](fixtures/muse-glimmer-30b/sets.toml) | meta-models/Muse-Glimmer-30B @ a4e59da5 | 1 | 2 | 27161 | 52257 | 10513 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [nanbeige4.2-3b](fixtures/nanbeige4.2-3b/sets.toml) | Nanbeige/Nanbeige4.2-3B @ b82e54bd | 1 | 2 | 27160 | 54195 | 10576 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [nvidia-nemotron-3-nano-30b-a3b-bf16](fixtures/nvidia-nemotron-3-nano-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 @ bf77c317 | 1 | 2 | 27161 | 12829 | 10419 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
@@ -194,9 +199,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [tinyllama-1.1b-chat-v1.0](fixtures/tinyllama-1.1b-chat-v1.0/sets.toml) | TinyLlama/TinyLlama-1.1B-Chat-v1.0 @ fe8a4ea1 | 1 | 3 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [trinity-mini](fixtures/trinity-mini/sets.toml) | arcee-ai/Trinity-Mini @ cdb81e81 | 1 | 2 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 38436 | 54418 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
-| all | | 146 | | 4897390 | 6255101 | 4471782 | |
+| all | | 151 | | 7170982 | 8272813 | 5565247 | |
 
-820 more groups (1278 checkpoints) have a manifest and nothing recorded yet.
+815 more groups (1273 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
