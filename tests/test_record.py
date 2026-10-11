@@ -26,7 +26,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.content_format import detect_content_format, in_content_format
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
-from bellwether.record.reference import HfTemplateOracle
+from bellwether.record.reference import HfTemplateOracle, load_tokenizer
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids, next_messages
 from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
@@ -1961,6 +1961,28 @@ def test_a_hub_checkpoint_needs_its_generation_config_cached_or_known_absent(tmp
     absent.unlink()
     (snapshot / "generation_config.json").write_text(json.dumps({"eos_token_id": [7, 8]}))
     assert generation_eos_ids("acme/Tiny-Chat", revision) == ([7, 8], "generation_config.json")
+
+
+def test_a_hub_checkpoint_that_ships_no_config_json_loads_its_tokenizer_offline(tiny_model, tmp_path, monkeypatch):
+    # Mistral's own layout ships the tokenizer and the template and no config.json. Online, transformers takes the 404
+    # for an empty model config and loads the tokenizer; offline, as the recorder runs, it cannot tell a config.json the
+    # cache marks absent from one it never fetched, and refuses.
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", str(tmp_path))
+    monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_OFFLINE", True)
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    repo = tmp_path / "models--acme--No-Config-Chat"
+    snapshot = repo / "snapshots" / revision
+    snapshot.mkdir(parents=True)
+    for name in ("tokenizer.json", "tokenizer_config.json"):
+        shutil.copyfile(tiny_model / name, snapshot / name)
+    absent = repo / ".no_exist" / revision / "config.json"
+    absent.parent.mkdir(parents=True)
+    absent.touch()
+
+    tokenizer = load_tokenizer("acme/No-Config-Chat", revision, {"revision": revision})
+
+    expected = Tokenizer.from_file(str(tiny_model / "tokenizer.json")).encode("Paris", add_special_tokens=False).ids
+    assert tokenizer.encode("Paris", add_special_tokens=False) == expected
 
 
 def test_config_json_is_read_with_the_defaults_of_the_class_transformers_has_for_its_model_type(

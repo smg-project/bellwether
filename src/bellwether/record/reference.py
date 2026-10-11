@@ -150,6 +150,13 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
             tokenizer_class = tokenizer_class_from_name(named)
             if tokenizer_class is not None:
                 return tokenizer_class.from_pretrained(model, **kwargs)
+    # A checkpoint that ships no config.json (Mistral's own layout): online, transformers takes the 404 for an empty
+    # model config and goes on; offline, as the recorder runs, it cannot tell a file the cache marks absent from one it
+    # never fetched, and refuses. The empty config it would have built loads the same tokenizer either way.
+    if not Path(model).is_dir() and checkpoint_file(model, revision, "config.json") is None:
+        from transformers import PreTrainedConfig
+
+        return AutoTokenizer.from_pretrained(model, config=PreTrainedConfig(), **kwargs)
     return AutoTokenizer.from_pretrained(model, **kwargs)
 
 
