@@ -1558,11 +1558,12 @@ def test_committed_fixtures_are_canonical_sorted_and_valid(path):
 
 
 def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
-    """One committed set against its manifest, its ``sets.toml`` table and the schema; skipped while a pointer."""
+    """One committed set against its manifest, its ``sets.toml`` table and the schema; skipped while a pointer. The set
+    is read a line at a time, hashed as it goes: a tau2 render set holds 2 GB of plain JSON Lines, which parsed whole
+    is more than a hosted runner's memory."""
     if is_lfs_pointer(path):
         pytest.skip(f"Git LFS has not fetched this set; fetch it with: {lfs_pull_command([path], root)}")
     manifest = load_manifest(path.parent.parent / "manifest.toml")
-    plain = plain_text(path)
     name = path.name.removesuffix(".zst").removesuffix(".jsonl")
     table = set_tables.read(path.parent.parent / set_tables.FILE).get((path.parent.name, name))
     assert table is not None, f"{path}: sets.toml has no table for this set"
@@ -1570,25 +1571,33 @@ def check_committed_set(path: pathlib.Path, root: pathlib.Path) -> None:
     generate = {field: table[field] for field in set_tables.GENERATE_FIELDS if field in table}
     if path.parent.name == "parse":  # recorded from a hub checkpoint, which ships config.json at least
         assert list(generate) == list(set_tables.GENERATE_FIELDS), f"{path}: sets.toml names no stop ids of generate's"
-    expected = set_tables.entry(form, plain, table["cases"], table["rejected"], **generate)
+    digest, size, count, previous = hashlib.sha256(), 0, 0, None
+    # Only "\n" ends a line (open_text reads with newline="\n"): U+2028 and the like stay raw inside a case's strings.
+    with storage.open_text(path) as lines:
+        for line in lines:
+            data = line.encode("utf-8")
+            digest.update(data)
+            size += len(data)
+            assert line.endswith("\n"), f"{path}: the last line does not end in a newline"
+            raw = line.removesuffix("\n")
+            case = json.loads(raw)
+            count += 1
+            if not committed_line_valid(case):
+                validator().validate(case)  # jsonschema's error names the field
+                pytest.fail(f"{path}: {case['id']}: jsonschema-rs refuses the line and jsonschema takes it")
+            assert previous is None or previous <= case["id"], f"{path}: {case['id']} is out of order"
+            previous = case["id"]
+            assert raw == canonical_line(case)
+            assert case["id"].startswith(f"{manifest.slug}/{path.parent.name}/")
+            assert case["model"] == manifest.model
+            assert case["reference"]["provenance"]["revision"] == manifest.revision
+            if case["kind"] == "parse":
+                assert len(case["output_pieces"]) == len(case["output_ids"])
+                assert "".join(case["output_pieces"]) == case["reference"]["text"]
+    expected = set_tables.entry(form, "", table["cases"], table["rejected"], **generate)
+    expected |= {"plain_bytes": size, "plain_sha256": digest.hexdigest()}
     assert table == expected, f"{path}: its sets.toml table does not match the file"
-    # Only "\n" ends a line: U+2028 and the like stay raw inside a case's strings.
-    lines = plain.split("\n")
-    assert lines.pop() == "", f"{path}: the last line does not end in a newline"
-    assert len(lines) == table["cases"]
-    cases = [json.loads(line) for line in lines]
-    assert [c["id"] for c in cases] == sorted(c["id"] for c in cases)
-    for raw, case in zip(lines, cases, strict=True):
-        if not committed_line_valid(case):
-            validator().validate(case)  # jsonschema's error names the field
-            pytest.fail(f"{path}: {case['id']}: jsonschema-rs refuses the line and jsonschema takes it")
-        assert raw == canonical_line(case)
-        assert case["id"].startswith(f"{manifest.slug}/{path.parent.name}/")
-        assert case["model"] == manifest.model
-        assert case["reference"]["provenance"]["revision"] == manifest.revision
-        if case["kind"] == "parse":
-            assert len(case["output_pieces"]) == len(case["output_ids"])
-            assert "".join(case["output_pieces"]) == case["reference"]["text"]
+    assert count == table["cases"]
 
 
 def record_argv(tmp_path, tiny_model, *extra: str) -> list[str]:
@@ -2459,6 +2468,31 @@ def test_a_pointer_error_names_the_command_that_fetches_it_from_the_repository_r
     for given in (pointer, pathlib.Path("render/bench-x.jsonl.zst")):
         with pytest.raises(ValueError, match=re.escape(FETCH_BENCH_X)):
             plain_text(given)
+
+
+def test_the_committed_fixture_check_reads_a_set_a_line_at_a_time(tmp_path, tiny_model, monkeypatch):
+    """A set runs to gigabytes (a tau2 telecom render set holds 2 GB of plain JSON Lines), more than a hosted runner's
+    memory takes parsed whole: the check reads a line at a time and never the set whole."""
+    cases = [{"name": name, "request": {"messages": [user(name)]}} for name in ("a", "b", "c")]
+    status, out_dir = record(tmp_path, tiny_model, ("bench-x", cases))
+    assert status == 0
+
+    def whole(path):
+        raise AssertionError(f"{path} was read whole")
+
+    monkeypatch.setitem(globals(), "plain_text", whole)
+    check_committed_set(out_dir / "bench-x.jsonl", tmp_path)
+
+
+def test_the_committed_fixture_check_refuses_a_set_its_table_does_not_describe(tmp_path, tiny_model):
+    cases = [{"name": name, "request": {"messages": [user(name)]}} for name in ("a", "b")]
+    status, out_dir = record(tmp_path, tiny_model, ("bench-x", cases))
+    assert status == 0
+    sets_toml = out_dir.parent / set_tables.FILE
+    zeros = 'plain_sha256 = "' + "0" * 64 + '"'
+    sets_toml.write_text(re.sub(r'plain_sha256 = "[0-9a-f]+"', zeros, sets_toml.read_text()))
+    with pytest.raises(AssertionError, match="its sets.toml table does not match the file"):
+        check_committed_set(out_dir / "bench-x.jsonl", tmp_path)
 
 
 def test_the_committed_fixture_check_skips_a_set_git_lfs_has_not_fetched(tmp_path):
