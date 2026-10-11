@@ -112,10 +112,13 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 |---|---|---:|---:|---:|---:|---:|---|
 | [ai21-jamba2-3b](fixtures/ai21-jamba2-3b/sets.toml) | ai21labs/AI21-Jamba2-3B @ 525c6c8e | 2 | 2 | 38436 | 41533 | 9 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [apertus-8b-instruct-2509](fixtures/apertus-8b-instruct-2509/sets.toml) | swiss-ai/Apertus-8B-Instruct-2509 @ b946d404 | 1 | 2 | 136946 | 137178 | 382850 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm |
+| [contextpilot-14b](fixtures/contextpilot-14b/sets.toml) | tencent/ContextPilot-14B @ 8eafd835 | 8 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [deepseek-r1](fixtures/deepseek-r1/sets.toml) | deepseek-ai/DeepSeek-R1 @ 56d4cbbb | 2 | 3 | 23 | 0 | 1 | hand-written |
 | [deepseek-v3-0324](fixtures/deepseek-v3-0324/sets.toml) | deepseek-ai/DeepSeek-V3-0324 @ e9b33add | 2 | 3 | 38439 | 18947 | 15694 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [deepseek-v3.1](fixtures/deepseek-v3.1/sets.toml) | deepseek-ai/DeepSeek-V3.1 @ c0781d03 | 3 | 3 | 38439 | 18947 | 15694 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [deepseek-v3.2-exp](fixtures/deepseek-v3.2-exp/sets.toml) | deepseek-ai/DeepSeek-V3.2-Exp @ 194c67e1 | 2 | 3 | 531735 | 184972 | 254532 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 38439 | 54418 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [devstral-2-123b-instruct-2512](fixtures/devstral-2-123b-instruct-2512/sets.toml) | mistralai/Devstral-2-123B-Instruct-2512 @ 1613bf01 | 1 | 2 | 531730 | 570194 | 6591 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [dots3-note-prev](fixtures/dots3-note-prev/sets.toml) | dots-studio/dots3-note-prev @ 1e1e7b0c | 1 | 3 | 238490 | 589296 | 278839 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ernie-4.5-21b-a3b-thinking](fixtures/ernie-4.5-21b-a3b-thinking/sets.toml) | baidu/ERNIE-4.5-21B-A3B-Thinking @ 4341bb42 | 1 | 3 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [gemma-4-e4b-it](fixtures/gemma-4-e4b-it/sets.toml) | google/gemma-4-E4B-it @ ee0ef602 | 2 | 2 | 238484 | 478241 | 389900 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -140,6 +143,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [laguna-xs.2](fixtures/laguna-xs.2/sets.toml) | poolside/Laguna-XS.2 @ a397bde0 | 1 | 3 | 27161 | 41372 | 10518 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [lfm2.5-1.2b-instruct](fixtures/lfm2.5-1.2b-instruct/sets.toml) | LiquidAI/LFM2.5-1.2B-Instruct @ 0f604ada | 2 | 2 | 27421 | 54418 | 10092 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [ling-3.0-flash](fixtures/ling-3.0-flash/sets.toml) | inclusionAI/Ling-3.0-flash @ ef06d91f | 2 | 3 | 27161 | 54195 | 10575 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [llama-3.3-nemotron-70b-reward-principle](fixtures/llama-3.3-nemotron-70b-reward-principle/sets.toml) | nvidia/Llama-3.3-Nemotron-70B-Reward-Principle @ ac3e237f | 3 | 2 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [llama-xlam-2-8b-fc-r](fixtures/llama-xlam-2-8b-fc-r/sets.toml) | Salesforce/Llama-xLAM-2-8b-fc-r @ a0efe39a | 1 | 3 | 38440 | 40529 | 9 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [llava-1.5-7b-hf](fixtures/llava-1.5-7b-hf/sets.toml) | llava-hf/llava-1.5-7b-hf @ b234b804 | 1 | 3 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [mimo-v2.5](fixtures/mimo-v2.5/sets.toml) | XiaomiMiMo/MiMo-V2.5 @ 63651580 | 2 | 2 | 27160 | 54181 | 10590 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
@@ -194,9 +198,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [tinyllama-1.1b-chat-v1.0](fixtures/tinyllama-1.1b-chat-v1.0/sets.toml) | TinyLlama/TinyLlama-1.1B-Chat-v1.0 @ fe8a4ea1 | 1 | 3 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [trinity-mini](fixtures/trinity-mini/sets.toml) | arcee-ai/Trinity-Mini @ cdb81e81 | 1 | 2 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 38436 | 54418 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
-| all | | 146 | | 4897390 | 6255101 | 4471782 | |
+| all | | 160 | | 7001367 | 8051538 | 4879592 | |
 
-820 more groups (1278 checkpoints) have a manifest and nothing recorded yet.
+816 more groups (1264 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
