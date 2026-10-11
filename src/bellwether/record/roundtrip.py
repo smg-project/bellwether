@@ -49,7 +49,8 @@ arguments as they are. That difference is recorded here, not decided. A parse ca
 carry its arguments as a JSON object string, the one a parser returns: that is a rule of the corpus,
 not of an engine. A template that cannot take an object (DeepSeek's concatenate the string) fails the
 case: that is a finding about the template and the engines, reported, never worked around. The
-reference message keeps the JSON string.
+reference message keeps the JSON string, spelled as a parser returns it
+(``with_arguments_as_parsers_return_them``).
 
 The output's ids are the tokenizer's encoding of the output text, the turn up to its stop id, and they
 must decode back to it. A normalizer that applies a Unicode normalization form can change the text
@@ -607,6 +608,24 @@ def as_vllm_gives_it(message: dict) -> dict:
             except json.JSONDecodeError:
                 arguments = None
         function["arguments"] = arguments if isinstance(arguments, dict) else {}
+    return message
+
+
+def with_arguments_as_parsers_return_them(message: dict) -> dict:
+    """A copy of a parse case's message with each call's arguments spelled as a parser returns them.
+
+    vLLM's tool parsers build a call's arguments with ``json.dumps(..., ensure_ascii=False)`` of the object they read:
+    keys in their order, non-ASCII as it is, ``", "`` and ``": "`` between items. A corpus case keeps the spelling its
+    source wrote (tau2's trajectories write compact JSON), and the template renders the object whatever the spelling,
+    so the reference states the arguments in the one spelling a parser gives back. ``check_parse_call_arguments`` has
+    made sure each is a JSON object string.
+    """
+    if not message.get("tool_calls"):
+        return message
+    message = copy.deepcopy(message)
+    for call in message["tool_calls"]:
+        function = call["function"]
+        function["arguments"] = json.dumps(json.loads(function["arguments"]), ensure_ascii=False)
     return message
 
 

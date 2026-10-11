@@ -428,6 +428,20 @@ def test_a_media_part_is_rejected_since_the_reference_cannot_resolve_it():
         in_content_format([{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}], "openai")
 
 
+def test_record_spells_a_parse_cases_reference_arguments_as_the_engines_parsers_return_them(tmp_path, tiny_model):
+    """A parser returns a call's arguments as ``json.dumps`` of the object it read: keys in their order, non-ASCII as
+    it is, ``", "`` and ``": "`` between items (vLLM's tool parsers). The reference spells them that way whatever
+    spelling the corpus case carries (tau2's trajectories carry compact JSON); the request keeps the case's own."""
+    compact = {"type": "function", "function": {"name": "get_weather", "arguments": '{"city":"Zürich","unit":"C"}'}}
+    request = {"messages": [user("Weather?")], "tools": [WEATHER_TOOL]}
+    cases = [{"name": "call", "request": request, "message": {"content": "", "tool_calls": [compact]}}]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases), kind="parse")
+    assert status == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/parse/call"]
+    assert line["reference"]["message"]["tool_calls"][0]["function"]["arguments"] == '{"city": "Zürich", "unit": "C"}'
+    assert line["request"] == request
+
+
 def record(
     tmp_path, tiny_model, *corpus_sets: tuple[str, list[dict]], kind: str = "render"
 ) -> tuple[int, pathlib.Path]:
