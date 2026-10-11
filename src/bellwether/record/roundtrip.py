@@ -45,7 +45,10 @@ the release whose image bellwether pins): a call's arguments become the object t
 anything that does not decode to a JSON object becomes ``{}``, and an empty ``tool_calls`` is
 dropped. SGLang differs: at 7d22b7a8 (``normalize_assistant_tool_call_arguments``) it rejects a
 string that is not a JSON object, except under Kimi-K3's encoding, and leaves missing or null
-arguments as they are. That difference is recorded here, not decided. A parse case's own call must
+arguments as they are. That difference is recorded here, not decided. Every message's content
+reaches the template in the content format vLLM selects for it (``content_format``), so a call's
+turn without content is ``[]`` or ``""``, never None, which GLM's templates would write out as the
+text ``None``, and a tool result is its text. A parse case's own call must
 carry its arguments as a JSON object string, the one a parser returns: that is a rule of the corpus,
 not of an engine. A template that cannot take an object (DeepSeek's concatenate the string) fails the
 case: that is a finding about the template and the engines, reported, never worked around. The
@@ -79,6 +82,7 @@ from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
 from . import vendor
+from .content_format import ContentFormat, in_content_format
 from .reference import HfTemplateOracle, checkpoint_file
 
 SOURCE = "roundtrip"
@@ -93,6 +97,7 @@ class OutputText:
     finish_reason: str
     end_of_turn: dict
     ids_without_unicode_normalization: bool
+    content_format: ContentFormat
 
 
 class RoundtripOracle:
@@ -118,13 +123,11 @@ class RoundtripOracle:
             )
         messages = [as_vllm_gives_it(m) if m.get("role") == "assistant" else m for m in request["messages"]]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
+        prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
         assistant = {"role": "assistant", **as_vllm_gives_it(message)}
         self.check_no_stop_id_in_the_message(assistant)
-        rendered = self.tokenizer.apply_chat_template(
-            [*messages, assistant], tokenize=False, add_generation_prompt=False, **kwargs
-        )
+        rendered = self.chat([*messages, assistant], kwargs, generation_prompt=False)
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
         self.check_every_part_is_rendered(messages, kwargs, message, rendered)
         self.check_every_part_keeps_its_edges(messages, kwargs, message, rendered)
@@ -158,7 +161,25 @@ class RoundtripOracle:
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
         end_of_turn = {"stop_id": cut.stop_id, "found_by": cut.found_by}
         return OutputText(
-            text, output_ids, output_pieces, finish_reason, end_of_turn, ids_without_unicode_normalization
+            text,
+            output_ids,
+            output_pieces,
+            finish_reason,
+            end_of_turn,
+            ids_without_unicode_normalization,
+            self.renderer.content_format(kwargs.get("tools")),
+        )
+
+    def chat(self, messages: list, kwargs: dict, *, generation_prompt: bool) -> str:
+        """The template's rendering of ``messages`` with each one's content as vLLM hands it to the template for the
+        request: in the content format the engine selects for the template (``in_content_format``), so a null content
+        is ``[]`` or ``""``, never None, and a tool result is its text."""
+        content_format = self.renderer.content_format(kwargs.get("tools"))
+        return self.tokenizer.apply_chat_template(
+            in_content_format(messages, content_format),
+            tokenize=False,
+            add_generation_prompt=generation_prompt,
+            **kwargs,
         )
 
     def check_no_stop_id_in_the_message(self, assistant: dict) -> None:
@@ -182,9 +203,7 @@ class RoundtripOracle:
     def render_next_message(self, messages: list, assistant: dict, message: dict, kwargs: dict) -> str:
         """The conversation rendered with the next message after the turn, for a turn that holds no stop id."""
         try:
-            return self.tokenizer.apply_chat_template(
-                [*messages, assistant, *next_messages(message)], tokenize=False, add_generation_prompt=False, **kwargs
-            )
+            return self.chat([*messages, assistant, *next_messages(message)], kwargs, generation_prompt=False)
         except Exception as err:
             raise ValueError(
                 f"no stop id in the turn, and the template cannot render the next message: {type(err).__name__}: {err}"
@@ -238,9 +257,7 @@ class RoundtripOracle:
             for change, what in ((renamed, "renaming"), (with_marker_argument, "adding an argument to")):
                 variant = {"role": "assistant", **as_vllm_gives_it(change(message, index))}
                 try:
-                    again = self.tokenizer.apply_chat_template(
-                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
-                    )
+                    again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
                     continue
                 if again == rendered:
@@ -265,9 +282,7 @@ class RoundtripOracle:
                 continue
             variant = {"role": "assistant", **as_vllm_gives_it({**message, part: text + MARKER})}
             try:
-                again = self.tokenizer.apply_chat_template(
-                    [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
-                )
+                again = self.chat([*messages, variant], kwargs, generation_prompt=False)
             except Exception:
                 continue
             if again == rendered:
@@ -296,9 +311,7 @@ class RoundtripOracle:
                     continue
                 variant = {"role": "assistant", **as_vllm_gives_it({**message, part: rest})}
                 try:
-                    again = self.tokenizer.apply_chat_template(
-                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
-                    )
+                    again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
                     continue
                 if again == rendered:
@@ -321,9 +334,7 @@ class RoundtripOracle:
             for path, value in argument_entries(arguments):
                 variant = {"role": "assistant", **as_vllm_gives_it(without_entry(message, index, path))}
                 try:
-                    again = self.tokenizer.apply_chat_template(
-                        [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
-                    )
+                    again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
                     continue
                 if again == rendered:
@@ -370,9 +381,7 @@ class RoundtripOracle:
                 for candidate in same_text_candidates(value, types):
                     variant = {"role": "assistant", **as_vllm_gives_it(with_argument(message, index, name, candidate))}
                     try:
-                        again = self.tokenizer.apply_chat_template(
-                            [*messages, variant], tokenize=False, add_generation_prompt=False, **kwargs
-                        )
+                        again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                     except Exception:
                         continue
                     if again == rendered:

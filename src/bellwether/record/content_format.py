@@ -17,16 +17,16 @@ target that is not a plain name where the engine asserts one, is of the "string"
 engine resolves the template per request, so a checkpoint with named templates is detected on the one transformers
 applies for the request.
 
-The messages are converted as ``_parse_chat_message_content`` in ``vllm/entrypoints/chat_utils.py:2007`` converts them
-for the "openai" format: a string becomes ``[{"type": "text", "text": ...}]``; a missing or null content an empty list;
-in a list, a bare string becomes a text part and a text part keeps its ``text`` and its other fields
-(``_parse_chat_message_content_part``, ``:1875``). A tool message is left as the request gives it: the engine joins a
-tool result's text parts back into one string (``:2049-2064``), so its string never reaches the template as parts. A
-part of another type is a media part, which the engine resolves and the reference cannot, so the case is rejected. In
-the "string" format the content is left as the request gives it: a string is what the engine hands through (the text
-parts of a message joined with newlines, ``_parse_chat_message_content_parts``, ``:1814``, which leaves a string as it
-is). Nothing else of the engine's pipeline is applied here: tool call arguments, the developer role and the thinking
-fields reach the template as the request gives them.
+The messages are converted as ``_parse_chat_message_content`` in ``vllm/entrypoints/chat_utils.py:2007`` converts them.
+A template never gets a null content: the engine reads a missing or null content as no parts. In the "openai" format a
+string becomes ``[{"type": "text", "text": ...}]`` and no parts an empty list; in a list, a bare string becomes a text
+part and a text part keeps its ``text`` and its other fields (``_parse_chat_message_content_part``, ``:1875``). In the
+"string" format the text parts are joined with newlines, no parts giving the empty string, and a string is handed
+through as it is (``_parse_chat_message_content_parts``, ``:1814``). A tool result is its text in either format: the
+engine joins its text parts back into one string, no parts giving the empty string (``:2049-2064``). A part of another
+type is a media part, which the engine resolves and the reference cannot, so the case is rejected. Nothing else of the
+engine's pipeline is applied here: tool call arguments, the developer role and the thinking fields reach the template
+as the request gives them.
 """
 
 from __future__ import annotations
@@ -64,17 +64,27 @@ def in_content_format(messages: list[dict], content_format: ContentFormat) -> li
     """A copy of ``messages`` with each message's content in ``content_format``, as the engine hands them to the
     template.
 
-    Only the "openai" format converts anything; the "string" format is the request as given. A message is copied only
-    when its content changes, so the request's own objects are never written to.
+    A message is copied only when its content changes, so the request's own objects are never written to.
     """
-    if content_format != "openai":
-        return messages
-    return [_in_openai_format(message) for message in messages]
+    convert = _in_openai_format if content_format == "openai" else _as_text
+    return [_as_text(message) if message.get("role") == "tool" else convert(message) for message in messages]
+
+
+def _as_text(message: dict) -> dict:
+    """The message with its content as one string: the text parts joined with newlines, no parts the empty string."""
+    content = message.get("content")
+    if isinstance(content, str):
+        return message
+    if content is None:
+        text = ""
+    elif isinstance(content, list):
+        text = "\n".join(_text_part(part)["text"] for part in content)
+    else:
+        raise ValueError(f"a message's content is neither a string nor a list of parts: {type(content).__name__}")
+    return {**copy.deepcopy(message), "content": text}
 
 
 def _in_openai_format(message: dict) -> dict:
-    if message.get("role") == "tool":
-        return message
     content = message.get("content")
     if isinstance(content, str):
         parts = [{"type": "text", "text": content}]

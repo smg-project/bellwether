@@ -404,6 +404,8 @@ def test_messages_in_the_openai_format_are_what_the_engine_hands_the_template():
         {"role": "assistant", "content": None, "tool_calls": [weather_call()]},
         {"role": "assistant", "tool_calls": [weather_call()]},
         {"role": "tool", "content": "sunny", "tool_call_id": "1"},
+        {"role": "tool", "content": None, "tool_call_id": "2"},
+        {"role": "tool", "content": [{"type": "text", "text": "sunny"}, {"type": "text", "text": "21 C"}]},
     ]
     before = copy.deepcopy(messages)
     assert in_content_format(messages, "openai") == [
@@ -418,14 +420,103 @@ def test_messages_in_the_openai_format_are_what_the_engine_hands_the_template():
         {"role": "assistant", "content": [], "tool_calls": [weather_call()]},
         {"role": "assistant", "content": [], "tool_calls": [weather_call()]},
         {"role": "tool", "content": "sunny", "tool_call_id": "1"},
+        {"role": "tool", "content": "", "tool_call_id": "2"},
+        {"role": "tool", "content": "sunny\n21 C"},
     ]
-    assert in_content_format(messages, "string") == messages
+    assert messages == before
+
+
+def test_messages_in_the_string_format_are_what_the_engine_hands_the_template():
+    """vLLM never hands a template a null content: in the "string" format a message's text parts are joined with
+    newlines and a null or missing content is the empty string (``_parse_chat_message_content``), so a template that
+    writes the content as it is writes nothing, not ``None``."""
+    messages = [
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": [{"type": "text", "text": "Hi", "cache_control": {"type": "ephemeral"}}, "there"]},
+        {"role": "assistant", "content": None, "tool_calls": [weather_call()]},
+        {"role": "assistant", "tool_calls": [weather_call()]},
+        {"role": "tool", "content": None, "tool_call_id": "1"},
+    ]
+    before = copy.deepcopy(messages)
+    assert in_content_format(messages, "string") == [
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": "Hi\nthere"},
+        {"role": "assistant", "content": "", "tool_calls": [weather_call()]},
+        {"role": "assistant", "content": "", "tool_calls": [weather_call()]},
+        {"role": "tool", "content": "", "tool_call_id": "1"},
+    ]
+    assert in_content_format(messages, "string")[0] is messages[0]
     assert messages == before
 
 
 def test_a_media_part_is_rejected_since_the_reference_cannot_resolve_it():
-    with pytest.raises(ValueError, match="image_url"):
-        in_content_format([{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}], "openai")
+    for content_format in ("openai", "string"):
+        with pytest.raises(ValueError, match="image_url"):
+            in_content_format(
+                [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}], content_format
+            )
+
+
+def visible_text_template() -> str:
+    """GLM's way with content, of the "openai" format: a macro loops over a message's content and writes anything
+    else as it is, so a null content would come out as ``None``."""
+    return (
+        "{%- macro visible(content) %}{%- if content is string %}{{ content }}"
+        "{%- elif content is iterable and content is not mapping %}{%- for p in content %}{{ p.text }}{%- endfor %}"
+        "{%- else %}{{ content }}{%- endif %}{%- endmacro %}"
+        "{%- for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' }}{{ visible(m['content']) }}"
+        "{%- for c in (m['tool_calls'] or []) %}{{ '<tool_call>' + c['function']['name'] + ' ' }}"
+        "{{- c['function']['arguments'] | tojson }}{{ '</tool_call>' }}{%- endfor %}"
+        "{{ '<|im_end|>\\n' }}{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+def bare_content_template() -> str:
+    """A template of the "string" format that writes the content as it is."""
+    return (
+        "{%- for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' }}{{ m['content'] }}"
+        "{%- for c in (m['tool_calls'] or []) %}{{ '<tool_call>' + c['function']['name'] + ' ' }}"
+        "{{- c['function']['arguments'] | tojson }}{{ '</tool_call>' }}{%- endfor %}"
+        "{{ '<|im_end|>\\n' }}{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "template", "content_format"),
+    [
+        pytest.param("visible-chat", visible_text_template(), "openai", id="openai"),
+        pytest.param("bare-chat", bare_content_template(), "string", id="string"),
+    ],
+)
+def test_roundtrip_hands_the_template_a_null_content_as_vllm_does(
+    tiny_model, tmp_path_factory, name, template, content_format
+):
+    """The round trip renders the turn the way the engine renders it for the request: a call's turn without content
+    reaches the template as ``[]`` or ``""``, never as None, so the output holds no ``None`` the model never writes.
+    The history goes the same way."""
+    model = tiny_variant(tiny_model, tmp_path_factory, name, template)
+    assert detect_content_format(template) == content_format
+    history = [user("Weather?"), {"role": "assistant", "content": None, "tool_calls": [weather_call()]}]
+    request = {"messages": [*history, {"role": "tool", "content": None, "tool_call_id": "1"}, user("And now?")]}
+    out = RoundtripOracle(str(model), "local").render_output(request, {"content": None, "tool_calls": [weather_call()]})
+    assert out.text == '<tool_call>get_weather {"city": "Paris"}</tool_call>'
+    assert "None" not in "".join(out.output_pieces)
+
+
+def test_a_tool_result_without_content_reaches_the_template_as_an_empty_string(parts_model):
+    tool = {"role": "tool", "content": None, "tool_call_id": "1"}
+    rendered = HfTemplateOracle(str(parts_model), "local").render({"messages": [user("Hi"), tool]})
+    assert rendered.text == "<|im_start|>user\nHi|<|im_end|>\n<|im_start|>tool\n<|im_end|>\n<|im_start|>assistant\n"
+
+
+def test_record_writes_a_parse_lines_content_format_in_its_provenance(tmp_path, parts_model):
+    cases = [{"name": "a", "request": {"messages": [user("Hi")]}, "message": {"content": "Hello"}}]
+    status, out_dir = record(tmp_path, parts_model, ("common", cases), kind="parse")
+    assert status == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/parse/a"]
+    assert line["reference"]["provenance"]["content_format"] == "openai"
 
 
 def record(

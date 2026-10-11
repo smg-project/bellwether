@@ -229,7 +229,8 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "finish_reason": output.finish_reason,
             "end_of_turn": output.end_of_turn,
             "text": output.text,
-            "provenance": provenance,
+            # The content format is the template's, resolved per request, as for a render line.
+            "provenance": {**provenance, "content_format": output.content_format},
         },
     }
     return line, output.ids_without_unicode_normalization
