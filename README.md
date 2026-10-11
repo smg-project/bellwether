@@ -119,8 +119,14 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [dots3-note-prev](fixtures/dots3-note-prev/sets.toml) | dots-studio/dots3-note-prev @ 1e1e7b0c | 1 | 3 | 27161 | 54195 | 10575 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [ernie-4.5-21b-a3b-thinking](fixtures/ernie-4.5-21b-a3b-thinking/sets.toml) | baidu/ERNIE-4.5-21B-A3B-Thinking @ 4341bb42 | 1 | 3 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [gemma-4-e4b-it](fixtures/gemma-4-e4b-it/sets.toml) | google/gemma-4-E4B-it @ ee0ef602 | 2 | 2 | 27161 | 54416 | 10354 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [glm-4.5v](fixtures/glm-4.5v/sets.toml) | zai-org/GLM-4.5V @ ed47433b | 1 | 3 | 238490 | 492389 | 364866 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [glm-4.6](fixtures/glm-4.6/sets.toml) | zai-org/GLM-4.6 @ be721948 | 3 | 2 | 27161 | 43309 | 10581 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [glm-4.6v](fixtures/glm-4.6v/sets.toml) | zai-org/GLM-4.6V @ 4e2d47eb | 1 | 2 | 238490 | 492389 | 364866 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [glm-4.6v-flash](fixtures/glm-4.6v-flash/sets.toml) | zai-org/GLM-4.6V-Flash @ 411bb4d7 | 1 | 2 | 238490 | 492389 | 364866 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [glm-4.7](fixtures/glm-4.7/sets.toml) | zai-org/GLM-4.7 @ 602d01ef | 1 | 2 | 238490 | 1947 | 278545 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [glm-4.7-flash](fixtures/glm-4.7-flash/sets.toml) | zai-org/GLM-4.7-Flash @ 7dd20894 | 1 | 2 | 27161 | 1947 | 10421 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [glm-5](fixtures/glm-5/sets.toml) | zai-org/GLM-5 @ c183ef8c | 1 | 2 | 238490 | 1947 | 278545 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [glm-5.1](fixtures/glm-5.1/sets.toml) | zai-org/GLM-5.1 @ 26e1bd6e | 1 | 2 | 238490 | 163746 | 677804 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [glm-5.3-flash](fixtures/glm-5.3-flash/sets.toml) | zai-org/GLM-5.3-Flash @ eb9eb208 | 2 | 1 | 27161 | 54193 | 10577 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [granite-4.1-3b](fixtures/granite-4.1-3b/sets.toml) | ibm-granite/granite-4.1-3b @ c0650403 | 2 | 2 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [hermes-4-14b](fixtures/hermes-4-14b/sets.toml) | NousResearch/Hermes-4-14B @ d6ce765c | 1 | 2 | 38440 | 41533 | 5 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
@@ -188,9 +194,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [tinyllama-1.1b-chat-v1.0](fixtures/tinyllama-1.1b-chat-v1.0/sets.toml) | TinyLlama/TinyLlama-1.1B-Chat-v1.0 @ fe8a4ea1 | 1 | 3 | 38436 | 27865 | 7706 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [trinity-mini](fixtures/trinity-mini/sets.toml) | arcee-ai/Trinity-Mini @ cdb81e81 | 1 | 2 | 38440 | 0 | 0 | bfcl, gsm8k, hand-written, hermes, mgsm, swebench |
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 38436 | 54418 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
-| all | | 140 | | 2498568 | 3079717 | 521480 | |
+| all | | 146 | | 3929508 | 4724524 | 2850972 | |
 
-826 more groups (1284 checkpoints) have a manifest and nothing recorded yet.
+820 more groups (1278 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
