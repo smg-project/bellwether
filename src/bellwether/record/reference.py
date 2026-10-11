@@ -140,16 +140,13 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
     ``AutoTokenizer`` would choose it. A tokenizer that is the vendor's class itself is ``AutoTokenizer``'s to refuse,
     or, with ``trust_remote_code`` in the sandbox, to load."""
     from transformers import AutoTokenizer
-    from transformers.models.auto.tokenization_auto import tokenizer_class_from_name
 
     if not kwargs.get("trust_remote_code") and vendor_config(model, revision):
         path = checkpoint_file(model, revision, "tokenizer_config.json")
         config = json.loads(path.read_text()) if path is not None else {}
         named = config.get("tokenizer_class")
         if "auto_map" not in config and isinstance(named, str):
-            tokenizer_class = tokenizer_class_from_name(named)
-            if tokenizer_class is not None:
-                return tokenizer_class.from_pretrained(model, **kwargs)
+            return auto_tokenizer_class(named).from_pretrained(model, **kwargs)
     # A checkpoint that ships no config.json (Mistral's own layout): online, transformers takes the 404 for an empty
     # model config and goes on; offline, as the recorder runs, it cannot tell a file the cache marks absent from one it
     # never fetched, and refuses. The empty config it would have built loads the same tokenizer either way.
@@ -158,6 +155,21 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
 
         return AutoTokenizer.from_pretrained(model, config=PreTrainedConfig(), **kwargs)
     return AutoTokenizer.from_pretrained(model, **kwargs)
+
+
+def auto_tokenizer_class(named: str):
+    """The class ``AutoTokenizer`` loads for the ``tokenizer_class`` that ``tokenizer_config.json`` names, as
+    ``tokenization_auto.py`` chooses it at transformers 5.17.0 (lines 875-938): a trailing ``Fast`` is dropped, the
+    name is looked up as it is, then with ``Fast``; the Python base it finds for ``PreTrainedTokenizer``, which has no
+    vocabulary of its own, becomes the ``tokenizers`` backend, and so does a name transformers does not ship."""
+    from transformers import TokenizersBackend
+    from transformers.models.auto.tokenization_auto import tokenizer_class_from_name
+
+    name = named.removesuffix("Fast")
+    tokenizer_class = tokenizer_class_from_name(name) or tokenizer_class_from_name(f"{name}Fast")
+    if tokenizer_class is None or tokenizer_class.__name__ == "PythonBackend":
+        return TokenizersBackend
+    return tokenizer_class
 
 
 def checkpoint_encoder(model: str, revision: str):

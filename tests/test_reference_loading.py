@@ -47,6 +47,28 @@ def test_a_model_config_that_needs_the_vendors_code_does_not_stop_the_named_toke
     assert not (checkpoint / "ran").exists()
 
 
+@pytest.mark.parametrize(
+    "named",
+    [
+        pytest.param("PreTrainedTokenizer", id="python-base"),  # NVIDIA-Nemotron-Nano-9B-v2, Ling-lite-1.5, Ultravox
+        pytest.param("XVendorTokenizer", id="unknown-to-transformers"),
+    ],
+)
+def test_a_vendor_config_loads_the_tokenizer_class_auto_tokenizer_picks_for_the_named_one(checkpoint, named):
+    """``AutoTokenizer`` does not load a named ``PreTrainedTokenizer`` as it is: that is the Python base, with no
+    vocabulary of its own, and a name transformers does not ship is no class at all. Both load the ``tokenizers``
+    backend from ``tokenizer.json`` (``tokenization_auto.py`` at transformers 5.17.0), and so does the recorder when
+    the model config is the vendor's class."""
+    config = {"model_type": "x-vendor", "auto_map": {"AutoConfig": "configuration_x.XConfig"}}
+    (checkpoint / "config.json").write_text(json.dumps(config))
+    tokenizer_config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps({**tokenizer_config, "tokenizer_class": named}))
+    oracle = HfTemplateOracle(str(checkpoint), "local")
+    assert type(oracle.tokenizer).__name__ == "TokenizersBackend"
+    rendered = oracle.render(REQUEST)
+    assert rendered.text.startswith("<|im_start|>user\nWhat is the capital of France?<|im_end|>")
+
+
 def test_inside_the_sandbox_the_tokenizer_is_auto_tokenizers_whatever_the_model_config(checkpoint, monkeypatch):
     # With trust_remote_code the vendor's config may be built, so the named-class path, for loads that may not run the
     # vendor's code, is not taken and reads none of the checkpoint's configs.
