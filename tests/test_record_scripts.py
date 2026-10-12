@@ -212,3 +212,26 @@ def test_plain_sets_and_a_set_named_for_its_source_are_recorded_too(tmp_path):
     ]
     with pytest.raises(SystemExit, match="no corpus set for comm under"):
         record.queue(tmp_path / "corpus", ["comm"], sets_toml)
+
+
+def test_the_changed_sets_are_cut_into_shards_under_the_budget_in_path_order():
+    shards = load("set_shards").shards
+    sized = [
+        ("fixtures/a/parse/x.jsonl.zst", 3),
+        ("fixtures/a/render/x.jsonl.zst", 3),
+        ("fixtures/b/parse/y.jsonl.zst", 5),
+    ]
+    assert shards(sized, budget=6) == [
+        ["fixtures/a/parse/x.jsonl.zst", "fixtures/a/render/x.jsonl.zst"],
+        ["fixtures/b/parse/y.jsonl.zst"],
+    ]
+    # A set past the budget on its own is a shard of its own.
+    assert shards([("big", 10), ("small", 1)], budget=6) == [["big"], ["small"]]
+    assert shards([], budget=6) == []
+
+
+def test_a_sets_size_is_the_one_its_git_lfs_pointer_names(tmp_path):
+    size = load("set_shards").size
+    pointer = tmp_path / "x.jsonl.zst"
+    pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 12345\n")
+    assert size(pointer) == 12345
