@@ -122,6 +122,13 @@ jobs:
         run: |
           include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,corpus/*/%s.jsonl.zst,' "$source" "$source"; done)
           git lfs pull --include "${include%,}"
+      # A set recorded again is read first, for the engine witnesses it carries over case by case, so the group's sets
+      # of the sources named again are fetched; .lfsconfig's fetchexclude keeps every other fixture set a pointer.
+      - name: The sets to record again
+        if: inputs.again != ''
+        run: |
+          include=$(for source in $AGAIN; do printf 'fixtures/%s/*/%s-*.jsonl.zst,fixtures/%s/*/%s.jsonl.zst,' "$SLUG" "$source" "$SLUG" "$source"; done)
+          git lfs pull --include "${include%,}" --exclude ''
       - name: Record
         id: record
         run: |
