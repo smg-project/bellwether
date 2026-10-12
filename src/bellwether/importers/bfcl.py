@@ -196,7 +196,6 @@ def _cast(properties: dict) -> dict:
 
 
 OMIT = object()
-NOT_STRINGS = "carries a value that is not a string, which the category's checker refuses (#26)"
 NO_FIRST_CALL = "the first turn has no ground-truth call, so there is no message to parse"
 
 
@@ -228,30 +227,111 @@ def realize(option):
 def _realize_dict(option: dict) -> dict:
     value = {}
     for key, acceptable in option.items():
-        if not isinstance(acceptable, list):
-            raise ValueError(f"dict option key {key!r} holds {acceptable!r}, not a list of acceptable values")
-        chosen = next((item for item in acceptable if item != ""), OMIT)
+        if isinstance(acceptable, list):
+            chosen = next((item for item in acceptable if item != ""), OMIT)
+        else:
+            # BFCL's simple_java_64 gives meta: {"format": "epoch_millis"} where acceptable is a scalar literal
+            # rather than a list of options, which BFCL's dict_checker grades wrongly.
+            chosen = acceptable
         if chosen is not OMIT:
             value[key] = chosen
     return value
 
 
-def string_valued(answer: dict) -> bool:
-    """Whether every value the call would carry is a string.
+def format_java_argument(value, property: dict | None = None) -> str:
+    """Format a ground-truth value as the string BFCL's java_type_converter reads back."""
+    if isinstance(value, str):
+        ptype = property.get("type") if property else None
+        if ptype == "char" and not (value.startswith("'") and value.endswith("'")):
+            return f"'{value}'"
+        return value
+    ptype = property.get("type", "") if property else ""
+    if ptype == "boolean" or isinstance(value, bool):
+        return "true" if value else "false"
+    if ptype in ("integer", "short", "byte"):
+        return str(value)
+    if ptype == "long":
+        return f"{value}L"
+    if ptype == "float":
+        return f"{value}f"
+    if ptype == "double":
+        return str(value)
+    if ptype == "char":
+        return f"'{value}'"
+    if ptype in ("String", "any"):
+        return str(value)
+    if ptype in ("Array", "ArrayList"):
+        items_type = (property or {}).get("items", {}).get("type")
+        if items_type == "any" and isinstance(value, list) and any(not isinstance(x, str) for x in value):
+            raise Unanswerable(
+                f"BFCL's java_type_converter parses an {ptype} of 'any' as strings, "
+                "but the ground truth holds non-strings"
+            )
+    if ptype == "Array":
+        if not value:
+            return "new Object[]{}"
+        items_type = (property or {}).get("items", {}).get("type")
+        elems = []
+        for x in value:
+            if items_type == "String" or (items_type is None and isinstance(x, str)):
+                elems.append(str(x))
+            elif items_type == "long" or (isinstance(x, int) and items_type == "long"):
+                elems.append(f"{x}L")
+            elif items_type == "float" or (isinstance(x, float) and items_type == "float"):
+                elems.append(f"{x}f")
+            elif isinstance(x, bool):
+                elems.append("true" if x else "false")
+            else:
+                elems.append(str(x))
+        return f"new Object[]{{{', '.join(elems)}}}"
+    if ptype == "ArrayList":
+        if not value:
+            return "new ArrayList<>()"
+        items_type = (property or {}).get("items", {}).get("type")
+        elems = []
+        for x in value:
+            if isinstance(x, str):
+                elems.append(json.dumps(x))
+            elif items_type == "long" or (isinstance(x, int) and items_type == "long"):
+                elems.append(f"{x}L")
+            elif items_type == "float" or (isinstance(x, float) and items_type == "float"):
+                elems.append(f"{x}f")
+            elif isinstance(x, bool):
+                elems.append("true" if x else "false")
+            else:
+                elems.append(str(x))
+        return f"new ArrayList<>(Arrays.asList({', '.join(elems)}))"
+    if ptype in ("HashMap", "Hashtable") or isinstance(value, dict):
+        if not value:
+            return "new HashMap<>()"
+        puts = []
+        for k, v in value.items():
+            if isinstance(v, str):
+                v_str = json.dumps(v)
+            elif isinstance(v, bool):
+                v_str = "true" if v else "false"
+            else:
+                v_str = str(v)
+            puts.append(f"put({json.dumps(k)}, {v_str});")
+        return f"new HashMap<String, Object>() {{{{ {' '.join(puts)} }}}}"
+    return str(value)
 
-    BFCL's Java and JavaScript categories ask for every argument in string representation, and its checker refuses
-    any other type, but their ground truth stores the converted value (``5``, ``true``, a dict). Until the importer
-    writes those values in the string form BFCL's converters read back (#26), such a row has no parse case.
-    """
-    for entry in answer["ground_truth"]:
-        for options in next(iter(entry.values())).values():
-            chosen = next((option for option in options if option != ""), OMIT)
-            if chosen is not OMIT and not isinstance(chosen, str):
-                return False
-    return True
+
+def format_js_argument(value, property: dict | None = None) -> str:
+    """Format a ground-truth value as the string BFCL's js_type_converter reads back."""
+    if isinstance(value, str):
+        return value
+    ptype = property.get("type", "") if property else ""
+    if ptype == "Boolean" or isinstance(value, bool):
+        return "true" if value else "false"
+    if ptype in ("integer", "float"):
+        return str(value)
+    if ptype in ("array", "dict") or isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
-def message_for(answer: dict, functions: list[dict]) -> dict:
+def message_for(answer: dict, functions: list[dict], category: str = "simple_python") -> dict:
     """The assistant message a parser must return for one BFCL ground truth: one call per entry, in order.
 
     Each call is held to the rules BFCL's checker applies to it: a parameter its function does not declare is left
@@ -259,6 +339,7 @@ def message_for(answer: dict, functions: list[dict]) -> dict:
     or insists on one the function lacks, raises ``Unanswerable``: no call from it would pass.
     """
     declared = {function["name"]: function["parameters"] for function in functions}
+    lang = language(category)
     calls = []
     for entry in answer["ground_truth"]:
         ((name, params),) = entry.items()
@@ -273,6 +354,10 @@ def message_for(answer: dict, functions: list[dict]) -> dict:
                 raise Unanswerable(f"{name} has no parameter {param!r}, which the ground truth requires")
             value = pick(options)
             if value is not OMIT:
+                if lang == "java":
+                    value = format_java_argument(value, properties.get(param))
+                elif lang == "javascript":
+                    value = format_js_argument(value, properties.get(param))
                 arguments[param] = value
         missing = [param for param in declared[name].get("required", []) if param not in arguments]
         if missing:
@@ -511,10 +596,9 @@ def build_sets(
 ) -> dict[tuple[str, str], list[dict]]:
     """Corpus lines per ``(kind, set name)``: a render case for every row, a parse case where BFCL has an answer.
 
-    A multi_turn row gives the request and the ground-truth calls of its first turn. A Java or JavaScript row gets its
-    parse case only when every value it carries is a string (``string_valued``), a multi_turn row only when its first
-    turn has a ground-truth call, and a row for which no call the rule builds passes BFCL's checker gets none
-    (``Unanswerable``); each such row is appended to ``skipped`` with its reason.
+    A multi_turn row gives the request and the ground-truth calls of its first turn. A multi_turn row gets its parse
+    case only when its first turn has a ground-truth call, and a row for which no call the rule builds passes BFCL's
+    checker gets none (``Unanswerable``); each such row is appended to ``skipped`` with its reason.
     """
     sets: dict[tuple[str, str], list[dict]] = {}
     seen: dict[str, str] = {}
@@ -546,14 +630,12 @@ def build_sets(
                 continue
             if multi_turn(category) and not answer["ground_truth"][0]:
                 why = NO_FIRST_CALL
-            elif language(category) != "python" and not string_valued(answer):
-                why = NOT_STRINGS
             else:
                 try:
                     if multi_turn(category):
                         message = first_turn_message(answer, functions, methods)
                     else:
-                        message = message_for(answer, functions)
+                        message = message_for(answer, functions, category)
                     why = None
                 except Unanswerable as err:
                     why = str(err)
