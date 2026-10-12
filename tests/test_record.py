@@ -584,6 +584,36 @@ def test_record_rerun_replaces_the_reference_and_keeps_witnesses(tmp_path, tiny_
     assert line["reference"]["text"] != "stale"
 
 
+def test_record_rerun_reads_the_previous_set_a_line_at_a_time(tmp_path, tiny_model, monkeypatch, capsys):
+    """A set recorded again after a recorder fix can be large: the run keeps only each old case's id, and the request
+    and witnesses of a case that has them, reading the old file a line at a time, not the set whole beside the new
+    one."""
+    cases = [{"name": n, "request": {"messages": [user(n.upper())]}} for n in ("a", "b")]
+    status, out_dir = record(tmp_path, tiny_model, ("common", cases))
+    assert status == 0
+    path = out_dir / "common.jsonl"
+    recorded = read_fixture_file(path)
+    recorded["tiny-chat/render/a"]["witnesses"] = {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    write_fixture_file(path, recorded)
+    capsys.readouterr()
+
+    plain_text = storage.plain_text
+
+    def whole(path, *args, **kwargs):  # the corpus is read as before; a fixture set must not be
+        if "fixtures" in pathlib.Path(path).parts:
+            raise AssertionError("the previous set was read whole")
+        return plain_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(storage, "plain_text", whole)
+    status, _ = record(tmp_path, tiny_model, ("common", cases[:1]))
+    assert status == 0
+    monkeypatch.undo()
+    lines = read_fixture_file(path)
+    assert list(lines) == ["tiny-chat/render/a"]
+    assert lines["tiny-chat/render/a"]["witnesses"] == {"vllm": {"version": "0.30.0", "input_ids": [1]}}
+    assert "1 old cases removed" in capsys.readouterr().out
+
+
 def test_record_rebuilds_the_file_from_the_cases_rendered_this_run(tmp_path, tiny_model, capsys):
     first = [{"name": "a", "request": {"messages": [user("A")]}}, {"name": "b", "request": {"messages": [user("B")]}}]
     status, out_dir = record(tmp_path, tiny_model, ("common", first))

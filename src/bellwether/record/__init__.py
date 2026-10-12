@@ -27,7 +27,7 @@ from . import sets as set_tables
 from . import vendor
 from .chunks import chunk_plans
 from .corpus import Case, load_corpus
-from .fixtures import read_fixture_file, write_fixture_file
+from .fixtures import read_previous, write_fixture_file
 from .reference import SOURCE as RENDER_SOURCE
 from .reference import HfTemplateOracle
 from .roundtrip import SOURCE as PARSE_SOURCE
@@ -91,7 +91,7 @@ def run(args: argparse.Namespace) -> int:
         form = "zstd" if any(case.origin for case in cases) else "plain"
         out = kind_dir / f"{set_name}{COMPRESSED_SUFFIX if form == 'zstd' else '.jsonl'}"
         other = kind_dir / f"{set_name}{'.jsonl' if form == 'zstd' else COMPRESSED_SUFFIX}"
-        previous = read_fixture_file(out) if out.is_file() else read_fixture_file(other) if other.is_file() else {}
+        previous = read_previous(out if out.is_file() else other if other.is_file() else None)
         rejected = 0
         # The file is rebuilt from the cases rendered in this run: a case the corpus no longer has,
         # or that the oracle now rejects, leaves the file. Witnesses are carried over by id, but
@@ -110,15 +110,15 @@ def run(args: argparse.Namespace) -> int:
             line = {"id": case_id, "kind": args.kind, "model": manifest.model, **line}
             if isinstance(oracle, RoundtripOracle):
                 stop_ids.append(line["reference"]["end_of_turn"]["stop_id"])
-            old = previous.get(case_id)
-            if old is not None and "witnesses" in old:
+            old = previous.witnessed.get(case_id)
+            if old is not None:
                 if old.get("request") == case.request:
                     line["witnesses"] = old["witnesses"]
                     witnesses_kept += 1
                 else:
                     witnesses_dropped += 1
             lines[case_id] = line
-        removed = len(set(previous) - set(lines))
+        removed = len(previous.ids - set(lines))
         if lines:
             write_fixture_file(out, lines)
             generate = oracle.generate_stop() if isinstance(oracle, RoundtripOracle) else {}

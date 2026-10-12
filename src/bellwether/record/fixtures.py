@@ -13,6 +13,7 @@ would no longer be the request the reference answers.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from functools import cache
 from importlib import resources
 from pathlib import Path
@@ -59,6 +60,32 @@ def read_fixture_file(path: Path) -> dict[str, dict]:
             raise ValueError(f"{path}:{number}: duplicate id {case['id']}")
         cases[case["id"]] = case
     return cases
+
+
+@dataclass(frozen=True)
+class Previous:
+    """What a set recorded again keeps from its old file: every case's id, and the request and witnesses of each case
+    that has witnesses."""
+
+    ids: frozenset[str] = frozenset()
+    witnessed: dict[str, dict] = field(default_factory=dict)
+
+
+def read_previous(path: Path | None) -> Previous:
+    """The old file's ``Previous``, read a line at a time: a set recorded again can be large, and the run holds the new
+    one beside it."""
+    if path is None:
+        return Previous()
+    ids: set[str] = set()
+    witnessed: dict[str, dict] = {}
+    with storage.open_text(path) as stream:
+        for number, case in jsonl.load(stream, path):
+            if case["id"] in ids:
+                raise ValueError(f"{path}:{number}: duplicate id {case['id']}")
+            ids.add(case["id"])
+            if "witnesses" in case:
+                witnessed[case["id"]] = {"request": case.get("request"), "witnesses": case["witnesses"]}
+    return Previous(frozenset(ids), witnessed)
 
 
 def write_fixture_file(path: Path, cases: dict[str, dict]) -> None:
