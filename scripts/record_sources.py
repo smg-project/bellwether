@@ -1,6 +1,7 @@
 """Record the named corpus sources for one checkpoint group, as a ``record`` workflow job does on a runner.
 
     uv run python scripts/record_sources.py <slug> [--sources common bfcl ... swehero] [--jobs 3]
+                                            [--again tau2 swehero --since <commit>]
 
 1. **The checkpoint's files.** The oracle inputs are read once with network access, as the recorder reads them
    (``bellwether.inputs.checkpoint_dir``), which leaves them in the Hugging Face cache at the manifest's revision with
@@ -16,6 +17,10 @@
    or so of plain JSON Lines, and a recorder near 3 GB.
 3. **Resuming.** A set ``sets.toml`` already lists for the kind is not recorded again, so a job that is run again picks
    up where the last one stopped.
+4. **Recording again.** After a fix to the recorder, ``--again`` names the sources to record although ``sets.toml``
+   lists their sets; each set is recorded anew and its table replaced. ``--since`` is the commit the run started from:
+   a set whose files the run's commits have changed since then was recorded again already, so a job run again does
+   not record it a third time.
 
 A call that refuses cases ends with status 1 and is not a failure. One that fails is: status 1 with no case refused
 (an error the recorder reports and stops on, such as a checkpoint it cannot read), a traceback, or a status other than
@@ -92,9 +97,16 @@ def calls(corpus: Path, kind: str, source: str, per: int, done: set[str]) -> lis
     return [files[start : start + per] for start in range(0, len(files), per)]
 
 
-def queue(corpus: Path, sources: list[str], sets_toml: Path) -> list[tuple[str, list[Path]]]:
+def queue(
+    corpus: Path,
+    sources: list[str],
+    sets_toml: Path,
+    again: set[str] | frozenset[str] = frozenset(),
+    rewritten: dict[str, set[str]] | None = None,
+) -> list[tuple[str, list[Path]]]:
     """Every call the group still needs, as ``(kind, sets)``, the largest corpus first. A source with no corpus set of
-    either kind is refused, so a misspelt one is not taken for one already recorded."""
+    either kind is refused, so a misspelt one is not taken for one already recorded. A source in ``again`` needs every
+    set but the ones ``rewritten`` names for the kind, whatever ``sets.toml`` lists."""
     kinds = ("render", "parse")
     missing = [source for source in sources if not any(source_sets(corpus, kind, source) for kind in kinds)]
     if missing:
@@ -103,9 +115,32 @@ def queue(corpus: Path, sources: list[str], sets_toml: Path) -> list[tuple[str, 
         (kind, call)
         for source in sources
         for kind in kinds
-        for call in calls(corpus, kind, source, SETS_PER_CALL.get(source, 1), listed(sets_toml, kind))
+        for call in calls(
+            corpus,
+            kind,
+            source,
+            SETS_PER_CALL.get(source, 1),
+            (rewritten or {}).get(kind, set()) if source in again else listed(sets_toml, kind),
+        )
     ]
     return sorted(pending, key=lambda item: -sum(path.stat().st_size for path in item[1]))
+
+
+def rewritten(group: Path, since: str) -> dict[str, set[str]]:
+    """The sets of each kind whose files the commits since ``since`` changed in the group's fixture directory: the ones
+    this run has recorded again already."""
+    changed = subprocess.run(
+        ["git", "-C", str(group), "diff", "--name-only", "--relative", since, "HEAD", "--", "."],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    sets: dict[str, set[str]] = {}
+    for name in changed:
+        parts = Path(name).parts
+        if len(parts) == 2 and parts[0] in ("render", "parse"):
+            sets.setdefault(parts[0], set()).add(set_name(Path(parts[1])))
+    return sets
 
 
 @contextlib.contextmanager
@@ -185,11 +220,21 @@ def main() -> int:
     parser.add_argument("--fixtures", type=Path, default=ROOT / "fixtures")
     parser.add_argument("--corpus", type=Path, default=ROOT / "corpus")
     parser.add_argument("--jobs", type=int, default=3, help="calls at once (default: %(default)s)")
+    parser.add_argument("--again", nargs="*", default=[], help="sources to record although sets.toml lists their sets")
+    parser.add_argument("--since", help="with --again: the commit the run started from")
     args = parser.parse_args()
+    if not set(args.again) <= set(args.sources):
+        parser.error(
+            f"--again names sources --sources does not: {' '.join(sorted(set(args.again) - set(args.sources)))}"
+        )
+    if args.again and not args.since:
+        parser.error("--again needs --since, the commit the run started from")
     manifest = tomllib.loads((args.fixtures / args.slug / "manifest.toml").read_text("utf-8"))
     model, revision = manifest["model"], manifest["revision"]
     fetch_inputs(model, revision)
-    pending = queue(args.corpus, args.sources, args.fixtures / args.slug / "sets.toml")
+    group = args.fixtures / args.slug
+    done_again = rewritten(group, args.since) if args.again else {}
+    pending = queue(args.corpus, args.sources, group / "sets.toml", set(args.again), done_again)
     say(f"{args.slug}: {len(pending)} call(s), {args.jobs} at once")
     failures: list[str] = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:

@@ -20,6 +20,10 @@ on:
         description: Recorder calls at once in each group's job (a pod has 64 GiB; a tau2 call holds up to ~19 GB)
         required: false
         default: "2"
+      again:
+        description: Sources to record again although a group has their sets, after a fix to the recorder
+        required: false
+        default: ""
       max-parallel:
         description: Groups at once
         required: false
@@ -83,6 +87,7 @@ jobs:
     env:
       SLUG: ${{ matrix.group.slug }}
       SOURCES: ${{ inputs.sources }}
+      AGAIN: ${{ inputs.again }}
       JOBS: ${{ inputs.jobs }}
       BRANCH: record/${{ matrix.group.slug }}/${{ github.run_id }}
     steps:
@@ -119,7 +124,10 @@ jobs:
           git lfs pull --include "${include%,}"
       - name: Record
         id: record
-        run: uv run --frozen python scripts/record_sources.py "$SLUG" --sources $SOURCES --jobs "$JOBS"
+        run: |
+          again=()
+          [ -n "$AGAIN" ] && again=(--again $AGAIN --since "${{ github.sha }}")
+          uv run --frozen python scripts/record_sources.py "$SLUG" --sources $SOURCES --jobs "$JOBS" "${again[@]}"
       # Whatever was recorded goes up, a crashed call or a cancelled job included. These commits stay on record/
       # branches and carry no sign-off: the pull requests that bring the sets to main are made from the files, as their
       # author's own signed-off commits.

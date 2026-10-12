@@ -107,6 +107,52 @@ def test_a_source_with_no_corpus_set_is_refused_and_a_finished_one_is_not(tmp_pa
         record.queue(tmp_path / "corpus", ["glaive-v2", "swehro"], sets_toml)
 
 
+def test_a_source_named_again_is_recorded_again_but_not_a_third_time(tmp_path):
+    """After a recorder fix, ``--again`` records a source whose sets ``sets.toml`` already lists; a job run again
+    leaves out the sets this run has already recorded again."""
+    record = load("record_sources")
+    for kind in ("render", "parse"):
+        directory = tmp_path / "corpus" / kind
+        directory.mkdir(parents=True)
+        for name in ("tau2-run-0", "tau2-run-1", "glaive-v2-00"):
+            (directory / f"{name}.jsonl.zst").write_bytes(b"x")
+    sets_toml = tmp_path / "sets.toml"
+    sets_toml.write_text(
+        "".join(
+            f"[{kind}.{name}]\ncases = 1\n\n"
+            for kind in ("render", "parse")
+            for name in ("tau2-run-0", "tau2-run-1", "glaive-v2-00")
+        )
+    )
+    corpus = tmp_path / "corpus"
+    assert record.queue(corpus, ["tau2", "glaive-v2"], sets_toml) == []
+    queue = record.queue(corpus, ["tau2", "glaive-v2"], sets_toml, again={"tau2"}, rewritten={"parse": {"tau2-run-0"}})
+    assert sorted((kind, [path.name.removesuffix(".jsonl.zst") for path in call]) for kind, call in queue) == [
+        ("parse", ["tau2-run-1"]),
+        ("render", ["tau2-run-0", "tau2-run-1"]),
+    ]
+
+
+def test_the_sets_a_run_recorded_again_are_the_ones_its_commits_changed(tmp_path):
+    record = load("record_sources")
+    group = tmp_path / "fixtures" / "g"
+    (group / "parse").mkdir(parents=True)
+    (group / "parse" / "tau2-run-0.jsonl.zst").write_bytes(b"old")
+    (group / "parse" / "tau2-run-1.jsonl.zst").write_bytes(b"old")
+    git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "dispatched"], check=True)
+    dispatched = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    assert record.rewritten(group, dispatched) == {}
+    (group / "parse" / "tau2-run-0.jsonl.zst").write_bytes(b"new")
+    (group / "render").mkdir()
+    (group / "render" / "tau2-run-1.jsonl").write_bytes(b"new")
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "record g: tau2"], check=True)
+    assert record.rewritten(group, dispatched) == {"parse": {"tau2-run-0"}, "render": {"tau2-run-1"}}
+
+
 def test_a_call_reads_a_corpus_directory_that_links_its_own_sets_alone(tmp_path):
     record = load("record_sources")
     source = tmp_path / "corpus" / "render"
