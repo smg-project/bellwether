@@ -37,9 +37,9 @@ Hugging Face's result as the reference. An image has no vendor-shipped reference
 class of transformers (or the checkpoint's own code), and the engine's path is its loader followed by that class. The
 maintainer's decision (2026-10-12) is that the reference is the engine's own image path, recorded inside the engine's
 image, and that a processor run outside the engine is the cross-check. The first recording found the two equal on
-every image of the corpus in each of the three families (19,556 of 19,556), which is the evidence that the engine's
-path adds nothing of its own to the processor; the cross-check stays a tool so that a later engine release is checked
-the same way.
+every image of the corpus in each of the three families (19,556 of 19,556: the images as #128 held them, before
+duplicate bytes were left out), which is the evidence that the engine's path adds nothing of its own to the
+processor; the cross-check stays a tool so that a later engine release is checked the same way.
 
 ## Which datasets
 
