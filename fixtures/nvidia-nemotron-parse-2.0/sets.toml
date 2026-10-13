@@ -1,3 +1,10 @@
+[render.common]
+form = "plain"
+cases = 24
+rejected = 0
+plain_bytes = 458569
+plain_sha256 = "ead17eac42aa4635be3db90ba4a8258502a38b9cfd4f8718233d6056b14bf2db"
+
 [render.swehero-0]
 form = "zstd"
 cases = 7500
@@ -123,3 +130,73 @@ cases = 1830
 rejected = 0
 plain_bytes = 123730163
 plain_sha256 = "edc2e761e35a3b4a12815569c2ab856e4b9a7610f50e8b2b4d0997e5a3127743"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-op]
+form = "zstd"
+cases = 5475
+rejected = 0
+plain_bytes = 557614417
+plain_sha256 = "82a8dbac710b8cd698b44c8ff6c3819d2803bd0a40f3cc20751d70911df0802a"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-default]
+form = "zstd"
+cases = 7183
+rejected = 0
+plain_bytes = 725011509
+plain_sha256 = "09f53803c310e9320e929043b74f8ad7f6deb63dfcc11f3bd17a45fe646a624d"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-no-user]
+form = "zstd"
+cases = 7999
+rejected = 0
+plain_bytes = 848766114
+plain_sha256 = "00362cc3561cd294a7a8e3d9e3316de5d882d0f8f6a23d0faf1f5204b5a69c50"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-op]
+form = "zstd"
+cases = 5675
+rejected = 0
+plain_bytes = 557367840
+plain_sha256 = "c5c6130fc59dd359d3d0b4045e44dcfb8a14417dbcd59b67c6f9a10ea8e46da7"
+
+[render.tau2-gpt-4-1-mini-2025-04-14-airline-base]
+form = "zstd"
+cases = 2071
+rejected = 0
+plain_bytes = 146357713
+plain_sha256 = "88b0989721eacb9c1d4366c974cd926aaf36fd7c589c87b02612ee8e8f275321"
+
+[render.tau2-o4-mini-2025-04-16-retail-default]
+form = "zstd"
+cases = 5635
+rejected = 0
+plain_bytes = 363317898
+plain_sha256 = "26bfc67709436b6d973da6d61a1cb2a9371930c25a0f3251d6f4bfd8d21ddc57"
+
+[render.tau2-o4-mini-2025-04-16-telecom-op]
+form = "zstd"
+cases = 3345
+rejected = 0
+plain_bytes = 322824342
+plain_sha256 = "6af221d44aebb7b2456ceef365a89f771744c45604d7357d773d93fe2a6d446c"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-default]
+form = "zstd"
+cases = 5414
+rejected = 0
+plain_bytes = 523787927
+plain_sha256 = "2f4cc204e71308b3a4048192dd999cff36e7c792ec1f50419769c86b87a76e4d"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-no-user]
+form = "zstd"
+cases = 7043
+rejected = 0
+plain_bytes = 743508337
+plain_sha256 = "9f36d295b2f30974789fe1671f0fae29d0949c5dd8b7c6b03981eade02049c06"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-op]
+form = "zstd"
+cases = 3187
+rejected = 0
+plain_bytes = 297830586
+plain_sha256 = "4d3dbc8293f91ddb45b0761955069b85043ff0fa37c032382410f2799fb2c02c"
