@@ -26,7 +26,7 @@ smg, pins an smg commit, or lists what smg gets wrong; that list belongs with th
 |---|---|
 | image | one file of the corpus, its bytes exactly as its dataset ships them, with its line in an image set |
 | image set | one JSON Lines file per dataset under `corpus/image/`, one line per image, written by `bellwether import <dataset>` and never edited by hand |
-| class | what a line's header fields say an image is (its dataset, container format, colour representation and flags), which the tiers are picked by |
+| class | the key the tiers are picked by, read from a line: its dataset, then the catalogue's `format`, `color`, `bits`, `transparency`, `progressive`, `subsampling` and `animated`, the EXIF `orientation` it carries when that is 2 to 8, and a size bucket (`tiny`: the shorter side under 112 px; `huge`: the longer side 4,096 px or more; else none); a derived image's class is `derived/<variant>`. Width and height are otherwise no part of it ("The corpus", Tiers) |
 | tier | a list of image paths over every set: `corpus-50`, one image of each of the most distinct classes, and `corpus-500`, every class at least once |
 | family | the checkpoints whose image preprocessing inputs are equal (the processor configuration, and the processor's code where the checkpoint ships its own), recorded once under one slug: the image side's checkpoint group |
 | reference | what the engine's own image path gives for an image: its media loader, then its multimodal processor, reached through the engine's render server inside the engine's official image; `reference.source` is `engine:vllm` |
@@ -124,11 +124,21 @@ A line is written in the order its fields are built, non-ASCII raw, as every cor
 - **`bellwether images check`** is the check every pull request runs: every line of every set names a file in the
   checkout whose pointer or content has the line's sha256 and size, no file is unnamed, names are unique across the
   sets, every tier names set lines, and the licence copies exist. No download, a few seconds.
-- **Tiers.** `bellwether tiers` writes `corpus-50` and `corpus-500` from the committed sets alone, deterministically:
-  the classes are read from the lines, `corpus-500` takes every class at least once and the rest in proportion to the
-  class's size by strided picks, `corpus-50` one image of each of the most distinct classes; `--check` compares. A
-  consumer fetches a tier's bytes with `git lfs pull --include` over its paths and `--exclude ''`, as a fixture set is
-  fetched.
+- **Tiers.** `bellwether tiers` writes `corpus-50` and `corpus-500` from the committed sets alone, deterministically.
+  The class of a line is its key for the tiers, written `<dataset>/<format>/<color>` and then, only where they hold,
+  `/<bits>bit` for a bit depth other than 8, `+transparency`, `+progressive`, `/<subsampling>` for a JPEG, `+animated`,
+  `+exif<n>` for an EXIF orientation 2 to 8, and `/tiny` (the shorter side under 112 px) or `/huge` (the longer side
+  4,096 px or more): `mmmu/png/rgb-alpha+transparency`, `coco/jpeg/ycbcr/4:2:0`, `docvqa/png/gray/huge`. A derived
+  image's class is `derived/<variant>` (`derived/exif6-webp`, `derived/png-gray16`, `derived/tiny-jpeg`), so every
+  variant is a class of its own and what a variant was made for is not folded into another class. Width and height
+  are otherwise no part of the key: within a class the picks are strided over the lines in name order, so sizes come
+  as the dataset has them, and the two edges a pipeline treats apart are the `tiny` and `huge` buckets and variants.
+  `corpus-500` takes one image of every class at least and the rest in proportion to the classes' sizes;
+  `corpus-50` takes one image of each of the most distinct classes (a photo, a document, a chart and a diagram; WebP
+  lossy and lossless; PNG grey, 16-bit, palette and with transparency; CMYK and YCCK; an EXIF orientation on JPEG, WebP
+  and PNG; progressive; animated; tiny; huge), named in the command. `tiers --check` compares. The classes and their
+  counts are printed with each run, so a new set's classes are seen. A consumer fetches a tier's bytes with
+  `git lfs pull --include` over its paths and `--exclude ''`, as a fixture set is fetched.
 
 ## Families
 
