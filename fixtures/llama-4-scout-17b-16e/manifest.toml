@@ -1,0 +1,11 @@
+model    = "meta-llama/Llama-4-Scout-17B-16E"
+revision = "14d516bdff6ac06cec40678529222f193386189c"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "01ef6bd4fda9c8a539655ee34b87accb31934e8235ee7c651f84f2f094bdff36"
+"generation_config.json"  = "640683e076f976a68d0d6da8566ef3de164a96160c7691bff718af3a889eec01"
+"special_tokens_map.json" = "52c1c70bc3807c1fbc5a28ec4a5c2cd35d8a64b6877b8f1ea89a4fdc63d53478"
+"tokenizer.json"          = "172c9eb4beafc72601690da3ccfcede5c2e6806a8d5ec1fca33e22acea8023a4"
+"tokenizer.model"         = "d0bdbaf59b0762c8c807617e2d8ea51420eb1b1de266df2495be755c8e0ed6ed"
+"tokenizer_config.json"   = "bd930a5828a586d6e7e0197399133a7d6170a01c25013d836c01b12d4f151cfb"

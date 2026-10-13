@@ -1,0 +1,11 @@
+model    = "google/gemma-2-9b"
+revision = "33c193028431c2fde6c6e51f29e6f17b60cbfac6"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "87bca907043cf139294a89955abdae2b6cff4f158914f6a59892bf64077c96ae"
+"generation_config.json"  = "fe718346295c678ec7d6f76ca7789a6e8096a56cccb7fdba132caa1f16ebca18"
+"special_tokens_map.json" = "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351"
+"tokenizer.json"          = "3f289bc05132635a8bc7aca7aa21255efd5e18f3710f43e3cdb96bcd41be4922"
+"tokenizer.model"         = "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2"
+"tokenizer_config.json"   = "bb8245b8d39a065fdf869ee4fce48db9cc491473eb7ff1b41d321fb4caf540d1"
