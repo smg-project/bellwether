@@ -119,9 +119,21 @@ def build_parser() -> argparse.ArgumentParser:
     importer = sub.add_parser("import", help="write corpus sets from a public dataset at a pinned revision")
     importer.add_argument(
         "dataset",
-        choices=["bfcl", "glaive-v2", "gsm8k", "hermes", "mgsm", "mmmu", "shapes", "swebench", "swehero", "tau2"],
+        choices=[
+            "bfcl",
+            "docvqa",
+            "glaive-v2",
+            "gsm8k",
+            "hermes",
+            "mgsm",
+            "mmmu",
+            "shapes",
+            "swebench",
+            "swehero",
+            "tau2",
+        ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
-        "mmmu is an image set (corpus/README.md)",
+        "mmmu and docvqa are image sets (corpus/README.md)",
     )
     importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     importer.add_argument(

@@ -291,8 +291,9 @@ The images the references of every processor family are recorded over, by the da
 
 | Dataset | From | Licenses | Images | Bytes |
 |---|---|---|---:|---:|
+| docvqa | hf:datasets/lmms-lab-encoder/DocVQA@539088ef | Apache-2.0 | 1285 | 832.7 MB |
 | mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
-| all | | | 959 | 340.6 MB |
+| all | | | 2244 | 1.17 GB |
 
 <!-- end of what bellwether count --readme writes -->
 

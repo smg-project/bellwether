@@ -46,4 +46,8 @@ def run(args: argparse.Namespace) -> int:
         from .mmmu import run as run_mmmu
 
         return run_mmmu(args)
+    if args.dataset == "docvqa":
+        from .docvqa import run as run_docvqa
+
+        return run_docvqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")

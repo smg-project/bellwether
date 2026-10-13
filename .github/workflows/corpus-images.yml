@@ -12,6 +12,7 @@ on:
     paths:
       - src/bellwether/importers/image_sets.py
       - src/bellwether/importers/mmmu.py
+      - src/bellwether/importers/docvqa.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -29,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu]
+        dataset: [mmmu, docvqa]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
