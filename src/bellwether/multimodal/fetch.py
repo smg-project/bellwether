@@ -9,12 +9,15 @@ command-line cap, as ``bellwether unpack`` fetches fixture sets.
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 from bellwether.multimodal import references, suite
-from bellwether.storage import is_lfs_pointer, lfs_pull_command, repository_root
-from bellwether.unpack import fetch as lfs_fetch
+from bellwether.storage import is_lfs_pointer, lfs_include, lfs_pull_command, repository_root
+
+# Linux caps one command-line argument at 131,072 bytes; a tier names thousands of paths.
+INCLUDE_BYTES = 100_000
 
 
 def paths_of(root: Path, tier: str, families: list[str] | None = None, raw: bool = True) -> list[Path]:
@@ -33,6 +36,27 @@ def paths_of(root: Path, tier: str, families: list[str] | None = None, raw: bool
                     if path.is_file():
                         wanted.append(path)
     return wanted
+
+
+def lfs_fetch(paths: list[Path]) -> None:
+    """``git lfs pull`` of exactly these files, in batches under the command-line cap, from the root of the checkout
+    that holds them (as ``bellwether unpack`` fetches fixture sets; written here so that the command group imports
+    nothing beyond the standard library and ``bellwether.storage``). Nothing is raised: without git-lfs, a network or
+    a checkout the files stay pointers, and the caller names them."""
+    root = repository_root(paths[0])
+    if root is None:
+        return
+    batch: list[Path] = []
+    size = 0
+    for path in paths:
+        item = len(lfs_include([path], root).encode()) + 1
+        if batch and size + item > INCLUDE_BYTES:
+            subprocess.run(["git", "lfs", "pull", "--include", lfs_include(batch, root), "--exclude", ""], cwd=root)
+            batch, size = [], 0
+        batch.append(path)
+        size += item
+    if batch:
+        subprocess.run(["git", "lfs", "pull", "--include", lfs_include(batch, root), "--exclude", ""], cwd=root)
 
 
 def run(args: argparse.Namespace) -> int:

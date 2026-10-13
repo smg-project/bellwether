@@ -33,7 +33,6 @@ jobs:
     timeout-minutes: 720
     container:
       image: ${{ inputs.image }}
-      options: --entrypoint /bin/bash
     permissions:
       contents: write  # the push of record/multimodal/<run id>
     env:
@@ -50,7 +49,13 @@ jobs:
       - run: git lfs install --local
       - name: The family's model, revision and whether it needs its own code
         run: |
-          python3 -I -c 'import os, tomllib; f = tomllib.load(open(f"multimodal/families/{os.environ[\"FAMILY\"]}/family.toml", "rb")); open(os.environ["GITHUB_ENV"], "a").write(f"MODEL={f[\"model\"]}\nREVISION={f[\"revision\"]}\nTRC={1 if f.get(\"trust_remote_code\") else 0}\n")'
+          python3 - <<'PY'
+          import os, tomllib
+          family = tomllib.load(open(f"multimodal/families/{os.environ['FAMILY']}/family.toml", "rb"))
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"MODEL={family['model']}\nREVISION={family['revision']}\n")
+              env.write(f"TRC={1 if family.get('trust_remote_code') else 0}\n")
+          PY
       - name: Fetch the tier's images
         run: |
           include=$(tr '\n' ',' < "multimodal/tiers/$TIER.txt" | sed 's/^/multimodal\//; s/,$//; s/,/,multimodal\//g')
@@ -70,11 +75,12 @@ jobs:
           extra=""; [ "$TRC" = 1 ] && extra="--trust-remote-code"
           python3 -I multimodal/tools/record_vllm.py --model-dir model --list list.txt --out rec.jsonl --threads 2 $extra
           python3 -I multimodal/tools/record_vllm.py --model-dir model --list list50.txt --out rec50.jsonl --raw-out raw --threads 2 $extra
+      # The command group alone (python -m bellwether.multimodal): the image has none of bellwether's other dependencies.
       - name: Import the set
         run: |
           python3 -m pip install -q --disable-pip-version-check zstandard
-          PYTHONPATH=src python3 -m bellwether.cli multimodal import-references --family "$FAMILY" --source vllm --from rec.jsonl --raw-from raw
-          PYTHONPATH=src python3 -m bellwether.cli multimodal count --readme multimodal/README.md
+          PYTHONPATH=src python3 -m bellwether.multimodal import-references --family "$FAMILY" --source vllm --from rec.jsonl --raw-from raw
+          PYTHONPATH=src python3 -m bellwether.multimodal count --readme multimodal/README.md
       - name: Push the set to its branch
         run: |
           set -euo pipefail

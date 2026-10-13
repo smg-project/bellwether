@@ -255,3 +255,11 @@ def test_fetch_names_the_pull_command_for_the_tier(tmp_path, capsys):
     assert main(["multimodal", "fetch", "--root", str(tmp_path), "--tier", "corpus-50", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert out.startswith("git lfs pull --include '") and "b.png" in out and "a.png" not in out
+
+
+def test_the_command_group_runs_on_its_own(tmp_path, capsys):
+    from bellwether.multimodal.__main__ import main as alone
+
+    write_suite(tmp_path)
+    assert alone(["check", "--root", str(tmp_path)]) == 0
+    assert "tables agree" in capsys.readouterr().out
