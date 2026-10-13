@@ -8,3 +8,12 @@ src/bellwether/importers/swebench_licenses.json linguist-generated=true
 corpus/**/*.jsonl.zst filter=lfs diff=lfs merge=lfs -text
 fixtures/**/*.jsonl.zst filter=lfs diff=lfs merge=lfs -text
 models.jsonl linguist-generated=true
+multimodal/images/** filter=lfs diff=lfs merge=lfs -text
+multimodal/clips/*.mp4 filter=lfs diff=lfs merge=lfs -text
+multimodal/clips/*.mov filter=lfs diff=lfs merge=lfs -text
+multimodal/clips/*.webm filter=lfs diff=lfs merge=lfs -text
+multimodal/references/**/raw/** filter=lfs diff=lfs merge=lfs -text
+multimodal/references/**/*.jsonl.zst filter=lfs diff=lfs merge=lfs -text
+multimodal/manifest.tsv linguist-generated=true
+multimodal/sources/*.tsv linguist-generated=true
+multimodal/tiers/*.txt linguist-generated=true

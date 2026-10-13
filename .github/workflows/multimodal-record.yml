@@ -1,0 +1,91 @@
+name: multimodal-record
+
+# Records a family's reference inside the engine's image, on CPU, on the bellwether-record runner scale set: the job
+# runs in the pinned vllm/vllm-openai image as a container job, so the recorder (multimodal/tools/record_vllm.py) uses
+# the engine's own loader and multimodal processor with the versions the image ships; the family's model files come
+# from the Hub at the revision family.toml pins (configs and tokenizer, no weights). The new set goes to a branch of its
+# own, record/multimodal/<run id>, and a pull request is made from it afterwards, as record.yml does for the text sets.
+# Started by hand only: when the engine pin moves, or a family is added.
+on:
+  workflow_dispatch:
+    inputs:
+      family:
+        description: The family slug under multimodal/families
+        required: true
+        default: qwen3-vl
+      tier:
+        description: The tier to record (all for the reference set; the raw arrays are written for corpus-50 always)
+        required: true
+        default: all
+        type: choice
+        options: [corpus-50, corpus-500, all]
+      image:
+        description: The engine image, pinned by digest
+        required: true
+        default: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: bellwether-record
+    timeout-minutes: 720
+    container:
+      image: ${{ inputs.image }}
+    permissions:
+      contents: write  # the push of record/multimodal/<run id>
+    env:
+      FAMILY: ${{ inputs.family }}
+      TIER: ${{ inputs.tier }}
+      BRANCH: record/multimodal/${{ github.run_id }}
+      CUDA_VISIBLE_DEVICES: ""
+    steps:
+      - name: Git LFS
+        run: |
+          apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git-lfs
+          git lfs install --local || true
+      - uses: actions/checkout@v7
+      - run: git lfs install --local
+      - name: The family's model, revision and whether it needs its own code
+        run: |
+          python3 - <<'PY'
+          import os, tomllib
+          family = tomllib.load(open(f"multimodal/families/{os.environ['FAMILY']}/family.toml", "rb"))
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"MODEL={family['model']}\nREVISION={family['revision']}\n")
+              env.write(f"TRC={1 if family.get('trust_remote_code') else 0}\n")
+          PY
+      - name: Fetch the tier's images
+        run: |
+          include=$(tr '\n' ',' < "multimodal/tiers/$TIER.txt" | sed 's/^/multimodal\//; s/,$//; s/,/,multimodal\//g')
+          git lfs pull --include "$include" --exclude ''
+          include50=$(tr '\n' ',' < multimodal/tiers/corpus-50.txt | sed 's/^/multimodal\//; s/,$//; s/,/,multimodal\//g')
+          git lfs pull --include "$include50" --exclude ''
+      - name: The model's files at the pinned revision (configs and tokenizer, no weights)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 -m pip install -q --disable-pip-version-check huggingface_hub
+          python3 -I -c "from huggingface_hub import snapshot_download; snapshot_download('$MODEL', revision='$REVISION', local_dir='model', allow_patterns=['*.json', '*.py', '*.txt', '*.jinja', '*.model', '*.tiktoken'])"
+      - name: Record
+        run: |
+          sed 's#^#'"$PWD"'/multimodal/#' "multimodal/tiers/$TIER.txt" > list.txt
+          sed 's#^#'"$PWD"'/multimodal/#' multimodal/tiers/corpus-50.txt > list50.txt
+          extra=""; [ "$TRC" = 1 ] && extra="--trust-remote-code"
+          python3 -I multimodal/tools/record_vllm.py --model-dir model --list list.txt --out rec.jsonl --threads 2 $extra
+          python3 -I multimodal/tools/record_vllm.py --model-dir model --list list50.txt --out rec50.jsonl --raw-out raw --threads 2 $extra
+      # The command group alone (python -m bellwether.multimodal): the image has none of bellwether's other dependencies.
+      - name: Import the set
+        run: |
+          python3 -m pip install -q --disable-pip-version-check zstandard
+          PYTHONPATH=src python3 -m bellwether.multimodal import-references --family "$FAMILY" --source vllm --from rec.jsonl --raw-from raw
+          PYTHONPATH=src python3 -m bellwether.multimodal count --readme multimodal/README.md
+      - name: Push the set to its branch
+        run: |
+          set -euo pipefail
+          git add multimodal/references multimodal/README.md
+          if git diff --cached --quiet; then echo "nothing new for $FAMILY"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "record multimodal $FAMILY: $TIER (run ${{ github.run_id }})"
+          git push origin "HEAD:refs/heads/$BRANCH"

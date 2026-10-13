@@ -1,0 +1,32 @@
+{
+  "processor_class": "MiniMaxVLProcessor",
+  "auto_map": {
+    "AutoImageProcessor": "image_processor.MiniMaxM3VLImageProcessor",
+    "AutoProcessor": "processing_minimax.MiniMaxVLProcessor",
+    "AutoVideoProcessor": "video_processor.MiniMaxM3VLVideoProcessor"
+  },
+  "process_image_mode": "dynamic_res",
+  "image_mean": [
+    0.48145466,
+    0.4578275,
+    0.40821073
+  ],
+  "image_std": [
+    0.26862954,
+    0.26130258,
+    0.27577711
+  ],
+  "size": [
+    672,
+    672
+  ],
+  "patch_size": 14,
+  "img_token_compression_config": {
+    "image_token_compression_threshold": 1.1,
+    "image_token_compression_method": "patch_merge",
+    "max_image_resolution": 1008,
+    "spatial_merge_size": 2,
+    "temporal_patch_size": 2
+  },
+  "add_start_end_special_tokens": true
+}

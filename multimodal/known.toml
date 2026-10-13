@@ -1,0 +1,9 @@
+# Known differences between SMG's media pipeline and the engine's own image path, by family, each with its reason and
+# where it is tracked. `bellwether multimodal verify` counts an image one of these covers apart and does not fail on it;
+# an entry goes as soon as SMG and the engine agree on its images.
+
+[[known]]
+family = "minimax-m3"
+short_side_under = 112
+reason = "SMG stages an image whose shorter side is under 112 px through its own path for this family; the engine's processor resizes it directly. Accepted by design for now; the images are compared and reported, not counted as parity."
+issue = ""

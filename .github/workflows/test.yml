@@ -52,6 +52,13 @@ jobs:
       - run: uv run bellwether import tau2 --check
       - name: The README's tables are what fixtures/ and corpus/ hold
         run: uv run bellwether count --readme README.md --check
+      # The multimodal suite: every image the manifest lists is in the checkout with the manifest's sha256 and size (a
+      # Git LFS pointer names both, so nothing is fetched), the tiers, sources, families and reference tables agree,
+      # and its README's tables are what it holds.
+      - name: The multimodal suite's tables agree with its files
+        run: uv run bellwether multimodal check
+      - name: The multimodal README's tables are what the suite holds
+        run: uv run bellwether multimodal count --readme multimodal/README.md --check
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/registries

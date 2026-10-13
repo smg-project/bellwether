@@ -1,0 +1,28 @@
+# The qwen3-vl processor family: the checkpoints whose image preprocessing inputs are equal, recorded once.
+smg_processor = "qwen3_vl"   # the processor name SMG's multimodal crate and the dump binary take
+model = "Qwen/Qwen3-VL-235B-A22B-Instruct"   # the checkpoint whose files the inputs were taken from
+revision = "710c13861be6c466e66de3f484069440b8f31389"   # its hub revision
+trust_remote_code = false
+note = "Every Qwen3-VL size and both variants ship the same image preprocessing values (patch 16, mean and std 0.5, 65536 to 16777216 pixels)."
+checkpoints = [
+    "Qwen/Qwen3-VL-2B-Instruct",
+    "Qwen/Qwen3-VL-4B-Instruct",
+    "Qwen/Qwen3-VL-8B-Instruct",
+    "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "Qwen/Qwen3-VL-32B-Instruct",
+    "Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "Qwen/Qwen3-VL-2B-Thinking",
+    "Qwen/Qwen3-VL-4B-Thinking",
+    "Qwen/Qwen3-VL-8B-Thinking",
+    "Qwen/Qwen3-VL-30B-A3B-Thinking",
+    "Qwen/Qwen3-VL-32B-Thinking",
+    "Qwen/Qwen3-VL-235B-A22B-Thinking",
+]
+
+[engine]   # the classes the engine builds for the family (vLLM 0.31.0)
+processor = "Qwen3VLMultiModalProcessor"
+hf_processor = "Qwen3VLProcessor"
+image_processor = "Qwen2VLImageProcessorFast"
+
+[inputs]   # sha256 of each file the oracles read
+"preprocessor_config.json" = "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
