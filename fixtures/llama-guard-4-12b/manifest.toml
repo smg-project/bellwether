@@ -1,0 +1,11 @@
+model    = "meta-llama/Llama-Guard-4-12B"
+revision = "87acb4b94e930c3d679e6e7ee9d57e2feab9ea71"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "40782d45db7ce0d96b0b2595c698e47603e2d459b0390f5025d974c861c53e3b"
+"config.json"             = "01ef6bd4fda9c8a539655ee34b87accb31934e8235ee7c651f84f2f094bdff36"
+"generation_config.json"  = "640683e076f976a68d0d6da8566ef3de164a96160c7691bff718af3a889eec01"
+"special_tokens_map.json" = "7a93c78a9882608c08b225555f62e06b048fcdaebe8c9431da60b5724bb8bcbf"
+"tokenizer.json"          = "22e009b4fcb58eddbabf347e71b9881ea1e6eb72d44e5ea9477c7587df68fd8d"
+"tokenizer_config.json"   = "0ae4529298fd6d9c1c316571ade3179343d208d47072cc3fac3cb37bcff21aa6"

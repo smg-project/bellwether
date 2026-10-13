@@ -1,0 +1,10 @@
+model    = "CohereLabs/c4ai-command-r-v01"
+revision = "760ddb6c203d87ebdbe3c9785b49570e1bf95585"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "7ffa335b425eb5248f5772ed556e2b4b8a1d181241fe65e8d2bfab14b61ec6d0"
+"generation_config.json"  = "ba75a3f7e3ee24261d407d532f38f4d538cee997f54c033cde1c0a29d45df923"
+"special_tokens_map.json" = "a8a127f35f234ae60b1fcebe12a3c295c04021781a7e1fb97f65f4f89a513fa5"
+"tokenizer.json"          = "c69a7ea6c0927dfac8c349186ebcf0466a4723c21cbdb2e850cf559f0bee92b8"
+"tokenizer_config.json"   = "a754b10c13c8ae870ff4dd7dd6d008025da224fbabe1a2f0eafe2bb19d0a749d"

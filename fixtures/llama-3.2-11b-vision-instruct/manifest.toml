@@ -1,0 +1,11 @@
+model    = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+revision = "9eb2daaa8597bf192a8b0e73f848f3a102794df5"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.json"      = "0dd0be42178af3afe1c866408e408c02b787cbd43f35e41a71a75851ebec2139"
+"config.json"             = "00b554018e9fd31d1052c30766a046b301da6b74acf500993e95897c116a9ca0"
+"generation_config.json"  = "918bffbd5aa9e87b62c847a9b91f5fb7857b2905f4766e55d9d96fc4ecdf5e72"
+"special_tokens_map.json" = "94e708c3f5e64acf85bbe5ad01467a1248faadb73e83b41793087ecced586e8f"
+"tokenizer.json"          = "bbeb3ac656ce31599b5192b8442ab7f13a25cf0d72fde82cd01f17895b50ca37"
+"tokenizer_config.json"   = "c1bc3f9322fdbcd0a07f7522c3378f0ffd86a8cc5cf8b4e11ee0be110b20a14a"

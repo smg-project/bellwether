@@ -1,0 +1,10 @@
+model    = "google/paligemma2-3b-ft-docci-448"
+revision = "554fe3ea1355a4d6524dcdc7d94b028e80bc00cf"
+tier     = 3
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"             = "831b292ff1a4847abc5a055ee4f7ffc8d93e7cbb9ad1273e7c7b7c30bf53ed85"
+"generation_config.json"  = "fe718346295c678ec7d6f76ca7789a6e8096a56cccb7fdba132caa1f16ebca18"
+"special_tokens_map.json" = "c87885c12d55c60133110a234291db5ac952e99e83d9735099d304cb4d45914d"
+"tokenizer.json"          = "172fab587d68c56b63eb3620057c62dfd15e503079ff7fce584692e3fd5bf4da"
+"tokenizer_config.json"   = "5a4d5042efb7f465976b1c7257dc3b080e8c1a5e5afabe43a0ff7d31e45025ad"

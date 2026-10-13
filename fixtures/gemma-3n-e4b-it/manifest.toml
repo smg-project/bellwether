@@ -1,0 +1,13 @@
+model    = "google/gemma-3n-E4B-it"
+revision = "c1221e9c62e34a43ab7ffacd1be0ea71f126ef10"
+tier     = 3
+group    = "gemma-3n-e2b-it"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "ac03dcb3b09726f1e50ac55ae58fc8d5930eadc3b3a12cb04286dc1d82ac8001"
+"config.json"             = "85d970875fd60bf24d9e340694675220d7f8abcbfd18b4ca69d56a6a5f305ea6"
+"generation_config.json"  = "f910da57f7a3766499027a833ebc281aff8ea664c436e0e57ba0cb76e485ed3a"
+"special_tokens_map.json" = "d0585986e1fa2764eb2ca29cd854da40478d804a9953ba2e2c1c682d1428adc6"
+"tokenizer.json"          = "c4c19736bf24d1c6805cf49340e31bd02c70fb7857a2cb31065c90c2b5719c4e"
+"tokenizer.model"         = "ea5f0cc48abfbfc04d14562270a32e02149a3e7035f368cc5a462786f4a59961"
+"tokenizer_config.json"   = "53f610f9a24692d444ab7f64b9b6ac07b0edabca6b15bb530d1b056bd36bc6e2"
