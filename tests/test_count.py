@@ -270,3 +270,55 @@ def test_readme_names_a_corpus_line_that_is_not_a_json_object(tmp_path, capsys, 
     readme.write_text(README.format(begin=README_BEGIN, end=README_END))
     assert main(["count", "--fixtures", str(fixtures), "--corpus", str(corpus), "--readme", str(readme)]) == 1
     assert f"{corpus / 'parse' / 'bfcl-x.jsonl'}{why}" in capsys.readouterr().err
+
+
+def test_readme_gets_an_images_table_once_the_corpus_holds_image_sets(tmp_path):
+    from bellwether.count import image_rows, render_readme
+
+    corpus = tmp_path / "corpus"
+    assert image_rows(corpus) == []
+    source = "hf:datasets/org/pics@" + "a" * 40
+    write_lines(
+        corpus / "image" / "pics.jsonl",
+        [
+            {
+                "name": "pics-00001-aaaaaaaa",
+                "path": "images/pics/a.png",
+                "bytes": 1000,
+                "sha256": "a" * 64,
+                "origin": {"dataset": "pics", "source": source, "license": "Apache-2.0"},
+            },
+            {
+                "name": "pics-00002-bbbbbbbb",
+                "path": "images/pics/b.jpg",
+                "bytes": 500,
+                "sha256": "b" * 64,
+                "origin": {"dataset": "pics", "source": source, "license": "Apache-2.0"},
+            },
+        ],
+    )
+    write_lines(
+        corpus / "image" / "drawn.jsonl",
+        [{"name": "drawn-00001-cccccccc", "path": "images/drawn/c.png", "bytes": 7, "sha256": "c" * 64}],
+    )
+    rows = image_rows(corpus)
+    assert rows == [
+        {"source": "drawn", "from": set(), "licenses": set(), "images": 1, "bytes": 7},
+        {
+            "source": "pics",
+            "from": {"hf:datasets/org/pics@aaaaaaaa"},
+            "licenses": {"Apache-2.0"},
+            "images": 2,
+            "bytes": 1500,
+        },
+    ]
+    block = render_readme([], [], tmp_path, rows)
+    assert block.splitlines()[-7:-1] == [
+        "| Dataset | From | Licenses | Images | Bytes |",
+        "|---|---|---|---:|---:|",
+        "| drawn | written in this repository | | 1 | 0.0 MB |",
+        "| pics | hf:datasets/org/pics@aaaaaaaa | Apache-2.0 | 2 | 0.0 MB |",
+        "| all | | | 3 | 0.0 MB |",
+        "",
+    ]
+    assert "### Images" not in render_readme([], [], tmp_path)

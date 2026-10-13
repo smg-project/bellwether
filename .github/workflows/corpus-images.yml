@@ -1,0 +1,44 @@
+name: corpus-images
+
+# The image importers' --check: each builds its import again from its pinned downloads (hundreds of megabytes a
+# dataset) and compares it with the committed set and files, which every pull request's `bellwether images check`
+# does not repeat. Weekly, by hand, and on a pull request that changes an image importer; one job per dataset, each
+# with its own cache of pinned files, since all of them together would not fit the one cache the text imports share.
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - src/bellwether/importers/image_sets.py
+      - src/bellwether/importers/mmmu.py
+      - .github/workflows/corpus-images.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-images-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: import ${{ matrix.dataset }} --check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: [mmmu]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      # The dataset's pinned files, keyed by its importer: a pin that moves downloads again, nothing else does.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/bellwether/datasets
+          key: corpus-images-${{ matrix.dataset }}-${{ hashFiles(format('src/bellwether/importers/{0}.py', matrix.dataset), 'src/bellwether/importers/image_sets.py') }}
+      - run: uv run bellwether import ${{ matrix.dataset }} --check

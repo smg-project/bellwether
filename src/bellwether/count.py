@@ -5,9 +5,10 @@ checkpoint with a manifest is a row, as in the design's per-model table: a group
 group, which is recorded once, and name it; a checkpoint whose group has recorded nothing yet still has a row, with no
 kind and no cases. The ``all`` line counts each group's cases once.
 
-With ``--readme``, it writes two tables into the README instead, between ``README_BEGIN`` and ``README_END``: one row
-per checkpoint group that has recorded anything, and one row per corpus source, read from every line of every set.
-``--check`` compares them with the file and writes nothing, as CI runs it, so the tables cannot go stale.
+With ``--readme``, it writes the tables into the README instead, between ``README_BEGIN`` and ``README_END``: one row
+per checkpoint group that has recorded anything, one row per corpus source, read from every line of every set, and,
+once the corpus holds image sets, one row per image set (``corpus/image/``). ``--check`` compares them with the file
+and writes nothing, as CI runs it, so the tables cannot go stale.
 """
 
 from __future__ import annotations
@@ -169,6 +170,32 @@ def corpus_rows(corpus: Path) -> list[dict]:
     return [rows[name] for name in sorted(rows)]
 
 
+def image_rows(corpus: Path) -> list[dict]:
+    """One row per image set under ``corpus/image/``: the dataset its lines were imported from, their sources and
+    licences, how many images and the bytes they take, which are the files in Git LFS. Every line is read."""
+    rows: list[dict] = []
+    directory = corpus / "image"
+    if not directory.is_dir():
+        return rows
+    for path in sorted(directory.glob("*.jsonl")):
+        row = {"source": path.name.removesuffix(".jsonl"), "from": set(), "licenses": set(), "images": 0, "bytes": 0}
+        with path.open(encoding="utf-8", newline="\n") as lines:
+            for number, record in jsonl.load(lines, path):
+                if not isinstance(record, dict):
+                    raise ValueError(f"{path}: line {number} is not a JSON object")
+                row["images"] += 1
+                row["bytes"] += int(record.get("bytes", 0))
+                origin = record.get("origin")
+                if isinstance(origin, dict):
+                    row["source"] = origin.get("dataset", row["source"])
+                    if origin.get("source"):
+                        row["from"].add(_short(origin["source"]))
+                    if origin.get("license"):
+                        row["licenses"].add(origin["license"])
+        rows.append(row)
+    return rows
+
+
 def _short(source: str) -> str:
     """A source with its full commit id cut to eight characters, as the models table writes revisions."""
     return re.sub(r"@([0-9a-f]{8})[0-9a-f]{32}\b", r"@\1", source)
@@ -178,8 +205,9 @@ def _size(size: int) -> str:
     return f"{size / 1e6:.1f} MB" if size < 1e9 else f"{size / 1e9:.2f} GB"
 
 
-def render_readme(groups: list[dict], sources: list[dict], base: Path) -> str:
-    """The README's block: the two tables, between the markers."""
+def render_readme(groups: list[dict], sources: list[dict], base: Path, images: list[dict] | None = None) -> str:
+    """The README's block: the models and corpus tables, and the images table when there are image sets, between the
+    markers."""
     recorded = [row for row in groups if row["render"] or row["parse"] or row["refused"]]
     rest = [row for row in groups if row not in recorded]
     lines = [
@@ -273,6 +301,32 @@ def render_readme(groups: list[dict], sources: list[dict], base: Path) -> str:
             ]
         )
     )
+    if images:
+        lines += [
+            "",
+            "### Images",
+            "",
+            "The images the references of every processor family are recorded over, by the dataset they were imported "
+            "from; the files are in Git LFS.",
+            "",
+            "| Dataset | From | Licenses | Images | Bytes |",
+            "|---|---|---|---:|---:|",
+        ]
+        for row in images:
+            lines.append(
+                _line(
+                    [
+                        row["source"],
+                        ", ".join(sorted(row["from"])) or "written in this repository",
+                        ", ".join(sorted(row["licenses"])) or None,
+                        row["images"],
+                        _size(row["bytes"]),
+                    ]
+                )
+            )
+        lines.append(
+            _line(["all", None, None, sum(row["images"] for row in images), _size(sum(row["bytes"] for row in images))])
+        )
     return "\n".join([*lines, "", README_END])
 
 
@@ -305,7 +359,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         if args.readme is not None:
             groups, sources = group_rows(args.fixtures, args.corpus), corpus_rows(args.corpus)
-            block = render_readme(groups, sources, args.readme.resolve().parent)
+            block = render_readme(groups, sources, args.readme.resolve().parent, image_rows(args.corpus))
             return write_readme(args.readme, block, args.check)
         rows = counts(args.fixtures, args.corpus)
     except (OSError, ValueError) as err:

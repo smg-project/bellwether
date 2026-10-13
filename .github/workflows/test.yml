@@ -50,6 +50,10 @@ jobs:
       - run: uv run bellwether import glaive-v2 --check
       - run: uv run bellwether import swehero --check
       - run: uv run bellwether import tau2 --check
+      # The image sets' files stay Git LFS pointers here; each pointer names its content's sha256 and size, which the
+      # check compares with the set lines. An image importer's --check, with its downloads, runs in corpus-images.yml.
+      - name: The image sets and their files agree
+        run: uv run bellwether images check
       - name: The README's tables are what fixtures/ and corpus/ hold
         run: uv run bellwether count --readme README.md --check
       - uses: actions/cache@v6

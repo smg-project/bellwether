@@ -3,5 +3,7 @@
 	#   git lfs pull --include 'fixtures/<slug>/<kind>/<set>.jsonl.zst' --exclude ''
 	# with the path from the repository root. Without --exclude '', this fetchexclude wins and nothing is fetched.
 	# Compressed corpus sets (corpus/**/*.jsonl.zst, an import past corpus_sets.LIMIT) are fetched: record and
-	# import --check read them whole, and there is one copy per dataset, not one per model.
-	fetchexclude = fixtures/**/*.jsonl.zst
+	# import --check read them whole, and there is one copy per dataset, not one per model. The image corpus
+	# (corpus/images/**, gigabytes) is not: bellwether images check reads the pointers, and a consumer fetches the
+	# images it needs by path, as it fetches a fixture set.
+	fetchexclude = fixtures/**/*.jsonl.zst,corpus/images/**

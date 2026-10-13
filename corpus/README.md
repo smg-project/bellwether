@@ -453,6 +453,37 @@ was sent, so the import rebuilds every request from tau2's own code and data.
   cases and 4,747 parse cases. A solo agent's turns repeat most, since no user varies them: its sets hold about 7,000
   parse cases each, with fewer than 300 distinct messages.
 
+## Image sets
+
+An image set is the image side's corpus: one JSON Lines file per dataset under `corpus/image/`, one line per image,
+written by `bellwether import <dataset>` and never edited by hand, with the image's bytes beside it under
+`corpus/images/<dataset>/`, exactly as the dataset ships them, in Git LFS (`docs/image-sets.md`). A line is written in
+the order its fields are built: `name`, a slug that becomes the last part of a fixture id (`<dataset>-<nnnnn>-<sha8>`:
+the image's position among the dataset's kept images and the first eight hex digits of its sha256); `path` from the
+corpus root; `bytes` and `sha256`; what the file's own headers say it is, read with no decoder (`format`, `w` and `h`
+as stored, `color`, `bits`, `transparency`, `orientation` where the file carries an EXIF orientation, `progressive`
+and `subsampling` for a JPEG, `animated`); `notes`; and `origin`: the dataset, its source pinned by commit, the sha256
+of the file the bytes were read from, the `row` and `column`, and the licence as the source states it. A row whose
+bytes equal an earlier image's of the dataset gives no line and is named with the image it repeats; a row whose cell
+holds no image, or bytes the catalogue does not read, is named with its reason.
+
+`.lfsconfig` keeps a clone from fetching the images; a pointer names its content's sha256 and size, so
+`bellwether images check` compares every line with the checkout without a download, and CI runs it on every pull
+request. An image importer's `--check` builds the import again from its pinned downloads and compares it with the
+committed set and files; those downloads are large, so `corpus-images.yml` runs it weekly and when an importer
+changes. Fetch a dataset's images with `git lfs pull --include 'corpus/images/<dataset>/**' --exclude ''`, or one
+tier of them once the tiers exist.
+
+| Dataset | Set | Source | License | Attribution |
+|---|---|---|---|---|
+| MMMU | `mmmu`: every image cell of the validation split's 900 questions across its 30 subjects, columns `image_1` to `image_7` (959 images, 340.6 MB; the cells that repeat an earlier image's bytes are left out and named) | `hf:datasets/MMMU/MMMU@876ce5cb130f7f7e290ce4d9984357737d4db5cf`: the 30 files `<subject>/validation-00000-of-00001.parquet`, each pinned by its sha256 in the importer; the card `README.md`, sha256 `0c9190b5582c5798f5744d37215858de0df51c74de49fc4e64f925c3efd725a8` | Apache-2.0, checked in the card's YAML front matter on every import. The dataset ships no LICENSE or NOTICE file, so the import writes the License as the Apache Software Foundation publishes it (the bytes of https://www.apache.org/licenses/LICENSE-2.0.txt, from `github:apache/www-site@01b1be9fbc5cd93b6794f5653a58b9b863807f84`, sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`) to `corpus/licenses/mmmu-LICENSE`, which `--check` checks | MMMU: A Massive Multi-discipline Multimodal Understanding and Reasoning Benchmark for Expert AGI, Yue et al. 2024: https://mmmu-benchmark.github.io, https://huggingface.co/datasets/MMMU/MMMU. The images are the questions' figures as the dataset stores them; the card says its annotators were to avoid sources that forbid copying and redistribution and asks to be told of a sample that breaches a source's terms |
+
+An MMMU line is one image cell of one question: `notes` names the subject, the row and the column
+(`MMMU Accounting validation row 3, image_1`), and `origin.file` the subject's parquet file. The subjects' files are
+read in name order, each row in order and its columns `image_1` to `image_7` in order, so the names are stable from
+one import to the next. `bellwether import mmmu` writes `corpus/image/mmmu.jsonl` and the files under
+`corpus/images/mmmu/`, and removes a file there it did not write.
+
 Set names starting with `bfcl-`, `glaive-v2-`, `gsm8k-`, `hermes-`, `mgsm-`, `shapes-`, `swebench-`, `swehero-` or
 `tau2-` belong to that importer: `bellwether import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it
 did not write, `bellwether import glaive-v2` any `glaive-v2-*` one, `bellwether import gsm8k` any `gsm8k-*` one,

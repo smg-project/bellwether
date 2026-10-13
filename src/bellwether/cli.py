@@ -1,5 +1,5 @@
 """Command line entry point:
-``bellwether gaps | models | manifests | record | import | count | unpack | verify | report``.
+``bellwether gaps | models | manifests | record | import | count | unpack | verify | images | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -18,6 +18,7 @@ from bellwether import __version__
 from bellwether.count import run as count_run
 from bellwether.gaps import run as gaps_run
 from bellwether.groups import run as manifests_run
+from bellwether.images import run as images_check_run
 from bellwether.importers import pinned
 from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
@@ -118,8 +119,9 @@ def build_parser() -> argparse.ArgumentParser:
     importer = sub.add_parser("import", help="write corpus sets from a public dataset at a pinned revision")
     importer.add_argument(
         "dataset",
-        choices=["bfcl", "glaive-v2", "gsm8k", "hermes", "mgsm", "shapes", "swebench", "swehero", "tau2"],
-        help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape",
+        choices=["bfcl", "glaive-v2", "gsm8k", "hermes", "mgsm", "mmmu", "shapes", "swebench", "swehero", "tau2"],
+        help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
+        "mmmu is an image set (corpus/README.md)",
     )
     importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     importer.add_argument(
@@ -209,10 +211,31 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--junit", type=Path, metavar="PATH", help="write a JUnit XML report here")
     verify.set_defaults(func=verify_run)
 
+    images = sub.add_parser("images", help="the image corpus: its sets and the files that go with them")
+    images_sub = images.add_subparsers(dest="images_command", metavar="command")
+    images_check = images_sub.add_parser(
+        "check",
+        help="every set line names a file in the checkout with its sha256 and size, as content or as a Git LFS "
+        "pointer, and nothing is unnamed; no fetch",
+    )
+    images_check.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: image/<dataset>.jsonl")
+    images_check.set_defaults(func=images_check_run)
+    images.set_defaults(func=_help(images))
+
     report = sub.add_parser("report", help="summarize verify reports as markdown for the artifacts repo")
     report.add_argument("reports", nargs="+")
     report.set_defaults(func=_stub("report", "M5"))
     return parser
+
+
+def _help(parser: argparse.ArgumentParser):
+    """What a command with subcommands does when given none: its help, and the status of a run that did nothing."""
+
+    def run(_: argparse.Namespace) -> int:
+        parser.print_help()
+        return NOT_IMPLEMENTED
+
+    return run
 
 
 def _stub(name: str, milestone: str):

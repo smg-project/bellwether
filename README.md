@@ -240,6 +240,15 @@ The cases every group is recorded over, by the source they were imported from.
 | tau2 | github:sierra-research/tau2-bench@4ce7c039 | MIT | 22 | 124175 | 22 | 127433 | 9.77 GB | 30.8 MB, zstd in Git LFS |
 | all | | | 144 | 531736 | 155 | 589659 | 26.08 GB | 1.13 GB |
 
+### Images
+
+The images the references of every processor family are recorded over, by the dataset they were imported from; the files are in Git LFS.
+
+| Dataset | From | Licenses | Images | Bytes |
+|---|---|---|---:|---:|
+| mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
+| all | | | 959 | 340.6 MB |
+
 <!-- end of what bellwether count --readme writes -->
 
 ## Quick start

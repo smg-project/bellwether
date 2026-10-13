@@ -42,4 +42,8 @@ def run(args: argparse.Namespace) -> int:
         from .tau2 import run as run_tau2
 
         return run_tau2(args)
+    if args.dataset == "mmmu":
+        from .mmmu import run as run_mmmu
+
+        return run_mmmu(args)
     raise ValueError(f"no importer for {args.dataset!r}")
