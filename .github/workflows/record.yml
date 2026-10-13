@@ -85,6 +85,8 @@ jobs:
       matrix:
         group: ${{ fromJSON(needs.plan.outputs.groups) }}
     env:
+      # Opens a gated checkpoint's files, once its terms are accepted on the Hub with the token's account.
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
       SLUG: ${{ matrix.group.slug }}
       SOURCES: ${{ inputs.sources }}
       AGAIN: ${{ inputs.again }}

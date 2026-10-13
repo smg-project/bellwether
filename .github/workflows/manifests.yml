@@ -1,0 +1,44 @@
+name: manifests
+
+# Writes the manifests of checkpoints whose files only a token opens, gated models on the Hugging Face Hub: the rows
+# given to the run join fixtures/models.tsv when the HF_TOKEN Actions secret opens their files (scripts/
+# add_model_rows.py names the others in the run's summary), `bellwether manifests` reads every listed checkpoint's inputs
+# with that token, and the list and the manifests go to a branch of their own, manifests/<run id>, for a pull request.
+# Runs on the bellwether-record runners, since the inputs of every listed checkpoint are downloaded. Started by hand only.
+on:
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: Rows to add to fixtures/models.tsv, one a line, model<TAB>revision<TAB>downloads<TAB>day<TAB>tier
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    runs-on: bellwether-record
+    timeout-minutes: 360
+    permissions:
+      contents: write  # the push of manifests/<run id>
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      ROWS: ${{ inputs.rows }}
+      BRANCH: manifests/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - name: The rows the token opens join the list
+        run: uv run --frozen python scripts/add_model_rows.py fixtures/models.tsv | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Manifests
+        run: uv run --frozen bellwether manifests
+      - name: Push the list and the manifests to their branch
+        run: |
+          set -euo pipefail
+          git add fixtures
+          if git diff --cached --quiet; then echo "no new manifests"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "manifests: checkpoints the token opens (run ${{ github.run_id }})"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          git show --stat --format= HEAD | tail -1
