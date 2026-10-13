@@ -555,10 +555,17 @@ inside a sandbox: `bellwether sandbox-record` (`src/bellwether/sandbox.py`).
 4. **The run.** `bellwether record --oracle vendor` runs:
    - as a user without privileges, with no capabilities and no new privileges;
    - with no network and a read-only root, writing only to `/work` (a volume) and `/tmp`;
-   - within 2 CPUs, 6 GB of memory, 512 processes and four hours;
+   - within 2 CPUs, 6 GB of memory unless a larger limit is given (`--memory`), 512 processes and four
+     hours;
    - with no credential: the token never enters the container, and the hub is offline.
-5. **Back out.** The group's fixtures are copied back to the host. The container, the volume and
-   the run image are removed whatever the outcome.
+5. **Back out.** The group's fixtures are copied back to the host. A run of named sets (`--set`)
+   brings back those sets alone, their files and tables, so runs at once keep each other's sets. The
+   container, the volume and the run image are removed whatever the outcome.
+
+At benchmark scale the `sandbox-record` workflow records these groups, on the `bellwether-sandbox`
+runners, which run Docker in a sidecar. It cuts each source into calls as the `record` workflow does
+(`scripts/record_sources.py --sandbox`): each call is one `sandbox-record` run of a few sets, under a
+memory limit large enough for tau2's sets, and the group's new sets go to `record/<slug>/<run id>`.
 
 Outside the sandbox, `record --oracle vendor` refuses before any vendor code is imported, and no
 other oracle loads a vendor class. Each reference names its source: `vendor-code` for render,

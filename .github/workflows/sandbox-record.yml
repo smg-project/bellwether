@@ -1,0 +1,162 @@
+name: sandbox-record
+
+# Records corpus sources for the checkpoint groups whose oracle inputs hold the vendor's code (a tokenizer class from
+# the checkpoint's repository, such as Kimi's), which run only in the sandbox: each recorder call is
+# `bellwether sandbox-record`, a network-less container with no credential (docs/benchmark-sets.md, "Running vendor
+# code"), under the memory limit given, and brings back the sets it recorded alone. The calls are cut as the record
+# workflow cuts them (scripts/record_sources.py --sandbox), on the bellwether-sandbox runner scale set, whose pods run
+# Docker in a sidecar (8 CPU and 48 GiB). Each group's new fixture sets go to a branch of its own, record/<slug>/<run
+# id>, as the record workflow pushes them. Started by hand only, as the record workflow is.
+on:
+  workflow_dispatch:
+    inputs:
+      groups:
+        description: Group slugs to record, separated by spaces; empty for every group whose oracle inputs hold vendor code
+        required: false
+        default: ""
+      sources:
+        description: Corpus sources to record, separated by spaces; a group's sets already recorded are skipped
+        required: false
+        default: common bfcl gsm8k mgsm hermes shapes swebench glaive-v2 tau2 swehero
+      jobs:
+        description: Recorder calls at once in each group's job, each a container under the memory limit (48 GiB a pod)
+        required: false
+        default: "2"
+      memory:
+        description: Each call's memory limit, as docker run --memory takes it (a tau2 call holds up to ~19 GB)
+        required: false
+        default: "20g"
+      again:
+        description: Sources to record again although a group has their sets, after a fix to the recorder
+        required: false
+        default: ""
+      max-parallel:
+        description: Groups at once (the bellwether-sandbox scale set runs 2 pods)
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+      count: ${{ steps.plan.outputs.count }}
+      corpus-key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: plan
+        env:
+          SLUGS: ${{ inputs.groups }}
+          SOURCES: ${{ inputs.sources }}
+        run: |
+          # A source's sets are corpus/<kind>/<source>-<part> or <source> alone, as .jsonl or .jsonl.zst.
+          for source in $SOURCES; do
+            found=no
+            for set in corpus/*/"$source"{-*,}.jsonl{,.zst}; do [ -f "$set" ] && found=yes; done
+            [ "$found" = yes ] || { echo "::error::no corpus set for $source"; exit 1; }
+          done
+          python3 scripts/record_plan.py --sandbox $SLUGS >> "$GITHUB_OUTPUT"
+      # The sources' compressed corpus sets, fetched from Git LFS once into a cache every group's job restores: Git LFS
+      # bandwidth is metered, a cache restore is not. Plain sets are in the checkout.
+      - id: key
+        env:
+          SOURCES: ${{ inputs.sources }}
+        run: echo "key=record-corpus-$(echo $SOURCES | tr ' ' '+')-${{ hashFiles('corpus/**/*.jsonl.zst') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        id: corpus
+        with:
+          path: .git/lfs/objects
+          key: ${{ steps.key.outputs.key }}
+      - if: steps.corpus.outputs.cache-hit != 'true'
+        env:
+          SOURCES: ${{ inputs.sources }}
+        run: |
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,corpus/*/%s.jsonl.zst,' "$source" "$source"; done)
+          git lfs fetch --include "${include%,}"
+
+  record:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: record ${{ matrix.group.slug }}
+    runs-on: bellwether-sandbox
+    timeout-minutes: 2880
+    permissions:
+      contents: write  # the push of record/<slug>/<run id>
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    env:
+      # Opens a gated checkpoint's files on the runner, before any vendor code runs; no container is given it.
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      MEMORY: ${{ inputs.memory }}
+      SLUG: ${{ matrix.group.slug }}
+      SOURCES: ${{ inputs.sources }}
+      AGAIN: ${{ inputs.again }}
+      JOBS: ${{ inputs.jobs }}
+      BRANCH: record/${{ matrix.group.slug }}/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      # The runner image has neither. actions/cache keys an entry by its compression too, so the restore below finds
+      # the entry the plan job saved with zstd only where zstd is installed.
+      - name: Git LFS and zstd
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git-lfs zstd
+          git lfs install --local
+      - name: Docker
+        run: docker version --format 'client {{.Client.Version}}, server {{.Server.Version}}'
+      # A job run again (Re-run failed jobs) carries on from what its earlier attempt pushed: the sets sets.toml lists
+      # are not recorded again, and the new commit goes on top. The fixture sets stay pointers (.lfsconfig).
+      - name: Carry on from an earlier attempt
+        run: |
+          set +e; git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; found=$?; set -e
+          case $found in
+            0) git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+               git checkout -q --detach "refs/remotes/origin/$BRANCH"
+               git log -1 --format='carrying on from %h: %s' ;;
+            2) echo "first attempt" ;;
+            *) exit "$found" ;;
+          esac
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - uses: actions/cache/restore@v6
+        with:
+          path: .git/lfs/objects
+          key: ${{ needs.plan.outputs.corpus-key }}
+          fail-on-cache-miss: true
+      - name: The sources' corpus sets
+        run: |
+          include=$(for source in $SOURCES; do printf 'corpus/*/%s-*.jsonl.zst,corpus/*/%s.jsonl.zst,' "$source" "$source"; done)
+          git lfs pull --include "${include%,}"
+      # A set recorded again is read first, for the engine witnesses it carries over case by case, so the group's sets
+      # of the sources named again are fetched; .lfsconfig's fetchexclude keeps every other fixture set a pointer.
+      - name: The sets to record again
+        if: inputs.again != ''
+        run: |
+          include=$(for source in $AGAIN; do printf 'fixtures/%s/*/%s-*.jsonl.zst,fixtures/%s/*/%s.jsonl.zst,' "$SLUG" "$source" "$SLUG" "$source"; done)
+          git lfs pull --include "${include%,}" --exclude ''
+      - name: Record
+        id: record
+        run: |
+          again=()
+          [ -n "$AGAIN" ] && again=(--again $AGAIN --since "${{ github.sha }}")
+          uv run --frozen python scripts/record_sources.py "$SLUG" --sandbox --memory "$MEMORY" --sources $SOURCES \
+            --jobs "$JOBS" "${again[@]}"
+      # Whatever was recorded goes up, a crashed call or a cancelled job included. These commits stay on record/
+      # branches and carry no sign-off: the pull requests that bring the sets to main are made from the files, as their
+      # author's own signed-off commits.
+      - name: Push the group's sets to its branch
+        if: always() && steps.record.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          git add "fixtures/$SLUG"
+          if git diff --cached --quiet; then echo "nothing new for $SLUG"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "sandbox-record $SLUG: $SOURCES (run ${{ github.run_id }}, attempt ${{ github.run_attempt }})"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          git show --stat --format= HEAD | tail -1

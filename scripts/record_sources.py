@@ -1,7 +1,7 @@
 """Record the named corpus sources for one checkpoint group, as a ``record`` workflow job does on a runner.
 
     uv run python scripts/record_sources.py <slug> [--sources common bfcl ... swehero] [--jobs 3]
-                                            [--again tau2 swehero --since <commit>]
+                                            [--again tau2 swehero --since <commit>] [--sandbox --memory 20g]
 
 1. **The checkpoint's files.** The oracle inputs are read once with network access, as the recorder reads them
    (``bellwether.inputs.checkpoint_dir``), which leaves them in the Hugging Face cache at the manifest's revision with
@@ -17,7 +17,10 @@
    or so of plain JSON Lines, and a recorder near 3 GB.
 3. **Resuming.** A set ``sets.toml`` already lists for the kind is not recorded again, so a job that is run again picks
    up where the last one stopped.
-4. **Recording again.** After a fix to the recorder, ``--again`` names the sources to record although ``sets.toml``
+4. **In the sandbox.** With ``--sandbox`` each call is ``bellwether sandbox-record`` instead, for a group whose oracle
+   inputs hold the vendor's code: a container of its own, under ``--memory``, that brings back the call's sets alone.
+   The sandbox's base image is built once, before the calls.
+5. **Recording again.** After a fix to the recorder, ``--again`` names the sources to record although ``sets.toml``
    lists their sets; each set is recorded anew and its table replaced. ``--since`` is the commit the run started from:
    a set whose files the run's commits have changed since then was recorded again already, so a job run again does
    not record it a third time.
@@ -191,14 +194,26 @@ def fetch_inputs(model: str, revision: str) -> None:
             say(f"{model} at {revision[:8]}: no {name}, marked absent")
 
 
-def record(slug: str, model: str, kind: str, call: list[Path], fixtures: Path, failures: list[str]) -> None:
-    """One ``bellwether record`` call, on a corpus directory that links its sets alone."""
+def command(model: str, kind: str, fixtures: Path, corpus: Path, names: list[str], sandbox: str | None) -> list[str]:
+    """One call's command: ``bellwether record``, or ``bellwether sandbox-record`` under the memory limit
+    ``sandbox``."""
     bellwether = str(Path(sys.executable).parent / "bellwether")
+    if sandbox is None:
+        args = [bellwether, "record", "--model", model, "--kind", kind, "--oracle", "reference"]
+        args += ["--fixtures", str(fixtures), "--corpus", str(corpus)]
+    else:
+        args = [bellwether, "sandbox-record", "--model", model, "--kind", kind]
+        args += ["--fixtures", str(fixtures), "--corpus", str(corpus), "--memory", sandbox]
+    return args + [flag for name in names for flag in ("--set", name)]
+
+
+def record(
+    slug: str, model: str, kind: str, call: list[Path], fixtures: Path, failures: list[str], sandbox: str | None = None
+) -> None:
+    """One recorder call, on a corpus directory that links its sets alone."""
     names = [set_name(path) for path in call]
     with call_corpus(kind, call) as directory:
-        args = [bellwether, "record", "--model", model, "--kind", kind, "--oracle", "reference"]
-        args += ["--fixtures", str(fixtures), "--corpus", str(directory)]
-        args += [flag for name in names for flag in ("--set", name)]
+        args = command(model, kind, fixtures, directory, names, sandbox)
         start = time.monotonic()
         env = {**os.environ, "HF_HUB_OFFLINE": "1"}
         done = subprocess.run(args, capture_output=True, text=True, env=env)
@@ -222,6 +237,10 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=3, help="calls at once (default: %(default)s)")
     parser.add_argument("--again", nargs="*", default=[], help="sources to record although sets.toml lists their sets")
     parser.add_argument("--since", help="with --again: the commit the run started from")
+    parser.add_argument("--sandbox", action="store_true", help="record with `bellwether sandbox-record` (vendor code)")
+    parser.add_argument(
+        "--memory", default="6g", help="with --sandbox: each call's memory limit (default: %(default)s)"
+    )
     args = parser.parse_args()
     if not set(args.again) <= set(args.sources):
         parser.error(
@@ -236,9 +255,17 @@ def main() -> int:
     done_again = rewritten(group, args.since) if args.again else {}
     pending = queue(args.corpus, args.sources, group / "sets.toml", set(args.again), done_again)
     say(f"{args.slug}: {len(pending)} call(s), {args.jobs} at once")
+    sandbox = args.memory if args.sandbox else None
+    if sandbox and pending:
+        from bellwether.sandbox import base_image
+
+        say(f"{args.slug}: the sandbox's base image is {base_image()}")
     failures: list[str] = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(record, args.slug, model, kind, call, args.fixtures, failures) for kind, call in pending]
+        futures = [
+            pool.submit(record, args.slug, model, kind, call, args.fixtures, failures, sandbox)
+            for kind, call in pending
+        ]
     for future in futures:
         future.result()  # raises what this script, not the recorder, ran into, once every call has finished
     say(f"{args.slug}: the largest recorder held {largest_child_gb():.1f} GB")

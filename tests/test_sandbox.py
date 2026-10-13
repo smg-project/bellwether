@@ -178,3 +178,85 @@ def test_a_group_member_is_refused_before_its_files_are_read(tmp_path, snapshot,
     namespace = type("Args", (), {"model": "acme/X-1-Mini", "kind": "render", "fixtures": fixtures})
     assert sandbox.run(namespace) == 1
     assert "record its primary" in capsys.readouterr().err
+
+
+def test_named_sets_reach_the_recorder_and_the_memory_limit_is_the_one_given(listed):
+    # Benchmark-scale recording runs a source's sets a few at a time, as the record runners do, with room for them.
+    args = sandbox.run_args(
+        "run-1", "run-1-work", "run-image", "sha256:base", listed, "render", ["common", "bfcl-simple"], "20g"
+    )
+    assert ("--memory", "20g") in set(zip(args, args[1:], strict=False))
+    assert "6g" not in args
+    command = args[args.index("run-image") + 1 :]
+    assert command[-4:] == ["--set", "common", "--set", "bfcl-simple"]
+
+
+def sets_toml(group: pathlib.Path, tables: dict[str, int]) -> None:
+    fields = f'form = "plain"\nrejected = 0\nplain_bytes = 3\nplain_sha256 = "{"0" * 64}"\n'
+    text = "".join(f"[render.{name}]\ncases = {cases}\n{fields}\n" for name, cases in tables.items())
+    (group / "sets.toml").write_text(text)
+
+
+def test_a_run_of_named_sets_brings_back_those_sets_alone(tmp_path):
+    # Calls at once each bring back their own sets: a call's copy of the group holds the others as they were when it
+    # started, so the host's other sets and tables stay as the host holds them now.
+    from bellwether.record import sets as set_tables
+
+    group = tmp_path / "fixtures" / "x-1"
+    (group / "render").mkdir(parents=True)
+    (group / "render" / "other.jsonl").write_text("host's\n")
+    (group / "render" / "named.jsonl").write_text("old\n")
+    (group / "render" / "gone.jsonl").write_text("old\n")
+    sets_toml(group, {"other": 7, "named": 1, "gone": 1})
+    fresh = sandbox.landing(group)
+    (fresh / "render").mkdir()
+    (fresh / "render" / "other.jsonl").write_text("a call's stale copy\n")
+    (fresh / "render" / "named.jsonl.zst").write_bytes(b"new")
+    sets_toml(fresh, {"other": 6, "named": 2})
+    sandbox.bring_back(fresh, group, "render", ["named", "gone"])
+    files = sorted(p.relative_to(group).as_posix() for p in group.rglob("*") if p.is_file() and p.suffix != ".lock")
+    assert files == ["render/named.jsonl.zst", "render/other.jsonl", "sets.toml"]
+    assert (group / "render" / "other.jsonl").read_text() == "host's\n"
+    tables = set_tables.read(group / "sets.toml")
+    assert {name: table["cases"] for (_, name), table in tables.items()} == {"other": 7, "named": 2}
+
+
+def test_a_run_of_named_sets_from_the_command_line_keeps_the_hosts_other_sets(listed, tmp_path, monkeypatch):
+    group = listed.path.parent
+    (group / "render").mkdir()
+    (group / "render" / "other.jsonl").write_text("host's\n")
+    sets_toml(group, {"other": 7})
+
+    def docker(*args, **kwargs):
+        if args[0] == "cp":
+            landed = pathlib.Path(args[2])
+            (landed / "render").mkdir()
+            (landed / "render" / "named.jsonl").write_text("new\n")
+            sets_toml(landed, {"named": 3})
+        return subprocess.CompletedProcess(args, 0)
+
+    ran = []
+    monkeypatch.setattr(sandbox, "checked_snapshot", lambda manifest: tmp_path)
+    monkeypatch.setattr(sandbox, "base_image", lambda: "sha256:base")
+    monkeypatch.setattr(sandbox, "stage", lambda *args: None)
+    monkeypatch.setattr(sandbox, "docker", docker)
+    monkeypatch.setattr(
+        subprocess, "run", lambda args, **kwargs: ran.append(args) or subprocess.CompletedProcess(args, 0)
+    )
+    namespace = type(
+        "Args",
+        (),
+        {
+            "model": "acme/X-1",
+            "kind": "render",
+            "fixtures": group.parent,
+            "corpus": tmp_path,
+            "sets": ["named"],
+            "memory": "20g",
+        },
+    )
+    assert sandbox.run(namespace) == 0
+    assert ran[0][-2:] == ["--set", "named"] and ("--memory", "20g") in set(zip(ran[0], ran[0][1:], strict=False))
+    assert (group / "render" / "other.jsonl").read_text() == "host's\n"
+    assert (group / "render" / "named.jsonl").read_text() == "new\n"
+    assert (group / "manifest.toml").is_file()

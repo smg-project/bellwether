@@ -18,8 +18,9 @@ container that holds bellwether, the checkpoint's files and the corpus, and noth
    ``/tmp``. No credential is passed in.
 5. **Back out.** When the recorder finished, refusals or not, the group's fixtures are copied from the volume to the
    host and take the place of the host's copy, so a set the run removed is gone there too; a run the time or memory
-   limit stopped leaves the host's fixtures unchanged. The container, volume and run image are removed whatever the
-   outcome.
+   limit stopped leaves the host's fixtures unchanged. A run of named sets (``--set``) brings back those sets alone,
+   files and tables, so runs at once, each recording a few of a source's sets as the record runners do at benchmark
+   scale, keep each other's. The container, volume and run image are removed whatever the outcome.
 """
 
 from __future__ import annotations
@@ -34,13 +35,16 @@ from pathlib import Path
 
 from bellwether.inputs import checkpoint_dir, oracle_inputs
 from bellwether.manifest import Manifest, find_manifest
+from bellwether.record import sets as set_tables
 from bellwether.record import vendor
+from bellwether.storage import stem
 
 ROOT = Path(__file__).resolve().parents[2]  # the bellwether checkout: pyproject.toml, uv.lock, src/, docker/
 DOCKERFILE = ROOT / "docker" / "vendor" / "Dockerfile"
 BASE_TAG = "bellwether-vendor-base"
 USER = "10001:10001"
-LIMITS = ("--cpus", "2", "--memory", "6g", "--pids-limit", "512")
+LIMITS = ("--cpus", "2", "--pids-limit", "512")
+MEMORY = "6g"  # a run's memory limit unless one is given: a benchmark-scale call of tau2's sets holds more
 SECONDS = 4 * 3600  # the longest a group's recording may take
 # The statuses of a run whose fixtures are copied back: the recorder finished (0), or refused some cases (1, its usual
 # outcome). A run the time limit stopped (124), the memory limit killed (137) or that was stopped (143) has its
@@ -96,15 +100,25 @@ def stage(manifest: Manifest, snapshot: Path, kind: str, fixtures: Path, corpus:
     )
 
 
-def run_args(name: str, volume: str, image: str, base_digest: str, manifest: Manifest, kind: str) -> list[str]:
+def run_args(
+    name: str,
+    volume: str,
+    image: str,
+    base_digest: str,
+    manifest: Manifest,
+    kind: str,
+    sets: list[str] | None = None,
+    memory: str = MEMORY,
+) -> list[str]:
     """``docker run`` for one recording: no network, a read-only root, an unprivileged user, no capabilities, limits,
-    and no credential in the environment."""
+    and no credential in the environment. Named ``sets`` are the only ones the recorder records."""
     record = ["bellwether", "record", "--model", manifest.model, "--kind", kind, "--oracle", "vendor"]
     record += ["--fixtures", "/work/fixtures", "--corpus", "/work/corpus"]
+    record += [flag for name in sets or [] for flag in ("--set", name)]
     return [
         "docker", "run", "--name", name, "--network", "none", "--read-only",
         "--tmpfs", "/tmp:rw,size=2g,mode=1777", "--mount", f"type=volume,src={volume},dst=/work",
-        "--user", USER, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", *LIMITS,
+        "--user", USER, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", *LIMITS, "--memory", memory,
         "--env", f"{vendor.SANDBOX_ENV}=1", "--env", f"{vendor.IMAGE_ENV}={base_digest}",
         "--env", "HF_HOME=/hf", "--env", "HF_HUB_OFFLINE=1", "--env", "HF_MODULES_CACHE=/tmp/hf_modules",
         "--env", "HOME=/tmp", image, "timeout", str(SECONDS), *record,
@@ -123,6 +137,22 @@ def replace_group(fresh: Path, group: Path) -> None:
     group.rename(old)
     fresh.rename(group)
     shutil.rmtree(old)
+
+
+def bring_back(fresh: Path, group: Path, kind: str, names: list[str]) -> None:
+    """Put the named sets of ``kind`` from ``fresh`` into ``group``, files and tables, and leave every other set as the
+    host holds it now: calls at once each bring back their own sets, and a call's copy of the group holds the others as
+    they were when it started. A named set the run left no table for is gone from the host too."""
+    tables = set_tables.read(fresh / set_tables.FILE)
+    for name in names:
+        for path in (group / kind).glob(f"{name}.jsonl*"):
+            if stem(path) == name:
+                path.unlink()
+        for path in (fresh / kind).glob(f"{name}.jsonl*") if (fresh / kind).is_dir() else []:
+            if stem(path) == name:
+                (group / kind).mkdir(exist_ok=True)
+                shutil.copyfile(path, group / kind / path.name)
+    set_tables.update(group / set_tables.FILE, kind, {name: tables.get((kind, name)) for name in names})
 
 
 def docker(*args: str, check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess:
@@ -161,6 +191,7 @@ def run(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as err:
         print(f"bellwether sandbox-record: {err}", file=sys.stderr)
         return 1
+    sets = list(getattr(args, "sets", None) or [])
     base = base_image()
     tag = f"bellwether-run-{uuid.uuid4().hex[:12]}"
     name, volume = tag, f"{tag}-work"
@@ -168,7 +199,8 @@ def run(args: argparse.Namespace) -> int:
         with tempfile.TemporaryDirectory(prefix="bellwether-run-") as tmp:
             stage(manifest, snapshot, args.kind, args.fixtures, args.corpus, Path(tmp))
             docker("build", "--quiet", "--tag", tag, tmp, quiet=True)
-        status = subprocess.run(run_args(name, volume, tag, base, manifest, args.kind)).returncode
+        memory = getattr(args, "memory", None) or MEMORY
+        status = subprocess.run(run_args(name, volume, tag, base, manifest, args.kind, sets, memory)).returncode
         if status not in FINISHED:
             print(
                 f"bellwether sandbox-record: the run stopped with status {status}; the host's fixtures are unchanged",
@@ -178,7 +210,10 @@ def run(args: argparse.Namespace) -> int:
         fresh = landing(args.fixtures / manifest.slug)
         try:
             docker("cp", f"{name}:/work/fixtures/{manifest.slug}/.", str(fresh))
-            replace_group(fresh, args.fixtures / manifest.slug)
+            if sets:
+                bring_back(fresh, args.fixtures / manifest.slug, args.kind, sets)
+            else:
+                replace_group(fresh, args.fixtures / manifest.slug)
         finally:
             shutil.rmtree(fresh, ignore_errors=True)
         return status

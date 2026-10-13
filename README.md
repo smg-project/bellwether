@@ -412,7 +412,9 @@ runs that class only inside a container:
 - holding only the files the manifest lists, each checked against its sha256 before anything runs.
 
 It needs a Docker engine. `record --oracle vendor` refuses outside the container and names this
-command. `docs/benchmark-sets.md`, "Running vendor code", has the steps.
+command. `docs/benchmark-sets.md`, "Running vendor code", has the steps. At benchmark scale the
+`sandbox-record` workflow runs it a few sets at a time, with `--set` and a larger `--memory`, on the
+`bellwether-sandbox` runners.
 
 ## The list of models
 

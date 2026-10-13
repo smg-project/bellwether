@@ -114,6 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
     sandboxed.add_argument("--kind", required=True, choices=["render", "parse"])
     sandboxed.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     sandboxed.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
+    sandboxed.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="record only this corpus set (repeat for more); only these sets' files and tables come back to the host",
+    )
+    sandboxed.add_argument(
+        "--memory",
+        default="6g",
+        help="the run's memory limit, as `docker run --memory` takes it (default: %(default)s)",
+    )
     sandboxed.set_defaults(func=sandbox_run)
 
     importer = sub.add_parser("import", help="write corpus sets from a public dataset at a pinned revision")

@@ -37,7 +37,7 @@ def test_the_plan_takes_every_group_once_and_leaves_vendor_code_to_the_sandbox(t
         {"slug": "a-group", "model": "org/A", "revision": REVISION},
         {"slug": "b-group", "model": "org/B", "revision": REVISION},
     ]
-    assert vendor == ["vendor"]
+    assert vendor == [{"slug": "vendor", "model": "org/V", "revision": REVISION}]
 
 
 def test_the_plan_takes_the_groups_named_and_refuses_a_name_with_no_manifest(tmp_path):
@@ -235,3 +235,33 @@ def test_a_sets_size_is_the_one_its_git_lfs_pointer_names(tmp_path):
     pointer = tmp_path / "x.jsonl.zst"
     pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:" + "0" * 64 + "\nsize 12345\n")
     assert size(pointer) == 12345
+
+
+def test_the_sandbox_plan_takes_the_vendor_groups_and_refuses_a_runner_group(tmp_path, monkeypatch, capsys):
+    plan = load("record_plan")
+    manifest(tmp_path, "a-group", "org/A", ["tokenizer_config.json"])
+    manifest(tmp_path, "vendor", "org/V", ["config.json", "tokenization_v.py"])
+    monkeypatch.setattr(plan, "ROOT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["record_plan.py", "--sandbox"])
+    assert plan.main() == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == [f'groups=[{{"slug":"vendor","model":"org/V","revision":"{REVISION}"}}]', "count=1"]
+    monkeypatch.setattr(sys, "argv", ["record_plan.py", "--sandbox", "a-group"])
+    with pytest.raises(
+        SystemExit, match="a-group: no vendor code among its oracle inputs; record it with the record workflow"
+    ):
+        plan.main()
+
+
+def test_a_sandbox_call_runs_sandbox_record_with_the_memory_limit(tmp_path):
+    record = load("record_sources")
+    plain = record.command("org/M", "parse", tmp_path / "f", tmp_path / "c", ["tau2-run-0"], None)
+    assert plain[1:] == [
+        "record", "--model", "org/M", "--kind", "parse", "--oracle", "reference",
+        "--fixtures", str(tmp_path / "f"), "--corpus", str(tmp_path / "c"), "--set", "tau2-run-0",
+    ]  # fmt: skip
+    boxed = record.command("org/M", "parse", tmp_path / "f", tmp_path / "c", ["tau2-run-0"], "20g")
+    assert boxed[1:] == [
+        "sandbox-record", "--model", "org/M", "--kind", "parse",
+        "--fixtures", str(tmp_path / "f"), "--corpus", str(tmp_path / "c"), "--memory", "20g", "--set", "tau2-run-0",
+    ]  # fmt: skip
