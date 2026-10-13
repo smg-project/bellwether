@@ -44,9 +44,17 @@ module-root = "src"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# A family's inputs are the checkpoint's own files at its pinned revision, kept byte for byte (family.toml hashes them).
+extend-exclude = ["multimodal/families"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# The multimodal suite's tools run outside bellwether's environment (the recorder inside the engine's image, the
+# cross-check and the corpus build in a torch environment) and are kept as the record of how the suite was made; they
+# set the offline environment before their imports and keep their long tables as written.
+"multimodal/tools/*.py" = ["E402", "E501", "E741", "B905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

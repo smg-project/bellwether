@@ -1,5 +1,5 @@
 """Command line entry point:
-``bellwether gaps | models | manifests | record | import | count | unpack | verify | report``.
+``bellwether gaps | models | manifests | record | import | count | unpack | verify | multimodal | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -22,6 +22,7 @@ from bellwether.importers import pinned
 from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
 from bellwether.models import run as models_run
+from bellwether.multimodal import add_parser as add_multimodal_parser
 from bellwether.record import run as record_run
 from bellwether.sandbox import run as sandbox_run
 from bellwether.unpack import run as unpack_run
@@ -208,6 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--report", type=Path, metavar="PATH", help="write the JSON report here")
     verify.add_argument("--junit", type=Path, metavar="PATH", help="write a JUnit XML report here")
     verify.set_defaults(func=verify_run)
+
+    add_multimodal_parser(sub)
 
     report = sub.add_parser("report", help="summarize verify reports as markdown for the artifacts repo")
     report.add_argument("reports", nargs="+")

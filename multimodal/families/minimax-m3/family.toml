@@ -1,0 +1,19 @@
+# The minimax-m3 processor family: the checkpoints whose image preprocessing inputs are equal, recorded once.
+smg_processor = "minimax_m3"   # the processor name SMG's multimodal crate and the dump binary take
+model = "MiniMaxAI/MiniMax-M3"   # the checkpoint whose files the inputs were taken from
+revision = "f0e1c1e04d40177e4673a22097036854f536e9c0"   # its hub revision
+trust_remote_code = true
+note = "The image processor is the checkpoint's own code (image_processor.py, named by preprocessor_config.json's auto_map), so the engine loads it with trust_remote_code and the cross-check imports that file by path."
+checkpoints = [
+    "MiniMaxAI/MiniMax-M3",
+]
+
+[engine]   # the classes the engine builds for the family (vLLM 0.31.0)
+processor = "MiniMaxVLMultiModalProcessor"
+hf_processor = "MiniMaxVLProcessor"
+image_processor = "MiniMaxM3VLImageProcessor"
+
+[inputs]   # sha256 of each file the oracles read
+"preprocessor_config.json" = "36785da1dc7a00324048bd7c537c24247fca97c626884818257fd0b92287de31"
+"image_processor.py" = "8218f98634c365608a98ea887bfebac37131ec2acdb8445188350490de7cf994"
+"config.json" = "c9c97ce1e4eece60012d5a10ea87717458bfb1f19c2c7a615a3dbff83d090c6b"

@@ -1,0 +1,98 @@
+name: multimodal
+
+# The image parity gate: SMG's media pipeline against the engine's own image path over one tier of the multimodal suite
+# (multimodal/README.md). The SMG side is the dump example (multimodal/tools/smg_dump.rs) built from the smg commit
+# pinned in .github/versions/smg.ref; the tier's images, raw arrays and reference sets are fetched from Git LFS and
+# cached by their pointers. A pull request that touches the suite or its commands runs corpus-50; the schedule runs
+# corpus-500 every night and the whole corpus once a week; a dispatch names its tier. No GPU anywhere.
+on:
+  pull_request:
+    paths:
+      - multimodal/**
+      - src/bellwether/multimodal/**
+      - .github/versions/smg.ref
+      - .github/workflows/multimodal.yml
+  schedule:
+    - cron: "17 3 * * *"   # nightly: corpus-500
+    - cron: "17 5 * * 0"   # weekly: all
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: The tier to verify
+        required: true
+        default: corpus-50
+        type: choice
+        options: [corpus-50, corpus-500, all]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multimodal-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      TIER: ${{ inputs.tier || (github.event.schedule == '17 5 * * 0' && 'all') || (github.event_name == 'schedule' && 'corpus-500') || 'corpus-50' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - name: The suite's tables agree with its files
+        run: uv run bellwether multimodal check
+      # The tier's Git LFS objects, cached by the pointers of what the tier names: an unchanged tier is not fetched twice.
+      - name: Which objects the tier needs
+        id: tier
+        run: |
+          uv run bellwether multimodal fetch --tier "$TIER" --dry-run > "$RUNNER_TEMP/pull.txt" || true
+          echo "key=multimodal-$TIER-$(sha256sum "$RUNNER_TEMP/pull.txt" | cut -c1-16)-$(cat multimodal/tiers/$TIER.txt multimodal/references/*/sets.toml | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: .git/lfs/objects
+          key: ${{ steps.tier.outputs.key }}
+      - name: Fetch the tier
+        run: uv run bellwether multimodal fetch --tier "$TIER"
+      - name: Read the pinned smg commit
+        id: pin
+        run: |
+          ref="$(tr -d '[:space:]' < .github/versions/smg.ref)"
+          [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error file=.github/versions/smg.ref::expected one 40-character commit hash"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - name: Check out smg
+        uses: actions/checkout@v7
+        with:
+          repository: smg-project/smg
+          ref: ${{ steps.pin.outputs.ref }}
+          path: .smg
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .smg
+          key: multimodal-dump
+      # The dump example: smg's own copy once it ships one, else the suite's source compiled as an example of the
+      # multimodal crate; both implement the same protocol (multimodal/README.md, "The SMG side").
+      - name: Build the dump example
+        run: |
+          if [ ! -f .smg/crates/multimodal/examples/bellwether_dump.rs ]; then
+            mkdir -p .smg/crates/multimodal/examples
+            cp multimodal/tools/smg_dump.rs .smg/crates/multimodal/examples/bellwether_dump.rs
+          fi
+          cargo build --release --manifest-path .smg/Cargo.toml -p llm-multimodal --example bellwether_dump
+      - name: Verify the tier
+        run: |
+          uv run bellwether multimodal verify --tier "$TIER" --smg-dump .smg/target/release/examples/bellwether_dump \
+            --jobs 2 --report "runs/multimodal-$TIER.json" --junit "runs/multimodal-$TIER.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: multimodal-${{ env.TIER }}-${{ github.run_id }}
+          path: runs/multimodal-*
+          if-no-files-found: ignore

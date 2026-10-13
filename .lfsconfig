@@ -4,4 +4,6 @@
 	# with the path from the repository root. Without --exclude '', this fetchexclude wins and nothing is fetched.
 	# Compressed corpus sets (corpus/**/*.jsonl.zst, an import past corpus_sets.LIMIT) are fetched: record and
 	# import --check read them whole, and there is one copy per dataset, not one per model.
-	fetchexclude = fixtures/**/*.jsonl.zst
+	# The multimodal suite's images, clips and raw arrays (gigabytes) are fetched one tier at a time by
+	#   bellwether multimodal fetch --tier corpus-50
+	fetchexclude = fixtures/**/*.jsonl.zst,multimodal/images/**,multimodal/clips/**,multimodal/references/**/raw/**
