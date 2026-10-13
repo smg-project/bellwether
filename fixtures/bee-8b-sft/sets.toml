@@ -1,3 +1,129 @@
+[render.bfcl-irrelevance]
+form = "zstd"
+cases = 240
+rejected = 0
+plain_bytes = 393125
+plain_sha256 = "178d4da2077f92b8e32267be370acd385dd80ed7b182c391818e0bb674f24ae7"
+
+[render.bfcl-live-irrelevance]
+form = "zstd"
+cases = 878
+rejected = 0
+plain_bytes = 3267303
+plain_sha256 = "3e9ed9cb75a0cec336ceb13a1ab574784994a91aae808ab21786e07934c038b4"
+
+[render.bfcl-live-multiple]
+form = "zstd"
+cases = 1053
+rejected = 0
+plain_bytes = 5171340
+plain_sha256 = "44583cfe48f73f1d2d5dd598713892a5d29fea6b4ef876c5802a2efa25d933c8"
+
+[render.bfcl-live-parallel]
+form = "zstd"
+cases = 16
+rejected = 0
+plain_bytes = 33256
+plain_sha256 = "396bc8acf93416365ee7bad54a45fe497274f80f320a38516b414c488fefeb3b"
+
+[render.bfcl-live-parallel-multiple]
+form = "zstd"
+cases = 24
+rejected = 0
+plain_bytes = 114812
+plain_sha256 = "89dc074f71315ddc4038be8d12b07cf7c8c8f5a002334f96d2352dcee9ab1e9d"
+
+[render.bfcl-live-relevance]
+form = "zstd"
+cases = 16
+rejected = 0
+plain_bytes = 72798
+plain_sha256 = "396241b54cd9dd449b87cc17e40e8f347dc2db999e2277d761de0c5dcbfd9ed3"
+
+[render.bfcl-live-simple]
+form = "zstd"
+cases = 258
+rejected = 0
+plain_bytes = 546668
+plain_sha256 = "b6886a328dadb1a257f4e8d005999d5d7a6b0601f8268c2321d5518a2db9129c"
+
+[render.bfcl-multi-turn-base]
+form = "zstd"
+cases = 199
+rejected = 0
+plain_bytes = 4791222
+plain_sha256 = "0c174d5cb456ba95c8ba7747d2819e7b533ec0bef2d0537445bb8aae0d720790"
+
+[render.bfcl-multi-turn-long-context]
+form = "zstd"
+cases = 3
+rejected = 0
+plain_bytes = 85307
+plain_sha256 = "2a5bc826cf8ff912b4c749d308abc2187bf8cd8e77c271d80e30205da43db524"
+
+[render.bfcl-multi-turn-miss-func]
+form = "zstd"
+cases = 199
+rejected = 0
+plain_bytes = 4579932
+plain_sha256 = "b5b66f7039b685f6a438f375580448353a1b5ad6a8fbb7fe3de907c8efd53eb3"
+
+[render.bfcl-multi-turn-miss-param]
+form = "zstd"
+cases = 83
+rejected = 0
+plain_bytes = 1934587
+plain_sha256 = "3cd1d02ace0fe7891913163d98b90973c5095bdb8a8e99fa16869ae4b3317d69"
+
+[render.bfcl-multiple]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 550744
+plain_sha256 = "ed6618fe39d6caa7bdc59471bb7466bdafecbe974d83b656650771725e39604b"
+
+[render.bfcl-parallel]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 451167
+plain_sha256 = "aaedc3328557b6eb5cce00b1973347aff7cbae0b2b4f6a03fc93e355a3d06ffb"
+
+[render.bfcl-parallel-multiple]
+form = "zstd"
+cases = 200
+rejected = 0
+plain_bytes = 707568
+plain_sha256 = "2283fd2ce127570b9c4ba24e910396b7449eaab991088acdeff0fa6584bceb4a"
+
+[render.bfcl-simple-java]
+form = "zstd"
+cases = 100
+rejected = 0
+plain_bytes = 228860
+plain_sha256 = "f3888a286e79a25230c7c127d74a0590edf13b7d79c6416c202eaa18a90b546d"
+
+[render.bfcl-simple-javascript]
+form = "zstd"
+cases = 50
+rejected = 0
+plain_bytes = 118838
+plain_sha256 = "c7d47fd132378b0fafb9049ec6ea71f5a739652cdb82d174fc22820df963b1df"
+
+[render.bfcl-simple-python]
+form = "zstd"
+cases = 400
+rejected = 0
+plain_bytes = 693649
+plain_sha256 = "0603b64361efc5677e7b0a586097f7f05c1619dee4ec5984eafa058690a2d7b7"
+
+[render.common]
+form = "plain"
+cases = 24
+rejected = 0
+plain_bytes = 33175
+plain_sha256 = "7a971db446f492b542bb89f1c4e705119c9a36cc23f6fde01a4b258d8c31ea49"
+
 [render.glaive-v2-00]
 form = "zstd"
 cases = 4724
@@ -495,6 +621,153 @@ rejected = 0
 plain_bytes = 13669232
 plain_sha256 = "3e5923645d7629f6eecc569585cd07d2ae690cf73ff72f6e416119146a239546"
 
+[render.gsm8k-test]
+form = "zstd"
+cases = 1319
+rejected = 0
+plain_bytes = 2073295
+plain_sha256 = "09c59471bd01f824a78816909222eddb5f2c0f8c8ff106271ebc155a8de13e43"
+
+[render.gsm8k-train]
+form = "zstd"
+cases = 7473
+rejected = 0
+plain_bytes = 11626403
+plain_sha256 = "52b061bc74ef0cecbc656f28cacae5d9693accc9b8b67d00f6ce3dc81238582c"
+
+[render.hermes-func-calling]
+form = "zstd"
+cases = 927
+rejected = 0
+plain_bytes = 7412108
+plain_sha256 = "1d3bf9ba895eb608688cf773d03377bb9a07c6037e2be7c48d3493f8932d36ba"
+
+[render.hermes-func-calling-singleturn]
+form = "zstd"
+cases = 1100
+rejected = 0
+plain_bytes = 6483440
+plain_sha256 = "e06b01daf33d21c25cdccb517c6b38ec42b408fe69d912b2ee24c7b80673b21a"
+
+[render.hermes-glaive-func-calling]
+form = "zstd"
+cases = 18742
+rejected = 0
+plain_bytes = 61317685
+plain_sha256 = "1382a7f835eeb3ce6c53b03b06ad4b5381cc3072dcbaaec1f3b60fae64ab91ab"
+
+[render.mgsm-bn]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 858946
+plain_sha256 = "d9efe72440583a1d0ccb583e509370f62f8e1fee41819f893170081bd88c031e"
+
+[render.mgsm-de]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 440103
+plain_sha256 = "cac90f53da55bc0b78b0fcf9de550a60e994e79e620e576367955729c481e252"
+
+[render.mgsm-es]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 428050
+plain_sha256 = "e020081e4adaffca2b1f8c98cf1b0efa92c0635a582b9811a45c90ab0bc933c3"
+
+[render.mgsm-fr]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 434869
+plain_sha256 = "10e4caa313d10ddb7d49a637631a744c1d2299d85b24872933897684cd07f3af"
+
+[render.mgsm-ja]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 482343
+plain_sha256 = "29a7b5d16586af31dd691ab3b083cf34fc82959f9f5ae98899570dea1cab9d88"
+
+[render.mgsm-ru]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 551385
+plain_sha256 = "d7423ed1a72f8e5ba0499d9b6fff635d1e8c3a9f1ca6fcdbb67eb7f562ed9033"
+
+[render.mgsm-sw]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 461233
+plain_sha256 = "3ffacd103724b576112d42be92a07a778517b5f2617f6f083ad59120f7448a03"
+
+[render.mgsm-te]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 1060534
+plain_sha256 = "f9b4689807acbbc2c280a68b029cfd3750f5bc55c6e521cbfcf7dda5da614c91"
+
+[render.mgsm-th]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 704572
+plain_sha256 = "c6bb5a0fa2b993f9498a83673531daf6d9cd07a9de2c9195f7c7b08f8b3a85df"
+
+[render.mgsm-zh]
+form = "zstd"
+cases = 250
+rejected = 0
+plain_bytes = 410213
+plain_sha256 = "8560a37f738ded337ed2f1b60efbb857204e008f986acf7cb34c8e27711adabb"
+
+[render.swebench-test]
+form = "zstd"
+cases = 1697
+rejected = 0
+plain_bytes = 23204365
+plain_sha256 = "d70e23768c0572d8c271f0fc94546ca1db358d5df1ddebb0c2772c5de4f320a2"
+
+[render.swebench-test-copyleft]
+form = "zstd"
+cases = 47
+rejected = 0
+plain_bytes = 784180
+plain_sha256 = "69af624d66888248d81e031d5bca513352c63b6c16fc53c5891939bab366faa4"
+
+[render.swebench-verified]
+form = "zstd"
+cases = 482
+rejected = 0
+plain_bytes = 5108059
+plain_sha256 = "7a924467b7dab686e61561b5b3b3258ea50d7dfa7e8c4b35dca263435955ad79"
+
+[render.swebench-verified-copyleft]
+form = "zstd"
+cases = 10
+rejected = 0
+plain_bytes = 183090
+plain_sha256 = "af3f5f73866e22ec2ed56c1c673941725967fddac38aa98ef90af1a85794f61e"
+
+[render.swehero-0]
+form = "zstd"
+cases = 7500
+rejected = 0
+plain_bytes = 796759587
+plain_sha256 = "aba62d9fb75bf76925326ffd15cfb9f794fecca8372d25c552ca05552c7f2730"
+
+[render.swehero-1]
+form = "zstd"
+cases = 5679
+rejected = 0
+plain_bytes = 708656464
+plain_sha256 = "7d01058b1aa7e585afc19f8149dcf9c40411696d920e4d892246a8a4fd54cd07"
+
 [render.swehero-10]
 form = "zstd"
 cases = 5156
@@ -515,6 +788,41 @@ cases = 5111
 rejected = 0
 plain_bytes = 685994503
 plain_sha256 = "bd2d4f9626427ed67f5f1633b12116cbd4ab79265bc15f5e100019b26d72500c"
+
+[render.swehero-13]
+form = "zstd"
+cases = 3709
+rejected = 0
+plain_bytes = 493156454
+plain_sha256 = "76e72df67ea63f1b1ac3f72fb448122369889229ff0c7eb382198c09386e107d"
+
+[render.swehero-2]
+form = "zstd"
+cases = 5138
+rejected = 0
+plain_bytes = 682978229
+plain_sha256 = "b6c5b05820ea8c11596528a4268d08fbb2d1c159550b17d0e7b43b24165279bc"
+
+[render.swehero-3]
+form = "zstd"
+cases = 5108
+rejected = 0
+plain_bytes = 684967863
+plain_sha256 = "448173c4511afdd8118a90d145e902e30666164bd892470ce60a52303447ba84"
+
+[render.swehero-4]
+form = "zstd"
+cases = 6749
+rejected = 0
+plain_bytes = 788331992
+plain_sha256 = "a815129750962e55889213927103f6fefbd61544e5983d24f02fd923ed567381"
+
+[render.swehero-5]
+form = "zstd"
+cases = 5314
+rejected = 0
+plain_bytes = 712326363
+plain_sha256 = "2818d4580ff4d93fc9d423c979b7e13a1a70dfbd76b6c5276aa1f647aed68d22"
 
 [render.swehero-6]
 form = "zstd"
@@ -543,3 +851,157 @@ cases = 5360
 rejected = 0
 plain_bytes = 697009738
 plain_sha256 = "049f831833faeb5999ef4d0884fa399f57c18b00a82b73351ecafcd87098ebf4"
+
+[render.tau2-claude-3-7-sonnet-20250219-airline-default]
+form = "zstd"
+cases = 2613
+rejected = 0
+plain_bytes = 132452013
+plain_sha256 = "add4a5751197df3ccbe8084790940be5760129d3b991d6e37637a4700a2c5ebb"
+
+[render.tau2-claude-3-7-sonnet-20250219-retail-default]
+form = "zstd"
+cases = 6070
+rejected = 0
+plain_bytes = 285373955
+plain_sha256 = "bdad52ad5d0510ff9a3d500e39325eeb7ac5200e9173e3362311931a0eaee3a8"
+
+[render.tau2-claude-3-7-sonnet-20250219-telecom-default]
+form = "zstd"
+cases = 7473
+rejected = 0
+plain_bytes = 742473345
+plain_sha256 = "6b4e7a39ae016032f361fe33f634099ad0014b681e741dffac1938105d531872"
+
+[render.tau2-gpt-4-1-2025-04-14-airline-default]
+form = "zstd"
+cases = 1830
+rejected = 0
+plain_bytes = 86689254
+plain_sha256 = "6556166c453f6138bfdbab809af07ea5f8794008abc4453202af07fcce2a23b8"
+
+[render.tau2-gpt-4-1-2025-04-14-retail-default]
+form = "zstd"
+cases = 4819
+rejected = 0
+plain_bytes = 214639904
+plain_sha256 = "8d93c59d9c256e96676230c34f10184c9d948d8b513c59cdcd171afb8c076e64"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-default]
+form = "zstd"
+cases = 7272
+rejected = 0
+plain_bytes = 705190352
+plain_sha256 = "790078d3a88d79eab78cea0540d791e6dd8a4cc463341a823b3f729c2cf07eec"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-no-user]
+form = "zstd"
+cases = 6964
+rejected = 0
+plain_bytes = 685324493
+plain_sha256 = "b1721988368f7d02950e74e9c9c916a15302e04c7541035144b1733070325fad"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-op]
+form = "zstd"
+cases = 5475
+rejected = 0
+plain_bytes = 511255588
+plain_sha256 = "8bc329a9e1efd04894e71dc7ad0413d73574f914d03f8a2783b00407f719f823"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-default]
+form = "zstd"
+cases = 7183
+rejected = 0
+plain_bytes = 664648443
+plain_sha256 = "f764b50aca3c93f487c4ce3ba789667089c55dfa8bb1f72ea3a3ed10aff7a0bf"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-no-user]
+form = "zstd"
+cases = 7999
+rejected = 0
+plain_bytes = 763401060
+plain_sha256 = "3fbb3a4eb0244f62c02648cdf1f64e124eae49eef4ff0ac42f2e888c191d0d53"
+
+[render.tau2-gpt-4-1-2025-04-14-telecom-workflow-op]
+form = "zstd"
+cases = 5675
+rejected = 0
+plain_bytes = 514396820
+plain_sha256 = "3dd924fda95a2b2d29abcc76cb369c751fae04afcd6eb6093ae1ce55f0371c23"
+
+[render.tau2-gpt-4-1-mini-2025-04-14-airline-base]
+form = "zstd"
+cases = 2071
+rejected = 0
+plain_bytes = 104274485
+plain_sha256 = "0be0ef14d8dcd03bbe268a47a77314672f8efeef38232ffffa21b180b59c0a4c"
+
+[render.tau2-gpt-4-1-mini-2025-04-14-retail-base]
+form = "zstd"
+cases = 5332
+rejected = 0
+plain_bytes = 247867650
+plain_sha256 = "96b2790acb893e7d19078275a90194921db225a2e937b1d78c4b410010d65c7e"
+
+[render.tau2-gpt-4-1-mini-2025-04-14-telecom-base]
+form = "zstd"
+cases = 12673
+rejected = 0
+plain_bytes = 1368510730
+plain_sha256 = "4c8ed29702bd4aba04891d7189311abdc322ec409eb098a9e89b16289280728f"
+
+[render.tau2-o4-mini-2025-04-16-airline-default]
+form = "zstd"
+cases = 1836
+rejected = 0
+plain_bytes = 84003535
+plain_sha256 = "0956c1dd5e7411bfac736823c93dde84b4db99c3dde2ca72ac9892ee3eed2082"
+
+[render.tau2-o4-mini-2025-04-16-retail-default]
+form = "zstd"
+cases = 5635
+rejected = 0
+plain_bytes = 250922287
+plain_sha256 = "e5637fbc8f1c3d68bdce3cc2c56503113f15bb2183c0e3eda77078c33bf0b584"
+
+[render.tau2-o4-mini-2025-04-16-telecom-default]
+form = "zstd"
+cases = 7466
+rejected = 0
+plain_bytes = 702032774
+plain_sha256 = "ffe2c610df05342c763f62cfc24b0085142406a4eff445a77f935a24cb003bba"
+
+[render.tau2-o4-mini-2025-04-16-telecom-no-user]
+form = "zstd"
+cases = 6800
+rejected = 0
+plain_bytes = 665230334
+plain_sha256 = "0ed827c136d26b89be9491c51d396c86c65e0d30225986ca108ff16a1d8bc0fe"
+
+[render.tau2-o4-mini-2025-04-16-telecom-op]
+form = "zstd"
+cases = 3345
+rejected = 0
+plain_bytes = 296420827
+plain_sha256 = "4d86bf09122df1bd2e45d846fe3a449e928a899f0f8387e8dcb14c821ea3ee59"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-default]
+form = "zstd"
+cases = 5414
+rejected = 0
+plain_bytes = 475646292
+plain_sha256 = "3324171f031dde0c9b63a90ff24dacd09d7a07d9a31bd999d29d4dcd9f24d8aa"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-no-user]
+form = "zstd"
+cases = 7043
+rejected = 0
+plain_bytes = 669063874
+plain_sha256 = "7b514abc58b9d440c28a93ce099018a0c7cbfbea44434b693e943ed59d6efd58"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-op]
+form = "zstd"
+cases = 3187
+rejected = 0
+plain_bytes = 273793587
+plain_sha256 = "3c291b7129bda205bd247232c343a168de201611a98dad92cac01d429093d9cb"
