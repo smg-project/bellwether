@@ -124,6 +124,15 @@ plain_sha256 = "a0dfb806a522273fd46fcf449b4f98f099181eff3a9ecd43af9b3ecca52cb83a
 generate_stop_ids = [1, 106, 50]
 generate_stop_ids_from = "generation_config.json"
 
+[parse.common]
+form = "plain"
+cases = 12
+rejected = 4
+plain_bytes = 40946
+plain_sha256 = "37f9a7dde4c5b918caf3fb744976afbe8a56228643aca314976a640fcf24880c"
+generate_stop_ids = [1, 106, 50]
+generate_stop_ids_from = "generation_config.json"
+
 [parse.glaive-v2-00]
 form = "zstd"
 cases = 4753
@@ -1458,6 +1467,13 @@ rejected = 0
 plain_bytes = 1227015
 plain_sha256 = "de9de79f00d2e52a18056fe7df9f73b1d848d4b127a8ef543f83d461101d29d2"
 
+[render.common]
+form = "plain"
+cases = 24
+rejected = 0
+plain_bytes = 38954
+plain_sha256 = "83aae03fdccb0be6b115d48d6a0f8c83a767022ccd3568d47900872afb67716b"
+
 [render.glaive-v2-00]
 form = "zstd"
 cases = 4724
@@ -2241,3 +2257,17 @@ cases = 5635
 rejected = 0
 plain_bytes = 474603063
 plain_sha256 = "f337740510fb345e37fdf2e8792fc191b7807d2fcd2f3c942491d532c369cedb"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-no-user]
+form = "zstd"
+cases = 7043
+rejected = 0
+plain_bytes = 976168938
+plain_sha256 = "057eebc803353e238fbbe5953e0096b17f0360bba51324688c2d313b338d975e"
+
+[render.tau2-o4-mini-2025-04-16-telecom-workflow-op]
+form = "zstd"
+cases = 3187
+rejected = 0
+plain_bytes = 339996889
+plain_sha256 = "cd52206756184231abdbe228f8b3f7ae59c94b5bcc5ada7198370470d830e43c"
