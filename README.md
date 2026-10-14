@@ -540,12 +540,14 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [mimo-v2.5-pro-base](fixtures/mimo-v2.5-pro-base/sets.toml) | XiaomiMiMo/MiMo-V2.5-Pro-Base @ 1e94ccfd | 1 | 2 | 238490 | 589278 | 278857 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mimo-v2.6-distill-qwen-9b](fixtures/mimo-v2.6-distill-qwen-9b/sets.toml) | XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B @ 2367e865 | 1 | 2 | 531736 | 589298 | 361 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mimo-v2.6-flash-rl](fixtures/mimo-v2.6-flash-rl/sets.toml) | XiaomiMiMo/MiMo-V2.6-Flash-RL @ 5711b268 | 1 | 2 | 531736 | 589298 | 361 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [mimo-v2.6-pro-rl](fixtures/mimo-v2.6-pro-rl/sets.toml) | XiaomiMiMo/MiMo-V2.6-Pro-RL @ 73875d00 | 3 | 2 | 531736 | 589298 | 361 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mimo-vl-7b-rl-2508](fixtures/mimo-vl-7b-rl-2508/sets.toml) | XiaomiMiMo/MiMo-VL-7B-RL-2508 @ 4bfb2707 | 4 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mindlink-32b-0801](fixtures/mindlink-32b-0801/sets.toml) | Skywork/MindLink-32B-0801 @ 1c102e40 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mindlink-72b-0801](fixtures/mindlink-72b-0801/sets.toml) | Skywork/MindLink-72B-0801 @ d7d8b63c | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm-v-4.6](fixtures/minicpm-v-4.6/sets.toml) | openbmb/MiniCPM-V-4.6 @ 36f34a66 | 1 | 2 | 238478 | 461722 | 349772 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm-v-4.6-thinking](fixtures/minicpm-v-4.6-thinking/sets.toml) | openbmb/MiniCPM-V-4.6-Thinking @ 93d8f4b6 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm4-0.5b](fixtures/minicpm4-0.5b/sets.toml) | openbmb/MiniCPM4-0.5B @ 5253c7fc | 4 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [minicpm4-8b](fixtures/minicpm4-8b/sets.toml) | openbmb/MiniCPM4-8B @ bb2ae14c | 4 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm4-8b-eagle-frspec](fixtures/minicpm4-8b-eagle-frspec/sets.toml) | openbmb/MiniCPM4-8B-Eagle-FRSpec @ 1182e40b | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm4-8b-eagle-frspec-qat-cpmcu](fixtures/minicpm4-8b-eagle-frspec-qat-cpmcu/sets.toml) | openbmb/MiniCPM4-8B-Eagle-FRSpec-QAT-cpmcu @ 259b5380 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm4-8b-marlin-cpmcu](fixtures/minicpm4-8b-marlin-cpmcu/sets.toml) | openbmb/MiniCPM4-8B-marlin-cpmcu @ e7e7fcc2 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -558,6 +560,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [minicpm5-1b-sft](fixtures/minicpm5-1b-sft/sets.toml) | openbmb/MiniCPM5-1B-SFT @ a60b37f1 | 1 | 2 | 238490 | 589265 | 278870 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm5-2b](fixtures/minicpm5-2b/sets.toml) | openbmb/MiniCPM5-2B @ f9740005 | 1 | 2 | 238490 | 589277 | 278858 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm5-2b-base](fixtures/minicpm5-2b-base/sets.toml) | openbmb/MiniCPM5-2B-Base @ 96a57cd5 | 1 | 2 | 238490 | 589277 | 278858 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [minicpm5-2b-sft](fixtures/minicpm5-2b-sft/sets.toml) | openbmb/MiniCPM5-2B-SFT @ 3e0690c5 | 2 | 2 | 238490 | 589277 | 278858 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2](fixtures/minimax-m2/sets.toml) | MiniMaxAI/MiniMax-M2 @ 757303d4 | 1 | 2 | 238490 | 12821 | 278551 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2.1](fixtures/minimax-m2.1/sets.toml) | MiniMaxAI/MiniMax-M2.1 @ cd97f591 | 1 | 2 | 238490 | 12821 | 278551 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2.5](fixtures/minimax-m2.5/sets.toml) | MiniMaxAI/MiniMax-M2.5 @ f710177d | 1 | 2 | 238490 | 12821 | 278551 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -725,6 +728,8 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [sage-mm-molmo2-8b-sft-rl](fixtures/sage-mm-molmo2-8b-sft-rl/sets.toml) | allenai/SAGE-MM-Molmo2-8B-SFT_RL @ 55cc7057 | 1 | 2 | 86316 | 0 | 238455 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm |
 | [sage-mm-qwen2.5-vl-7b-sft](fixtures/sage-mm-qwen2.5-vl-7b-sft/sets.toml) | allenai/SAGE-MM-Qwen2.5-VL-7B-SFT @ 3c141dd4 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [sage-mm-qwen2.5-vl-7b-sft-rl](fixtures/sage-mm-qwen2.5-vl-7b-sft-rl/sets.toml) | allenai/SAGE-MM-Qwen2.5-VL-7B-SFT_RL @ 63930ee3 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [sage-mm-qwen3-vl-4b-sft-rl](fixtures/sage-mm-qwen3-vl-4b-sft-rl/sets.toml) | allenai/SAGE-MM-Qwen3-VL-4B-SFT_RL @ ea4dced0 | 2 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [sage-mm-qwen3-vl-8b-sft](fixtures/sage-mm-qwen3-vl-8b-sft/sets.toml) | allenai/SAGE-MM-Qwen3-VL-8B-SFT @ 983d97eb | 2 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [sarvam-m](fixtures/sarvam-m/sets.toml) | sarvamai/sarvam-m @ 01534a53 | 1 | 3 | 238483 | 10886 | 278493 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [sarvam-translate](fixtures/sarvam-translate/sets.toml) | sarvamai/sarvam-translate @ e0a7a6bc | 1 | 3 | 238484 | 184969 | 533016 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [scalecua-32b](fixtures/scalecua-32b/sets.toml) | OpenGVLab/ScaleCUA-32B @ 9a91c806 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -732,14 +737,17 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [scalecua-7b](fixtures/scalecua-7b/sets.toml) | OpenGVLab/ScaleCUA-7B @ da549689 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [seed-coder-8b-reasoning](fixtures/seed-coder-8b-reasoning/sets.toml) | ByteDance-Seed/Seed-Coder-8B-Reasoning @ 9927b772 | 1 | 3 | 86317 | 47052 | 530046 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes |
 | [seed-coder-8b-reasoning-bf16](fixtures/seed-coder-8b-reasoning-bf16/sets.toml) | ByteDance-Seed/Seed-Coder-8B-Reasoning-bf16 @ aa146343 | 1 | 3 | 86317 | 47052 | 530046 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes |
+| [seed-oss-36b-base](fixtures/seed-oss-36b-base/sets.toml) | ByteDance-Seed/Seed-OSS-36B-Base @ 866afe24 | 1 | 3 | 236463 | 495977 | 373185 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [seed-oss-36b-instruct](fixtures/seed-oss-36b-instruct/sets.toml) | ByteDance-Seed/Seed-OSS-36B-Instruct @ 497f1dca | 2 | 2 | 236463 | 495977 | 373185 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [shieldagent](fixtures/shieldagent/sets.toml) | thu-coai/ShieldAgent @ a62f8413 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [shieldstral-1.0-3b](fixtures/shieldstral-1.0-3b/sets.toml) | mistralai/Shieldstral-1.0-3B @ 003ec7e2 | 1 | 2 | 238483 | 184968 | 533018 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [shieldvlm-7b-qwen](fixtures/shieldvlm-7b-qwen/sets.toml) | thu-coai/ShieldVLM-7B-qwen @ 5166dfe7 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [singguard-nsfa-4b](fixtures/singguard-nsfa-4b/sets.toml) | inclusionAI/SingGuard-NSFA-4B @ c7991967 | 2 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [skywork-or1-32b-preview](fixtures/skywork-or1-32b-preview/sets.toml) | Skywork/Skywork-OR1-32B-Preview @ ae710ba9 | 1 | 3 | 531736 | 94830 | 329706 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [skywork-r1v2-38b](fixtures/skywork-r1v2-38b/sets.toml) | Skywork/Skywork-R1V2-38B @ 2230f5dc | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [skywork-r1v3-38b](fixtures/skywork-r1v3-38b/sets.toml) | Skywork/Skywork-R1V3-38B @ 85536660 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [skywork-swe-32b](fixtures/skywork-swe-32b/sets.toml) | Skywork/Skywork-SWE-32B @ f39ff490 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [small-qwen3-5-20b](fixtures/small-qwen3-5-20b/sets.toml) | imdatta0/small_qwen3_5_20b @ 801d554c | 1 | 2 | 238483 | 0 | 278483 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [smollm2-1.7b-magpie-ultra-v0.1-attribution](fixtures/smollm2-1.7b-magpie-ultra-v0.1-attribution/sets.toml) | EleutherAI/SmolLM2-1.7B-magpie-ultra-v0.1-attribution @ 9dabc286 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [smollm2-1.7b-magpie-ultra-v0.1-attribution-lowest](fixtures/smollm2-1.7b-magpie-ultra-v0.1-attribution-lowest/sets.toml) | EleutherAI/SmolLM2-1.7B-magpie-ultra-v0.1-attribution-lowest @ 69db70bb | 4 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [smollm2-1.7b-magpie-ultra-v0.1-classification](fixtures/smollm2-1.7b-magpie-ultra-v0.1-classification/sets.toml) | EleutherAI/SmolLM2-1.7B-magpie-ultra-v0.1-classification @ c53eee0e | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -783,9 +791,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zamba2-7b-instruct-v2](fixtures/zamba2-7b-instruct-v2/sets.toml) | Zyphra/Zamba2-7B-Instruct-v2 @ 54438e69 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zerogui-androidlab-7b](fixtures/zerogui-androidlab-7b/sets.toml) | OpenGVLab/ZeroGUI-AndroidLab-7B @ c9b1907d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zerogui-osworld-7b](fixtures/zerogui-osworld-7b/sets.toml) | OpenGVLab/ZeroGUI-OSWorld-7B @ d14c534e | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1063 | | 297632000 | 218667375 | 91926216 | |
+| all | | 1080 | | 300710858 | 222298676 | 93318716 | |
 
-262 more groups (407 checkpoints) have a manifest and nothing recorded yet.
+254 more groups (390 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
