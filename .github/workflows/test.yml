@@ -39,17 +39,50 @@ jobs:
         with:
           path: .git/lfs/objects
           key: lfs-corpus-${{ hashFiles('corpus/**/*.jsonl.zst') }}
+      # An import's --check depends only on the corpus it compares, the importers' code and pins under src/, the locked
+      # environment and the steps below: checks that passed on the same files (on main, or earlier in the pull request)
+      # are not run again, as a shard of sets is not. A pull request that changes none of them, as a fixtures pull
+      # request does, skips the twenty minutes or so the SWE-Hero and tau2 checks take. The key is taken before the
+      # fetch below, while the corpus's Git LFS sets are pointers, and a pointer names its set's sha256.
+      - name: The import checks' key
+        id: imports
+        run: >-
+          echo "key=checked-imports-${{ hashFiles('corpus/**', 'src/**', 'uv.lock', 'pyproject.toml', '.python-version',
+          '.github/workflows/test.yml') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        id: imported
+        with:
+          path: ${{ runner.temp }}/checked-imports
+          key: ${{ steps.imports.outputs.key }}
       - name: Fetch the corpus sets kept in Git LFS
         run: git lfs pull --include 'corpus/**/*.jsonl.zst' --exclude ''
-      - run: uv run bellwether import bfcl --check
-      - run: uv run bellwether import gsm8k --check
-      - run: uv run bellwether import mgsm --check
-      - run: uv run bellwether import shapes --check
-      - run: uv run bellwether import hermes --check
-      - run: uv run bellwether import swebench --check
-      - run: uv run bellwether import glaive-v2 --check
-      - run: uv run bellwether import swehero --check
-      - run: uv run bellwether import tau2 --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import bfcl --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import gsm8k --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import mgsm --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import shapes --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import hermes --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import swebench --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import glaive-v2 --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import swehero --check
+      - if: steps.imported.outputs.cache-hit != 'true'
+        run: uv run bellwether import tau2 --check
+      # Saved only after every import check above passed.
+      - name: Remember the corpus the import checks passed
+        if: steps.imported.outputs.cache-hit != 'true'
+        run: echo "${{ steps.imports.outputs.key }}" > "$RUNNER_TEMP/checked-imports"
+      - uses: actions/cache/save@v6
+        if: steps.imported.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/checked-imports
+          key: ${{ steps.imports.outputs.key }}
       # The image sets' files stay Git LFS pointers here; each pointer names its content's sha256 and size, which the
       # check compares with the set lines. An image importer's --check, with its downloads, runs in corpus-images.yml.
       - name: The image sets and their files agree
