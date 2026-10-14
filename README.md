@@ -300,7 +300,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 38436 | 54418 | 4 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | all | | 327 | | 68586060 | 54268954 | 28483317 | |
 
-745 more groups (1139 checkpoints) have a manifest and nothing recorded yet.
+747 more groups (1143 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
