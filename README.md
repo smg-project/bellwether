@@ -893,6 +893,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ultravox-v0-6-qwen-3-32b](fixtures/ultravox-v0-6-qwen-3-32b/sets.toml) | fixie-ai/ultravox-v0_6-qwen-3-32b @ 783a0292 | 1 | 3 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ultravox-v0-7-glm-4-6](fixtures/ultravox-v0-7-glm-4-6/sets.toml) | fixie-ai/ultravox-v0_7-glm-4_6 @ a849a095 | 2 | 2 | 238490 | 492389 | 364866 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [unireason-med](fixtures/unireason-med/sets.toml) | IQuestLab/UniReason-Med @ 68d7c25b | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [unirg-cxr](fixtures/unirg-cxr/sets.toml) | microsoft/UniRG-CXR @ cd5a95fa | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [userlm-8b](fixtures/userlm-8b/sets.toml) | microsoft/UserLM-8b @ ce576a23 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [vebrain](fixtures/vebrain/sets.toml) | OpenGVLab/VeBrain @ 5d3a3ec2 | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [vibevoice-asr-hf](fixtures/vibevoice-asr-hf/sets.toml) | microsoft/VibeVoice-ASR-HF @ f22241c2 | 1 | 2 | 531735 | 0 | 1 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -908,6 +909,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [visual-erm](fixtures/visual-erm/sets.toml) | internlm/Visual-ERM @ 44b5486d | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [vlaser-8b](fixtures/vlaser-8b/sets.toml) | OpenGVLab/Vlaser-8B @ cadebc93 | 2 | 2 | 199970 | 145044 | 320255 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes |
 | [webworld-32b](fixtures/webworld-32b/sets.toml) | Qwen/WebWorld-32B @ e7fceedc | 3 | 1 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [x-reasoner-7b](fixtures/x-reasoner-7b/sets.toml) | microsoft/X-Reasoner-7B @ 4d2111d6 | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [xgen-small-4b-base-r](fixtures/xgen-small-4b-base-r/sets.toml) | Salesforce/xgen-small-4B-base-r @ d9f205a4 | 2 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [xgen-small-4b-instruct-r](fixtures/xgen-small-4b-instruct-r/sets.toml) | Salesforce/xgen-small-4B-instruct-r @ b2b2f609 | 2 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [xlam-2-1b-fc-r](fixtures/xlam-2-1b-fc-r/sets.toml) | Salesforce/xLAM-2-1b-fc-r @ 6870fcf1 | 3 | 3 | 531736 | 483062 | 92717 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -921,9 +923,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zerogui-osworld-7b](fixtures/zerogui-osworld-7b/sets.toml) | OpenGVLab/ZeroGUI-OSWorld-7B @ d14c534e | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1277 | | 359692855 | 265214765 | 108982087 | |
+| all | | 1279 | | 360756327 | 266368309 | 108982101 | |
 
-124 more groups (193 checkpoints) have a manifest and nothing recorded yet.
+122 more groups (191 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
