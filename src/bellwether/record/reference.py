@@ -21,8 +21,11 @@ The template is the tokenizer's, or, when the tokenizer ships none, the ``chat_t
 ships its template only there). The tokenizer is ``AutoTokenizer``'s, except when the model config is
 the vendor's class: ``AutoTokenizer`` builds the config first, which needs that code, and bellwether
 never runs it outside the sandbox. Then the class ``tokenizer_config.json`` names is loaded as ``AutoTokenizer``
-would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Neither applies with ``vendor_code``: the vendor's class
-loads as the checkpoint names it, and renders with its own template or none (Kimi-K3's).
+would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Nor does a model config of transformers' own class stop
+the tokenizer when that class's validators refuse the checkpoint's values (ZAYA1's and an OLMo-3 fine-tune's rope
+settings): ``AutoTokenizer`` is given a config of the same model type to choose the class by. Neither applies with
+``vendor_code``: the vendor's class loads as the checkpoint names it, and renders with its own template or none
+(Kimi-K3's).
 
 The template gets each message's content in the format vLLM selects for the template from its source
 (``content_format``: a template that loops over a message's content takes a list of typed parts, and string content
@@ -138,7 +141,8 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
     """The checkpoint's tokenizer: ``AutoTokenizer``'s, or, when the model config is the vendor's class
     (``auto_map``'s ``AutoConfig``) and the vendor's code may not run, the class ``tokenizer_config.json`` names, as
     ``AutoTokenizer`` would choose it. A tokenizer that is the vendor's class itself is ``AutoTokenizer``'s to refuse,
-    or, with ``trust_remote_code`` in the sandbox, to load."""
+    or, with ``trust_remote_code`` in the sandbox, to load. Outside the sandbox, a model config transformers refuses
+    (``config_refused``) has ``AutoTokenizer`` choose by a config of the same model type (``config_stand_in``)."""
     from transformers import AutoTokenizer
 
     if not kwargs.get("trust_remote_code") and vendor_config(model, revision):
@@ -154,7 +158,54 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
         from transformers import PreTrainedConfig
 
         return AutoTokenizer.from_pretrained(model, config=PreTrainedConfig(), **kwargs)
-    return AutoTokenizer.from_pretrained(model, **kwargs)
+    from huggingface_hub.errors import StrictDataclassError
+
+    try:
+        return AutoTokenizer.from_pretrained(model, **kwargs)
+    except (StrictDataclassError, AttributeError):
+        if kwargs.get("trust_remote_code") or not config_refused(model, kwargs):
+            raise
+    return AutoTokenizer.from_pretrained(model, config=config_stand_in(model, revision), **kwargs)
+
+
+def config_refused(model: str, kwargs: dict) -> bool:
+    """Whether transformers refuses the checkpoint's model config as ``AutoTokenizer`` builds it: ``AutoConfig``, or,
+    for a ``ValueError`` or ``OSError`` (a model type transformers does not know), the generic config. A refusal is a
+    validator of the class rejecting the checkpoint's values: a strict-dataclass error, or an ``AttributeError`` that
+    a validator raises and none wraps. Anything else leaves ``AutoTokenizer``'s error as it is."""
+    from huggingface_hub.errors import StrictDataclassError
+    from transformers import AutoConfig, PreTrainedConfig
+
+    try:
+        try:
+            AutoConfig.from_pretrained(model, **kwargs)
+        except (ValueError, OSError):
+            PreTrainedConfig.from_pretrained(model, **kwargs)
+    except (StrictDataclassError, AttributeError):
+        return True
+    except (ValueError, OSError):
+        return False
+    return False
+
+
+def config_stand_in(model: str, revision: str):
+    """The config ``AutoTokenizer`` chooses the tokenizer class by when transformers refuses the checkpoint's own: the
+    default config of its model type, or the generic config for a type transformers does not know (as ``AutoTokenizer``
+    falls back to), named as the checkpoint and carrying ``config.json``'s ``tokenizer_class`` and ``model_name``.
+    Those and the config's class are what ``AutoTokenizer`` reads of it (``tokenization_auto.py`` at transformers
+    5.17.0, lines 791-964); the tokenizer itself loads from the checkpoint's files."""
+    from transformers import CONFIG_MAPPING, PreTrainedConfig
+
+    path = checkpoint_file(model, revision, "config.json")
+    values = json.loads(path.read_text()) if path is not None else {}
+    model_type = values.get("model_type")
+    known = isinstance(model_type, str) and model_type in CONFIG_MAPPING
+    config = CONFIG_MAPPING[model_type]() if known else PreTrainedConfig()
+    config.name_or_path = model
+    for key in ("tokenizer_class", "model_name"):
+        if isinstance(values.get(key), str):
+            setattr(config, key, values[key])
+    return config
 
 
 def auto_tokenizer_class(named: str):

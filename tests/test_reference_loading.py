@@ -4,6 +4,7 @@ import shutil
 
 import pytest
 import transformers
+from huggingface_hub.errors import StrictDataclassFieldValidationError
 
 from bellwether.record import reference, vendor
 from bellwether.record.reference import HfTemplateOracle
@@ -67,6 +68,66 @@ def test_a_vendor_config_loads_the_tokenizer_class_auto_tokenizer_picks_for_the_
     assert type(oracle.tokenizer).__name__ == "TokenizersBackend"
     rendered = oracle.render(REQUEST)
     assert rendered.text.startswith("<|im_start|>user\nWhat is the capital of France?<|im_end|>")
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        # ZAYA1-reasoning-base: ZayaConfig takes "rope_scaling": false for its rope_parameters, a field false does not
+        # fit (a StrictDataclassFieldValidationError).
+        pytest.param({"model_type": "zaya", "rope_scaling": False}, id="field"),
+        # kanana-nano-2.1b-instruct: validate_architecture refuses 24 heads over a hidden size of 1792, though head_dim
+        # is set (a StrictDataclassClassValidationError).
+        pytest.param(
+            {"model_type": "llama", "hidden_size": 1792, "num_attention_heads": 24, "head_dim": 128}, id="class"
+        ),
+        # olmo3-7b-sdf-sft-clean150: Olmo3Config takes one set of rope parameters for one per layer type, and
+        # validate_rope fails on it with an AttributeError, which no strict-dataclass error wraps.
+        pytest.param(
+            {"model_type": "olmo3", "rope_parameters": {"rope_type": "default", "rope_theta": 500000}}, id="attribute"
+        ),
+    ],
+)
+def test_a_model_config_transformers_refuses_does_not_stop_the_tokenizer(checkpoint, config):
+    (checkpoint / "config.json").write_text(json.dumps(config))
+    rendered = HfTemplateOracle(str(checkpoint), "local").render(REQUEST)
+    assert rendered.text.startswith("<|im_start|>user\nWhat is the capital of France?<|im_end|>")
+
+
+@pytest.mark.parametrize(
+    "named", [pytest.param("GemmaTokenizerFast", id="named"), pytest.param(None, id="by-model-type")]
+)
+def test_a_refused_model_config_loads_the_tokenizer_class_its_model_type_picks(checkpoint, named):
+    """``AutoTokenizer`` chooses the class by the model config's type as well as by the class ``tokenizer_config.json``
+    names, and by the type alone when it names none (ZAYA1's type picks ``GemmaTokenizer``); the recorder gives it the
+    same choice for a config of that type that transformers refuses."""
+    tokenizer_config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    tokenizer_config.pop("tokenizer_class")
+    if named is not None:
+        tokenizer_config["tokenizer_class"] = named
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps(tokenizer_config))
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "zaya"}))
+    picked = type(transformers.AutoTokenizer.from_pretrained(str(checkpoint)))
+    assert picked.__name__ == "GemmaTokenizer"
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "zaya", "rope_scaling": False}))
+    assert type(reference.load_tokenizer(str(checkpoint), "local", {})) is picked
+
+
+def test_an_error_the_model_config_does_not_cause_is_the_tokenizers_own(checkpoint, monkeypatch):
+    def refuse(model, **kwargs):
+        raise AttributeError("the tokenizer's own")
+
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "llama"}))
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", refuse)
+    with pytest.raises(AttributeError, match="the tokenizer's own"):
+        reference.load_tokenizer(str(checkpoint), "local", {})
+
+
+def test_inside_the_sandbox_a_refused_model_config_stops_the_tokenizer(checkpoint):
+    # The sandbox loads what AutoTokenizer loads, as it builds the config; the stand-in config is for loads outside it.
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "zaya", "rope_scaling": False}))
+    with pytest.raises(StrictDataclassFieldValidationError):
+        reference.load_tokenizer(str(checkpoint), "local", {"trust_remote_code": True})
 
 
 def test_inside_the_sandbox_the_tokenizer_is_auto_tokenizers_whatever_the_model_config(checkpoint, monkeypatch):
