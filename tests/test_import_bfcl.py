@@ -194,9 +194,8 @@ def test_a_list_of_dict_options_realizes_each_dict():
     assert bfcl.realize(option) == [{"item": "burgers", "quantity": 5}, {"item": "chicken wings", "quantity": 6}]
 
 
-def test_a_dict_option_whose_values_are_not_lists_is_refused():
-    with pytest.raises(ValueError, match="not a list of acceptable values"):
-        bfcl.realize({"size": "large"})
+def test_a_dict_option_accepts_literal_values():
+    assert bfcl.realize({"format": "epoch_millis"}) == {"format": "epoch_millis"}
 
 
 CAFE_FUNCTIONS = [
@@ -522,7 +521,7 @@ def java_sets(tmp_path, answers: list[dict], skipped: list | None = None):
 def test_the_command_names_every_row_it_gives_no_parse_case(tmp_path, monkeypatch, capsys):
     ids = [f"simple_java_{i}" for i in range(1, 6)]
     rows = [{"id": i, "question": [[{"role": "user", "content": "Box"}]], "function": JAVA_FN} for i in ids]
-    answers = [{"id": i, "ground_truth": [{"Box.make": {"size": [5]}}]} for i in ids]
+    answers = [{"id": i, "ground_truth": [{"Box.make": {"unrecognized": [5]}}]} for i in ids]
     path = fake_wheel(
         tmp_path,
         {
@@ -534,10 +533,14 @@ def test_the_command_names_every_row_it_gives_no_parse_case(tmp_path, monkeypatc
     serve_pins(tmp_path, monkeypatch, path)
     assert main(["import", "bfcl", "--corpus", str(tmp_path / "corpus")]) == 0
     out = capsys.readouterr().out
-    assert f"no parse case for 5 row(s) ({', '.join(ids)}): {bfcl.NOT_STRINGS}" in out
+    expected = (
+        f"no parse case for 5 row(s) ({', '.join(ids)}): "
+        "Box.make has no parameter 'unrecognized', which the ground truth requires"
+    )
+    assert expected in out
 
 
-def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
+def test_java_rows_format_arguments_in_string_form(tmp_path):
     sets = java_sets(
         tmp_path,
         [
@@ -551,12 +554,77 @@ def test_java_rows_whose_values_are_not_all_strings_get_no_parse_case(tmp_path):
         "bfcl-simple-java-2",
         "bfcl-simple-java-3",
     ]
-    [parse] = sets[("parse", "bfcl-simple-java")]
-    assert parse["name"] == "bfcl-simple-java-2"
-    skipped: list[tuple[str, str]] = []
-    java_sets(tmp_path, [{"id": "simple_java_1", "ground_truth": [{"Box.make": {"size": [5]}}]}], skipped)
-    assert skipped == [("simple_java_1", bfcl.NOT_STRINGS)]
-    assert parse["message"]["tool_calls"][0]["function"]["arguments"] == '{"label": "big"}'
+    parses = sets[("parse", "bfcl-simple-java")]
+    assert [line["name"] for line in parses] == [
+        "bfcl-simple-java-1",
+        "bfcl-simple-java-2",
+        "bfcl-simple-java-3",
+    ]
+    assert parses[0]["message"]["tool_calls"][0]["function"]["arguments"] == '{"size": "5", "label": "big"}'
+    assert parses[1]["message"]["tool_calls"][0]["function"]["arguments"] == '{"label": "big"}'
+    assert (
+        parses[2]["message"]["tool_calls"][0]["function"]["arguments"]
+        == '{"meta": "new HashMap<String, Object>() {{ put(\\"format\\", \\"epoch_millis\\"); }}"}'
+    )
+
+
+def test_format_java_argument_formats_values_as_converters_expect():
+    assert bfcl.format_java_argument(True, {"type": "boolean"}) == "true"
+    assert bfcl.format_java_argument(False, {"type": "boolean"}) == "false"
+    assert bfcl.format_java_argument(42, {"type": "integer"}) == "42"
+    assert bfcl.format_java_argument(42, {"type": "short"}) == "42"
+    assert bfcl.format_java_argument(42, {"type": "byte"}) == "42"
+    assert bfcl.format_java_argument(42, {"type": "long"}) == "42L"
+    assert bfcl.format_java_argument(3.14, {"type": "float"}) == "3.14f"
+    assert bfcl.format_java_argument(3.14, {"type": "double"}) == "3.14"
+    assert bfcl.format_java_argument("c", {"type": "char"}) == "'c'"
+    assert bfcl.format_java_argument("'c'", {"type": "char"}) == "'c'"
+    assert bfcl.format_java_argument("hello", {"type": "String"}) == "hello"
+    assert bfcl.format_java_argument("hello", {"type": "any"}) == "hello"
+    assert bfcl.format_java_argument([], {"type": "Array"}) == "new Object[]{}"
+    assert (
+        bfcl.format_java_argument([1, 2, 3], {"type": "Array", "items": {"type": "integer"}}) == "new Object[]{1, 2, 3}"
+    )
+    assert bfcl.format_java_argument([1, 2], {"type": "Array", "items": {"type": "long"}}) == "new Object[]{1L, 2L}"
+    assert (
+        bfcl.format_java_argument([1.0, 2.0], {"type": "Array", "items": {"type": "float"}})
+        == "new Object[]{1.0f, 2.0f}"
+    )
+    assert bfcl.format_java_argument(["a", "b"], {"type": "Array", "items": {"type": "String"}}) == "new Object[]{a, b}"
+    assert bfcl.format_java_argument([], {"type": "ArrayList"}) == "new ArrayList<>()"
+    assert (
+        bfcl.format_java_argument(["a", "b"], {"type": "ArrayList", "items": {"type": "String"}})
+        == 'new ArrayList<>(Arrays.asList("a", "b"))'
+    )
+    assert (
+        bfcl.format_java_argument([1, 2], {"type": "ArrayList", "items": {"type": "long"}})
+        == "new ArrayList<>(Arrays.asList(1L, 2L))"
+    )
+    assert bfcl.format_java_argument({}, {"type": "HashMap"}) == "new HashMap<>()"
+    assert (
+        bfcl.format_java_argument({"k": "v", "num": 1, "flag": True}, {"type": "HashMap"})
+        == 'new HashMap<String, Object>() {{ put("k", "v"); put("num", 1); put("flag", true); }}'
+    )
+
+
+def test_java_array_or_arraylist_of_any_with_non_strings_is_unanswerable():
+    with pytest.raises(bfcl.Unanswerable, match="parses an ArrayList of 'any' as strings"):
+        bfcl.format_java_argument(["userID", 42, True], {"type": "ArrayList", "items": {"type": "any"}})
+    with pytest.raises(bfcl.Unanswerable, match="parses an Array of 'any' as strings"):
+        bfcl.format_java_argument([1, "a"], {"type": "Array", "items": {"type": "any"}})
+
+
+def test_format_js_argument_formats_values_as_converters_expect():
+    assert bfcl.format_js_argument(True, {"type": "Boolean"}) == "true"
+    assert bfcl.format_js_argument(False, {"type": "Boolean"}) == "false"
+    assert bfcl.format_js_argument(42, {"type": "integer"}) == "42"
+    assert bfcl.format_js_argument(3.14, {"type": "float"}) == "3.14"
+    assert bfcl.format_js_argument("hello", {"type": "String"}) == "hello"
+    assert bfcl.format_js_argument("hello", {"type": "any"}) == "hello"
+    assert bfcl.format_js_argument([], {"type": "array"}) == "[]"
+    assert bfcl.format_js_argument([1, "two", True], {"type": "array"}) == '[1, "two", true]'
+    assert bfcl.format_js_argument({}, {"type": "dict"}) == "{}"
+    assert bfcl.format_js_argument({"key": "val", "num": 1}, {"type": "dict"}) == '{"key": "val", "num": 1}'
 
 
 def test_a_parameter_the_function_does_not_declare_is_left_out_when_it_may_be_omitted():
