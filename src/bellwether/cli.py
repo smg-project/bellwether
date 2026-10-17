@@ -1,5 +1,5 @@
 """Command line entry point:
-``bellwether gaps | models | manifests | record | import | count | unpack | verify | images | report``.
+``bellwether gaps | models | manifests | record | import | count | unpack | patterns | verify | images | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -23,6 +23,7 @@ from bellwether.importers import pinned
 from bellwether.importers import run as import_run
 from bellwether.manifest import KINDS
 from bellwether.models import run as models_run
+from bellwether.patterns import run as patterns_run
 from bellwether.record import run as record_run
 from bellwether.sandbox import run as sandbox_run
 from bellwether.unpack import run as unpack_run
@@ -178,6 +179,20 @@ def build_parser() -> argparse.ArgumentParser:
     unpack.add_argument("--out", type=Path, default=Path("fixtures-plain"), help="where the plain tree goes")
     unpack.add_argument("--model", help="only this Hugging Face model id")
     unpack.set_defaults(func=unpack_run)
+
+    patterns = sub.add_parser(
+        "patterns",
+        help="record what Python's regex module says about the response templates' patterns, for a consumer's matcher",
+    )
+    patterns.add_argument(
+        "--out", type=Path, default=Path("patterns"), help="where the three recordings go (patterns/ of the checkout)"
+    )
+    patterns.add_argument(
+        "--check",
+        action="store_true",
+        help="record again and compare with the files under --out, writing nothing; exit 1 on a difference",
+    )
+    patterns.set_defaults(func=patterns_run)
 
     verify = sub.add_parser(
         "verify",

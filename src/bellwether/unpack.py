@@ -3,7 +3,9 @@
 Benchmark sets are stored compressed in Git LFS, and a clone holds only their pointers until they are fetched
 (``.lfsconfig``), so ``unpack`` first fetches the selected models' sets that are still pointers. A consumer
 (Symphony's fixture test, smg's consumer test) points at the unpacked root instead, where every set is plain JSON
-Lines beside the hand-written ones, and each model's ``manifest.toml`` and ``sets.toml`` come along.
+Lines beside the hand-written ones, and each model's ``manifest.toml`` and ``sets.toml`` come along. So do the shape
+patterns' recordings (``bellwether patterns``), from ``patterns/`` beside the fixture root into ``patterns/`` of the
+tree, so that a consumer reads one root.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import sys
 from pathlib import Path
 
 from bellwether.manifest import KINDS, Manifest, find_manifest, load_manifest, load_manifests
+from bellwether.patterns import FILES as PATTERN_FILES
 from bellwether.record import sets as set_tables
 from bellwether.storage import (
     is_lfs_pointer,
@@ -27,6 +30,8 @@ from bellwether.storage import (
 
 # Linux caps one command-line argument at 131,072 bytes; a full re-record changes thousands of sets.
 INCLUDE_BYTES = 100_000
+# The shape patterns' recordings, beside the fixture root and in the unpacked tree.
+PATTERNS = "patterns"
 
 
 def selected(fixtures: Path, model: str | None) -> list[Manifest]:
@@ -95,6 +100,24 @@ def unpack(fixtures: Path, out: Path, model: str | None = None) -> list[Path]:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(plain_text(path).encode("utf-8"))
             written.append(target)
+    written.extend(copy_patterns(fixtures, out))
+    return written
+
+
+def copy_patterns(fixtures: Path, out: Path) -> list[Path]:
+    """The shape patterns' recordings, copied by name from ``patterns/`` beside the fixture root into ``patterns/``
+    under ``out``, each replacing the one an earlier unpack wrote; nothing when the root has none (a fixture tree of a
+    test, or a commit before the recordings)."""
+    source = fixtures.resolve().parent / PATTERNS
+    if not source.is_dir():
+        return []
+    target_dir = out / PATTERNS
+    target_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name in PATTERN_FILES:
+        if (source / name).is_file():
+            shutil.copyfile(source / name, target_dir / name)
+            written.append(target_dir / name)
     return written
 
 

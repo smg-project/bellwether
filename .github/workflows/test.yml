@@ -74,6 +74,8 @@ jobs:
         run: uv run bellwether import swehero --check
       - if: steps.imported.outputs.cache-hit != 'true'
         run: uv run bellwether import tau2 --check
+      - name: The shape patterns' recordings are what the pinned regex gives
+        run: uv run bellwether patterns --check
       # Saved only after every import check above passed.
       - name: Remember the corpus the import checks passed
         if: steps.imported.outputs.cache-hit != 'true'
