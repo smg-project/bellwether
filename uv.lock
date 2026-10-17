@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -43,6 +43,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "pyarrow" },
+    { name = "regex" },
     { name = "tokenizers" },
     { name = "transformers" },
     { name = "zstandard" },
@@ -67,6 +68,7 @@ requires-dist = [
     { name = "jsonschema-rs", marker = "extra == 'dev'", specifier = ">=0.29" },
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
+    { name = "regex", specifier = "==2026.9.29" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.0" },
     { name = "tiktoken", marker = "extra == 'vendor'", specifier = ">=0.9" },
     { name = "tokenizers", specifier = "==0.23.2" },

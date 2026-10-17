@@ -1068,6 +1068,25 @@ command. `docs/benchmark-sets.md`, "Running vendor code", has the steps. At benc
 `sandbox-record` workflow runs it a few sets at a time, with `--set` and a larger `--memory`, on the
 `bellwether-sandbox` runners.
 
+## Recording the shape patterns' reference
+
+```bash
+uv run bellwether patterns            # writes patterns/regex.jsonl, search.jsonl, classes.json
+uv run bellwether patterns --check    # CI: records again and compares, byte for byte
+```
+
+A Hugging Face response template writes the parts of a tool call as regular expressions, which
+transformers compiles with Python's `regex` module. Symphony, SMG's parser, lowers each part into a
+matcher of its own, so it needs the module's answers to hold itself to. `patterns` records them at
+the `regex` version `uv.lock` pins: for every pattern a call shape runs in the public response
+templates (the header after a call's marker, the text before its closing marker, a parameter's tag
+with the ways its value ends), what `match` gives over written texts, their prefixes and seeded
+variations; where `search` closes a region before a marker; and the module's `\w`, `\s` and `\d`
+tables with a set of probe characters. The recordings are plain files under `patterns/`, and
+`unpack` copies them into the tree consumers read, so Symphony's tests find them beside the models'
+sets. The reference here is the module itself, pinned; a bump of the pin re-records, and the diff is
+the review.
+
 ## The list of models
 
 ```bash
@@ -1203,6 +1222,7 @@ they are recorded.
 src/bellwether/      package: cli.py, one subpackage per command, schemas/case.schema.json (the fixture line format)
 corpus/              request corpora, one JSON Lines file per set (see corpus/README.md)
 fixtures/            per-model manifests and recorded cases (see fixtures/README.md)
+patterns/            what Python's regex module says about the response templates' patterns (bellwether patterns)
 docker/vendor/       the vendor-code oracle's base image (bellwether sandbox-record)
 waivers/             engine_defects.toml
 tests/
