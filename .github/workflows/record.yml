@@ -15,7 +15,7 @@ on:
       sources:
         description: Corpus sources to record, separated by spaces; a group's sets already recorded are skipped
         required: false
-        default: common bfcl gsm8k mgsm hermes shapes swebench glaive-v2 tau2 swehero
+        default: common turns bfcl gsm8k mgsm hermes shapes swebench glaive-v2 tau2 swehero
       jobs:
         description: Recorder calls at once in each group's job (a pod has 64 GiB; a tau2 call holds up to ~19 GB)
         required: false

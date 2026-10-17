@@ -8,6 +8,9 @@ corpus/
     common.jsonl         # cases every model records
     <slug>/<set>.jsonl   # cases for one model, added to the set of the same name
     <set>.jsonl.zst      # a set of an import past the limit below, compressed in Git LFS
+  parse/
+    common.jsonl         # the parse cases every model records
+    turns.jsonl          # the turn shapes a parser reads beyond `common` (hand-written sets, below)
 ```
 
 A line is `{"name": "...", "request": {...}, "notes": "..."}`. `name` is a lowercase slug and
@@ -24,6 +27,17 @@ after the generation prompt is the output.
 
 Cases are inputs, so they may be written by hand or imported from a vendor catalogue; the
 recorded results next to them under `fixtures/` may not.
+
+## Hand-written sets
+
+`common` (render and parse) holds the cases every model records first: the probes and the parallel calls the
+consumers' tests list by id. `turns` (parse) holds the turn shapes a parser is built against beyond `common`: a call
+with typed values, string arguments holding a bracket, a newline or a quote, content followed by two calls, the turn
+after a tool result (an answer, a call, a thought and a call), a thought with content and calls, and the switches
+templates read from `chat_template_kwargs` (`enable_thinking` and `thinking` off, `preserve_thinking`). A template
+that ignores a switch renders the case as it renders one without it. Its calls carry no id, as the rule above says: a
+template that writes a call's id from the message (the Kimi K2 line's, Mistral's) renders a call no reader can name,
+and `record` reports the case as refused, as it does any call a template does not render whole.
 
 ## Imported sets
 

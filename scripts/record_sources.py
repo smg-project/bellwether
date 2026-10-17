@@ -52,7 +52,7 @@ from bellwether.storage import stem as set_name  # a corpus file's set: its name
 
 ROOT = Path(__file__).resolve().parent.parent
 # Every source in the corpus, the ones a group recorded before the benchmark-scale imports first.
-SOURCES = ["common", "bfcl", "gsm8k", "mgsm", "hermes", "shapes", "swebench", "glaive-v2", "tau2", "swehero"]
+SOURCES = ["common", "turns", "bfcl", "gsm8k", "mgsm", "hermes", "shapes", "swebench", "glaive-v2", "tau2", "swehero"]
 # How many sets one call records: glaive-v2's 71 sets take 0.54 GB (render) and 0.70 GB (parse) as plain JSON Lines in
 # all, tau2's 22 about 4.9 GB and SWE-Hero's 14 about 7.4 GB. The others are small enough for one call a kind: the
 # hermes sets about 100 MB, SWE-bench's 45 MB, BFCL's 37 MB, GSM8K's 23 MB, the shapes 18 MB, MGSM's 4 MB.
