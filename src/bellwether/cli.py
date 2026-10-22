@@ -178,6 +178,17 @@ def build_parser() -> argparse.ArgumentParser:
     unpack.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
     unpack.add_argument("--out", type=Path, default=Path("fixtures-plain"), help="where the plain tree goes")
     unpack.add_argument("--model", help="only this Hugging Face model id")
+    unpack.add_argument(
+        "--plain",
+        action="store_true",
+        help="the sets stored plain alone (the hand-written ones), each sets.toml trimmed to them; nothing is fetched",
+    )
+    unpack.add_argument(
+        "--sample-sets",
+        type=int,
+        metavar="N",
+        help="with --plain: every Nth compressed set of the tree besides, fetched and written whole",
+    )
     unpack.set_defaults(func=unpack_run)
 
     patterns = sub.add_parser(

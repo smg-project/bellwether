@@ -1084,7 +1084,9 @@ with the ways its value ends), what `match` gives over written texts, their pref
 variations; where `search` closes a region before a marker; and the module's `\w`, `\s` and `\d`
 tables with a set of probe characters. The recordings are plain files under `patterns/`, and
 `unpack` copies them into the tree consumers read, so Symphony's tests find them beside the models'
-sets. The reference here is the module itself, pinned; a bump of the pin re-records, and the diff is
+sets. `unpack --plain` writes the hand-written sets alone, each `sets.toml` trimmed to them, with nothing
+fetched; `--sample-sets N` adds every Nth compressed set of the tree, whole, so a consumer with a time or a
+disk budget reads every model's hand-written suite and a rotating sample of the benchmark sets. The reference here is the module itself, pinned; a bump of the pin re-records, and the diff is
 the review.
 
 ## The list of models
