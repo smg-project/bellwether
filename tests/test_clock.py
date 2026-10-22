@@ -45,5 +45,9 @@ def test_the_reference_renders_at_the_epoch_and_its_provenance_names_it(monkeypa
     rendered = oracle.render({"messages": [{"role": "user", "content": "Hello"}]})
     assert rendered.text.startswith(f"Today: {DAY}\n")
     assert oracle.provenance()["source_date_epoch"] == EPOCH
+    # The provenance names the epoch the oracle was built with, whatever the variable says later.
+    monkeypatch.setenv(clock.ENV, "1791374400")
+    assert oracle.provenance()["source_date_epoch"] == EPOCH
     monkeypatch.delenv(clock.ENV)
+    assert oracle.provenance()["source_date_epoch"] == EPOCH
     assert "source_date_epoch" not in HfTemplateOracle(str(checkpoint), "local").provenance()

@@ -12,11 +12,16 @@ from datetime import UTC, datetime
 ENV = "SOURCE_DATE_EPOCH"
 
 
+def pinned_value() -> str | None:
+    """``SOURCE_DATE_EPOCH`` as set, stripped; none when the variable is unset or empty."""
+    return os.environ.get(ENV, "").strip() or None
+
+
 def pinned() -> datetime | None:
     """The instant ``SOURCE_DATE_EPOCH`` names, as a naive UTC datetime (the shape ``datetime.now()`` returns), or
     none when the variable is unset or empty."""
-    value = os.environ.get(ENV, "").strip()
-    if not value:
+    value = pinned_value()
+    if value is None:
         return None
     return datetime.fromtimestamp(int(value), tz=UTC).replace(tzinfo=None)
 
