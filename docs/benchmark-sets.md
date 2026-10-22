@@ -199,8 +199,12 @@ needs a model (the maintainer, 2026-10-06, #23):
     template's source (`record/content_format.py`): a template that loops over a message's content
     gets string content as a one-item text part list, as `vllm serve` gives it; every other template
     gets the string. An assistant tool call's `arguments` reach the template as the object vLLM hands it
-    (`_postprocess_messages`, the parse bullet below), for render as for parse. The request stays recorded as
-    sent; the provenance names the format and the arguments' form (`tool_call_arguments`).
+    (`_postprocess_messages`, the parse bullet below), for render as for parse. A `developer` message reaches a
+    template that names no developer role as vLLM's renderer hands it: a system message without its `tools`, the
+    system messages merged into one at the front (`_convert_developer_to_system` and
+    `_consolidate_system_messages` in `vllm/renderers/hf.py`); a template that names the role gets it as written.
+    The request stays recorded as sent; the provenance names the format, the arguments' form
+    (`tool_call_arguments`) and the developer role's (`developer_role`).
   - A checkpoint whose prompt format or tokenizer is the vendor's own code is rendered by that code
     instead: an encoder in place of a chat template (DeepSeek V3.2 and V4, Mistral's
     `mistral-common` checkpoints) or a custom tokenizer class (Kimi-K3). That is the vendor-code

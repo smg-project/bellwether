@@ -25,9 +25,9 @@ part and a text part keeps its ``text`` and its other fields (``_parse_chat_mess
 through as it is (``_parse_chat_message_content_parts``, ``:1814``). A tool result is its text in either format: the
 engine joins its text parts back into one string, no parts giving the empty string (``:2049-2064``). A part of another
 type is a media part, which the engine resolves and the reference cannot, so the case is rejected. Nothing else of the
-engine's pipeline is applied here: an assistant message's tool calls are the oracles' business
-(``reference.as_vllm_gives_it``); the developer role and the thinking fields reach the template as the request gives
-them.
+engine's pipeline is applied here: an assistant message's tool calls and the developer role are the oracles' business
+(``reference.as_vllm_gives_it``, ``reference.with_developer_as_system``); the thinking fields reach the template as the
+request gives them.
 """
 
 from __future__ import annotations
