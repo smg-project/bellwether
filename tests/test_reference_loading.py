@@ -20,6 +20,68 @@ def checkpoint(tiny_model, tmp_path) -> pathlib.Path:
     return directory
 
 
+@pytest.fixture
+def legacy_llama_model(tmp_path) -> pathlib.Path:
+    """A checkpoint of transformers' Llama class whose ``tokenizer.json`` keeps the legacy pipeline: the ``Prepend``
+    normalizer the class replaces with a ``Metaspace`` pre-tokenizer when it builds its own backend."""
+    from tokenizers import Tokenizer, decoders, models, normalizers, trainers
+
+    directory = tmp_path / "legacy-llama"
+    directory.mkdir()
+    tokenizer = Tokenizer(models.BPE(unk_token="<unk>", byte_fallback=True))
+    tokenizer.normalizer = normalizers.Sequence([normalizers.Prepend("\u2581"), normalizers.Replace(" ", "\u2581")])
+    tokenizer.decoder = decoders.Sequence(
+        [decoders.Replace("\u2581", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(" ", 1, 0)]
+    )
+    trainer = trainers.BpeTrainer(
+        vocab_size=300,
+        special_tokens=["<unk>", "<s>", "</s>", "<|im_start|>", "<|im_end|>"],
+        initial_alphabet=list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ?.,\n\u2581"),
+    )
+    sentences = ["system user assistant What is the capital of France? Paris. The quick brown fox"] * 4
+    tokenizer.train_from_iterator(sentences, trainer)
+    tokenizer.save(str(directory / "tokenizer.json"))
+    template = (
+        "{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }}<|im_end|>\n{% endfor %}"
+        "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
+    )
+    config = {
+        "tokenizer_class": "LlamaTokenizer",
+        "chat_template": template,
+        "unk_token": "<unk>",
+        "bos_token": "<s>",
+        "eos_token": "</s>",
+        "add_bos_token": False,
+        "add_prefix_space": True,
+        "legacy": False,
+    }
+    (directory / "tokenizer_config.json").write_text(json.dumps(config))
+    return directory
+
+
+def test_a_llama_class_checkpoint_with_the_legacy_file_pipeline_is_encoded_by_the_class(legacy_llama_model):
+    """transformers' Llama class does not run such a file: its own pipeline gives ``user`` after ``<|im_start|>``
+    where the file's ``Prepend`` gives ``\u2581user``; the reference's ids are the class's, and the provenance says
+    so."""
+    from tokenizers import Tokenizer
+
+    oracle = HfTemplateOracle(str(legacy_llama_model), "local")
+    assert type(oracle.tokenizer).__name__ == "LlamaTokenizer"
+    rendered = oracle.render(REQUEST)
+    encoded = oracle.tokenizer.apply_chat_template(REQUEST["messages"], tokenize=True, add_generation_prompt=True)
+    class_ids = list(encoded["input_ids"] if hasattr(encoded, "keys") else encoded)
+    file_ids = (
+        Tokenizer.from_file(str(legacy_llama_model / "tokenizer.json"))
+        .encode(rendered.text, add_special_tokens=False)
+        .ids
+    )
+    assert rendered.input_ids == class_ids
+    assert rendered.input_ids != file_ids
+    assert oracle.tokenizer.convert_ids_to_tokens(rendered.input_ids[:2]) == ["<|im_start|>", "user"]
+    assert oracle.tokenizer.convert_ids_to_tokens(file_ids[:2]) == ["<|im_start|>", "\u2581user"]
+    assert oracle.provenance()["encoder"] == "transformers:LlamaTokenizer"
+
+
 def test_a_template_only_the_processor_ships_renders(checkpoint):
     # Qwen3-Omni ships its template in chat_template.json, the processor's file, and none in tokenizer_config.json;
     # transformers' processor and vLLM read it from there.

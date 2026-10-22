@@ -56,7 +56,11 @@ transformers tokenizer class may install its own pre-tokenizer over the file's (
 pattern that has no ``\\p{M}``, the Qwen3.5-generation ``tokenizer.json`` keeps combining marks with their letters),
 and the ids then differ on scripts with combining marks although the text is the same. A checkpoint without
 ``tokenizer.json`` (a tiktoken or SentencePiece vocabulary) is encoded by the transformers tokenizer, as before.
-The provenance names the encoder (``encoder``).
+So is a checkpoint whose class does not run the file at all: ``LlamaTokenizer`` builds its own pipeline (no
+normalizer, a ``Metaspace`` pre-tokenizer) over a ``tokenizer.json`` that keeps the legacy ``Prepend`` normalizer, and
+the ids transformers, and the engine with it, produce for such a checkpoint differ from the file's after every
+special token (``<|im_start|>user`` reads ``user``, not ``\u2581user``): the reference encodes through the class
+there (``class_rebuilds_the_pipeline``). The provenance names the encoder (``encoder``).
 """
 
 from __future__ import annotations
@@ -93,7 +97,11 @@ class HfTemplateOracle:
         self.source_date_epoch = clock.pinned_value()
         self.rendered_at = clock.pin_template_clock()
         self.tokenizer = load_tokenizer(model, revision, kwargs)
-        self.encoder = None if vendor_code else checkpoint_encoder(model, revision)
+        self.encoder = (
+            None
+            if vendor_code or class_rebuilds_the_pipeline(self.tokenizer, model, revision)
+            else checkpoint_encoder(model, revision)
+        )
         template = self.tokenizer.chat_template
         if template is None and not vendor_code:
             template = processor_template(model, revision)
@@ -368,6 +376,26 @@ def auto_tokenizer_class(named: str):
     if tokenizer_class is None or tokenizer_class.__name__ == "PythonBackend":
         return TokenizersBackend
     return tokenizer_class
+
+
+def class_rebuilds_the_pipeline(tokenizer, model: str, revision: str) -> bool:
+    """Whether transformers encodes the checkpoint with a pipeline of the class's own rather than its
+    ``tokenizer.json``: ``LlamaTokenizer`` builds its backend from the file's vocabulary with no normalizer and a
+    ``Metaspace`` pre-tokenizer (``tokenization_llama.py`` at transformers 5.17.0) where the file keeps the legacy
+    ``Prepend`` normalizer, so on such a checkpoint the file is not what transformers, and the engine with it, encodes
+    with, and the reference encodes through the class. Every other checkpoint keeps the file as its encoder."""
+    if type(tokenizer).__name__ != "LlamaTokenizer":
+        return False
+    from ..inputs import checkpoint_dir
+
+    path = checkpoint_dir(model, revision) / "tokenizer.json"
+    if not path.is_file():
+        return False
+    normalizer = json.loads(path.read_text(encoding="utf-8")).get("normalizer")
+    if not isinstance(normalizer, dict):
+        return False
+    steps = normalizer.get("normalizers", [normalizer])
+    return any(isinstance(step, dict) and step.get("type") == "Prepend" for step in steps)
 
 
 def checkpoint_encoder(model: str, revision: str):
