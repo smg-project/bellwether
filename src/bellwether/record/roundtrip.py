@@ -74,6 +74,7 @@ from __future__ import annotations
 import copy
 import functools
 import json
+import os
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -134,6 +135,7 @@ class RoundtripOracle:
         self.check_every_part_keeps_its_edges(messages, kwargs, message, rendered)
         self.check_every_argument_is_rendered(messages, kwargs, message, rendered)
         self.check_every_argument_keeps_its_type(messages, kwargs, request.get("tools"), message, rendered)
+        self.check_every_string_keeps_its_quotes(messages, kwargs, message, rendered)
         if not rendered.startswith(prompt):
             raise ValueError(
                 "the template does not extend the generation prompt when the turn is appended; "
@@ -387,6 +389,63 @@ class RoundtripOracle:
                         continue
                     if again == rendered:
                         raise ValueError(type_not_carried(function, name, value, candidate, types))
+
+    def check_every_string_keeps_its_quotes(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
+        """A quote inside what the template writes for an argument must be told apart from the quotes around it.
+
+        A template that writes every value between double quotes as it is (Llama 4's ``"%s"``) gives a string that
+        holds a ``"`` the same byte inside the value as at its end, so no reader can tell where the value ends: the
+        engines' own readers fail the turn and give it back as text, and the case would be recorded with a reference no
+        parser can return (bellwether's Llama 4 sets held a few such cases, ``call-nested-arguments`` among them). A
+        list or an object between those quotes is Python's repr of it, which quotes an element that holds a ``'`` with
+        ``"``, so an apostrophe at any depth loses the case the same way. For every argument that is a list, an object
+        or a string holding a quote, the call is rendered twice more with a string marker in the argument's place: what
+        the two renders share before and after the marker is what the template writes around a string value there, and
+        when that ends and starts with the same quote, the value's own rendering, between the same bytes in the turn,
+        must not hold it. Where it does, the call is rendered once more with a string holding that quote in the
+        argument's place: a template that writes it as it is escapes nothing, and the case is refused; one that escapes
+        it (JSON's ``\\"``) passes, as does one whose repr switched the value's own quotes (``"O'Brien"`` between
+        ``'``) or that delimits the value otherwise (a tag). A template that fails on a render is skipped for it, as in
+        ``check_every_call_is_rendered``. Two or three renders per such argument, none for a case without one.
+        """
+        for index, call in enumerate(message.get("tool_calls") or []):
+            function = call["function"]["name"]
+            for name, value in json.loads(call["function"]["arguments"]).items():
+                if not (isinstance(value, list | dict) or (isinstance(value, str) and any(q in value for q in QUOTES))):
+                    continue
+                framed = [
+                    self.render_variant(messages, kwargs, with_argument(message, index, name, marker))
+                    for marker in FRAMING_MARKERS
+                ]
+                if None in framed:
+                    continue
+                before, after = shared_around(*framed)
+                quote = before[-1:]
+                if not quote or quote not in QUOTES or not after.startswith(quote):
+                    continue  # the template writes no quote of its own around a string there
+                if len(rendered) < len(before) + len(after) or not (
+                    rendered.startswith(before) and rendered.endswith(after)
+                ):
+                    continue  # the value is written otherwise than a string there (a list bare, say)
+                if quote not in rendered[len(before) : len(rendered) - len(after)]:
+                    continue
+                probe = f"{MARKER}{quote}{MARKER}"
+                again = self.render_variant(messages, kwargs, with_argument(message, index, name, probe))
+                if again is None or probe not in again:
+                    continue  # escaped or respelled, so a reader can tell the quote inside from the one around
+                raise ValueError(
+                    f"the template writes argument {name} of call {index} ({function}) between two {quote!r} and a "
+                    f"{quote!r} inside it as it is, so no reader can tell where the value ends in the output"
+                )
+
+    def render_variant(self, messages: list, kwargs: dict, message: dict) -> str | None:
+        """The conversation rendered with ``message`` as its final turn, as the checks render their variants of the
+        case's message; None when the template fails on it."""
+        variant = {"role": "assistant", **as_vllm_gives_it(message)}
+        try:
+            return self.chat([*messages, variant], kwargs, generation_prompt=False)
+        except Exception:
+            return None
 
     def provenance(self) -> dict:
         return self.renderer.provenance()
@@ -721,6 +780,20 @@ def with_argument(message: dict, index: int, name: str, value: object) -> dict:
     function = message["tool_calls"][index]["function"]
     function["arguments"] = json.dumps({**json.loads(function["arguments"]), name: value})
     return message
+
+
+QUOTES = ('"', "'")
+# Two strings of one length with no character in common: rendered in turn in an argument's place, the renders share
+# exactly what the template writes around a string value there.
+FRAMING_MARKERS = ("ab" * 8, "cd" * 8)
+
+
+def shared_around(text: str, other: str) -> tuple[str, str]:
+    """What ``text`` and ``other`` share before and after the part where they differ: two renders of a conversation
+    that differ in one value alone share what the template writes around it."""
+    start = len(os.path.commonprefix([text, other]))
+    tail = len(os.path.commonprefix([text[start:][::-1], other[start:][::-1]]))
+    return text[:start], text[len(text) - tail :] if tail else ""
 
 
 def declared_types(tools: list | None, function: str, parameter: str) -> list[str] | None:
