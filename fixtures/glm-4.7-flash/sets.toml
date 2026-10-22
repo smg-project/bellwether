@@ -25,6 +25,15 @@ plain_sha256 = "fd1751c78003b0bd93e02b7ba4fab12d725a32a198f66af3f11dce4758db87b4
 generate_stop_ids = [154820, 154827, 154829]
 generate_stop_ids_from = "generation_config.json"
 
+[parse.turns]
+form = "plain"
+cases = 11
+rejected = 1
+plain_bytes = 37533
+plain_sha256 = "28aad6097f7976fe8b26e1578d445ea933e160c41444a0469fd253fc400bf8d8"
+generate_stop_ids = [154820, 154827, 154829]
+generate_stop_ids_from = "generation_config.json"
+
 [render.bfcl-irrelevance]
 form = "zstd"
 cases = 240
