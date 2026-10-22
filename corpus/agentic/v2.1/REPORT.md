@@ -17,8 +17,8 @@ converted with `tools/build_corpus_v21.py` (v2's builder + v1's `convert_m27`, u
 | tool schemas per cli session | 7 | - | - |
 | json_schema sessions | 217 = 17.5 % of all (0.2 of the 1,080 non-bfcl sessions) | 188 = 17.7 % | 89 = 13.9 % |
 | thinking sessions | 641 = 51.7 % | 549 = 51.8 % | 326 = 50.9 % |
-| image slots (gen and cli, first user turn) | 162 = 15.0 % of gen + cli (137 gen, 25 cli; the slot draw covers both tenants, so the gen set differs from v2's 135) | 135 (gen only) | none |
-| corpus bytes (plain) | 147,546,426 (6,830,816 as zstd -19) | 141,837,318 | 55.6 MB |
+| image slots (gen and cli, first user turn) | 162 = 15.0 % of each tenant: 135 gen (v2's picks and slot ids, drawn from v2's stream) + 27 cli (drawn apart, slot ids after the gen ones) | 135 (gen only) | none |
+| corpus bytes (plain) | 147,546,426 (6,830,979 as zstd -19) | 141,837,318 | 55.6 MB |
 
 The cli share by count (14.5 %) is not the traffic share: the driver's tenant mix draws each session class at the
 design's weight at sampling time; this count only says how many distinct cli sessions a play can draw from.
@@ -79,8 +79,10 @@ on the recording host; this directory holds the published form only.
 ## (e) Sizes, commands, checks
 
 Files: `corpus.jsonl.zst` (zstd -19 of `corpus.jsonl`; both sha256 in SHA256SUMS), `manifest.json`, `MANIFEST.md`,
-`REPORT.md` (this file), `SHA256SUMS`. Tools: `../tools/build_corpus_v21.py` (pinned by sha256 in manifest.json
-`sources.builder`), `../tools/gen_corpus.py` (unchanged from v2).
+`REPORT.md` (this file), `SHA256SUMS`. Verification: `sha256sum -c --ignore-missing SHA256SUMS` checks the published
+files; the `corpus.jsonl` line is the checksum of the decompressed stream, `zstd -dc corpus.jsonl.zst | sha256sum`.
+Tools: `../tools/build_corpus_v21.py` (pinned by sha256 in manifest.json `sources.builder`), `../tools/gen_corpus.py`
+(unchanged from v2).
 
     <PY> -I tools/build_corpus_v21.py --out v2.1 --bfcl sources/bfcl-26ad99ed --tokenizers deepseek-v4.1-flash=<TOK> \
          --gen 900 --bfcl-per-category 40 --seed 20261022 --jobs 16 --m27 <recordings dir> --synthetic-system-prefix
@@ -91,7 +93,7 @@ push (the builder's own scrub rules: 0 hits).
 
 ## (f) Owed
 
-- The cli sessions' 25 image slots name an image class only (`"file": null`), as the gen slots do; the driver attaches
+- The cli sessions' 27 image slots name an image class only (`"file": null`), as the gen slots do; the driver attaches
   an image of the class from the benchmark's image set (`../images/benchmark-2/`).
 - Only the V4.1 Flash family is counted; the other families' columns return when their tokenizer files are given.
 - The v2 calibration tail (25 of 900 gen last prompts within 5-8.3 % of the plan) is unchanged.

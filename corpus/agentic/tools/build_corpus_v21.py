@@ -18,8 +18,9 @@ USAGE (run with python -I: the BFCL files and the tokenizer files are downloaded
                          session; v1's convert_m27 unchanged): the per-turn history rebuilt from consecutive request bodies, system blocks -> one
                          canonical system string per tenant, tools -> function tools, tool_use -> expected calls, tool_result -> recorded results.
   Every session gets a salt point ("{{SALT}}" in the first user turn), 20 % of the non-bfcl sessions end under response_format
-  json_schema (the f3 schema), 50 % carry thinking=true, and 15 % of the gen sessions carry an image slot reference on the first
-  user turn ("image": {"slot", "class", ...}; the image bytes are attached by the driver from the baked image set when present).
+  json_schema (the f3 schema), 50 % carry thinking=true, and 15 % of the gen sessions and, drawn apart from them, 15 % of the cli
+  sessions carry an image slot reference on the first user turn ("image": {"slot", "class", ...}; the image bytes are attached by
+  the driver from the baked image set when present).
   Output: DIR/corpus.jsonl, DIR/manifest.json (sources and pins, per-session per-turn token counts, calibration, shares),
   DIR/MANIFEST.md (the summary tables). Run the campaign's leak scanner over DIR and this directory afterwards.
 
@@ -29,7 +30,7 @@ Session record (one JSON object per line of corpus.jsonl; unchanged from v1):
               "tool_results": [{"tool_call_id","name","content"}], "recorded_assistant": {"content","reasoning","tool_calls"} | null,
               "max_tokens", "response_format" | null, "planned_prompt_tokens" (gen)}],
    "max_tokens", "thinking": bool, "json_schema": bool, "tool_results_source": "generated|synthetic", "licence", "salt_points",
-   "image": {"slot","class","mpixels_range","file","note"} (15 % of gen only)}
+   "image": {"slot","class","mpixels_range","file","note"} (15 % of gen and, drawn apart, 15 % of cli)}
 """
 import argparse, ast, collections, glob, hashlib, importlib.util, json, math, os, random, re, sys, time
 
@@ -248,6 +249,11 @@ def convert_m27(rec_dir, rnd, limit=0):
                 elif m.get("role") == "system":
                     user_parts.append("[system] " + blocks_text(m.get("content")))
             user = "\n".join(p for p in user_parts if p.strip()) or None
+            # The environment message is the last part of its turn: the published form replaces it with a synthetic block that
+            # reaches to the end of the user text, so a recording with text after it is refused here rather than swallowed.
+            env_at = [k for k, p in enumerate(user_parts) if p.startswith("[system] # Environment")]
+            if env_at and any(p.strip() for p in user_parts[env_at[0] + 1:]):
+                raise SystemExit(f"{f}: turn {i + 1} carries text after the environment message; the replacement would swallow it")
             # the recorded assistant answer of this turn and the tool results that followed (from the next request), else the SSE
             if i + 1 < len(bodies):
                 nxt = bodies[i + 1].get("messages") or []
@@ -739,14 +745,18 @@ def finalize(sessions, rnd, json_share, thinking_share, schema):
 
 
 def assign_image_slots(sessions, seed, share):
-    """15 % (share) of the gen sessions carry an image slot on the first user turn; classes alternate screenshot/document."""
-    gen = [s for s in sessions if s["source"] in ("gen", "m27")]  # v2.1: the recorded cli sessions take image slots too (15 %)
-    k = int(round(share * len(gen)))
-    rnd = random.Random(f"{seed}:images")
-    chosen = sorted(rnd.sample(range(len(gen)), k)) if k else []
+    """`share` of the gen sessions carry an image slot on the first user turn and, drawn apart from them, the same share of the
+    cli (m27) sessions; classes alternate screenshot/document. The gen draw is v2's (the same stream over the gen sessions
+    alone, so the gen picks and their slot ids are v2's, byte for byte); the cli draw has its own stream and the slot ids after
+    the gen ones."""
+    picked = []
+    for source, stream in (("gen", f"{seed}:images"), ("m27", f"{seed}:images:cli")):
+        pool = [s for s in sessions if s["source"] == source]
+        k = int(round(share * len(pool)))
+        rnd = random.Random(stream)
+        picked += [pool[i] for i in sorted(rnd.sample(range(len(pool)), k))] if k else []
     slots = []
-    for n, i in enumerate(chosen):
-        s = gen[i]
+    for n, s in enumerate(picked):
         cls = "screenshot" if n % 2 == 0 else "document"
         s["image"] = {"slot": f"img-{n}", "class": cls, "mpixels_range": [0.2, 2.0], "file": None,
                       "note": "data URL attached by the driver from the baked image set when present; text only otherwise"}
@@ -788,7 +798,7 @@ def main():
     ap.add_argument("--jobs", type=int, default=16, help="generator worker processes")
     ap.add_argument("--json-schema-share", type=float, default=0.2)
     ap.add_argument("--thinking-share", type=float, default=0.5)
-    ap.add_argument("--image-share", type=float, default=0.15, help="share of gen sessions with an image slot on the first user turn")
+    ap.add_argument("--image-share", type=float, default=0.15, help="share of the gen sessions, and apart from them the same share of the cli sessions, with an image slot on the first user turn")
     ap.add_argument("--json-schema", choices=["f3", "report"], default="f3")
     ap.add_argument("--m27", default="", help="recordings dir of the coding-CLI sessions ('' = the cli tenant absent)")
     ap.add_argument("--m27-limit", type=int, default=0, help="convert at most N recordings (0 = all; the selftest keeps all so every file is proven to convert)")
@@ -830,6 +840,8 @@ def main():
     schema = JSON_SCHEMA_F3 if a.json_schema == "f3" else JSON_SCHEMA_REPORT
     sessions = finalize(sessions, rnd, a.json_schema_share, a.thinking_share, schema)
     image_slots = assign_image_slots(sessions, a.seed, a.image_share)
+    n_img_gen = sum(1 for x in image_slots if x["session"].startswith("gen-"))
+    n_img_cli = len(image_slots) - n_img_gen
     ids = [s["id"] for s in sessions]
     assert len(ids) == len(set(ids)), "duplicate session ids"
     # token counts per family: count every text piece once, prefix-sum per turn
@@ -902,7 +914,7 @@ def main():
     ssp = src_stats.get("cli", {}).get("synthetic_system_prefix")
     cli_prefix_lines = [f"- synthetic system prefix (the published form): {json.dumps(ssp)}"] if ssp else []
     md = [f"# Agentic corpus {VERSION} ({man['built']}, seed {a.seed}): {len(sessions)} sessions", "",
-          f"by source: {dict(man['by_source'])} (cli = m27: {src_stats['cli']['status']}, see below); by tenant: {dict(man['by_tenant'])}; json_schema sessions {man['json_schema_sessions']} ({man['shares']['json_schema']:.1%} of all, {man['shares']['json_schema_of_non_bfcl']:.1%} of non-bfcl; v1 13.9 %); thinking sessions {man['thinking_sessions']} ({man['shares']['thinking']:.1%}; v1 50.9 %); image slots {len(image_slots)} ({man['shares']['image_of_gen']:.1%} of gen); corpus {man['corpus_bytes'] / 1e6:.1f} MB",
+          f"by source: {dict(man['by_source'])} (cli = m27: {src_stats['cli']['status']}, see below); by tenant: {dict(man['by_tenant'])}; json_schema sessions {man['json_schema_sessions']} ({man['shares']['json_schema']:.1%} of all, {man['shares']['json_schema_of_non_bfcl']:.1%} of non-bfcl; v1 13.9 %); thinking sessions {man['thinking_sessions']} ({man['shares']['thinking']:.1%}; v1 50.9 %); image slots {len(image_slots)} ({man['shares']['image_of_gen']:.1%} of gen and of cli, drawn apart: {n_img_gen} gen, {n_img_cli} cli); corpus {man['corpus_bytes'] / 1e6:.1f} MB",
           f"turns per session: {man['turns']}; by source: {man['turns_by_source']}; tool schemas per session: {man['tool_schemas_by_source']}; scrubbed markers: {dict(SCRUBBED)}", "",
           "| family | source | first prompt p50 (min-max) | last prompt p50 (min-max) | sum over turns p50 | recorded output per turn p50 |", "|---|---|---|---|---|---|"]
     for fam in fams + ["chars/4"]:
@@ -922,7 +934,7 @@ def main():
           [f"- tokenizer {fam}: {FAMILIES[fam][0]} @ {FAMILIES[fam][1][:12]} ({FAMILIES[fam][2]}) file {man['sources']['tokenizer'][fam]['file']} sha256 {man['sources']['tokenizer'][fam]['sha256']}" for fam in fams] + \
           [f"- tokenizers absent: {[f for f in FAMILIES if f not in fams]}", f"- generator: gen_corpus.py sha256 {man['sources']['generator']['sha256']}", "",
            "## Generator calibration (gen, V4.1 Flash, after finalize)", "", "```", json.dumps(calib, indent=1), "```", "",
-           "## Image slots", "", f"{len(image_slots)} gen sessions carry an image slot on the first user turn (classes alternate screenshot/document, 0.2-2.0 Mpixel; the file is attached by the driver when the baked image set is present): " + ", ".join(x["slot"] + "=" + x["session"] for x in image_slots[:12]) + (" ..." if len(image_slots) > 12 else ""), "",
+           "## Image slots", "", f"{len(image_slots)} sessions carry an image slot on the first user turn ({n_img_gen} gen, drawn as in v2, and {n_img_cli} cli, drawn apart; classes alternate screenshot/document, 0.2-2.0 Mpixel; the file is attached by the driver when the baked image set is present): " + ", ".join(x["slot"] + "=" + x["session"] for x in image_slots[:12]) + (" ..." if len(image_slots) > 12 else ""), "",
            "## Source statistics", "", "```", json.dumps({k: ({kk: vv for kk, vv in v.items() if kk != "calibration_per_session"} if isinstance(v, dict) else v) for k, v in src_stats.items()}, indent=1), "```"]
     json.dump(man, open(f"{a.out}/manifest.json", "w"), indent=1, default=lambda o: dict(o) if isinstance(o, collections.Counter) else str(o))
     open(f"{a.out}/MANIFEST.md", "w").write("\n".join(md) + "\n")

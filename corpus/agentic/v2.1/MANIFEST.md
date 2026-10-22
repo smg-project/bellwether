@@ -1,6 +1,6 @@
-# Agentic corpus v2.1 (2026-10-22T19:28:10Z, seed 20261022): 1240 sessions
+# Agentic corpus v2.1 (2026-10-22T21:07:42Z, seed 20261022): 1240 sessions
 
-by source: {'gen': 900, 'bfcl': 160, 'm27': 180} (cli = m27: present, see below); by tenant: {'coder': 900, 'bfcl': 160, 'cli': 180}; json_schema sessions 217 (17.5% of all, 20.1% of non-bfcl; v1 13.9 %); thinking sessions 641 (51.7%; v1 50.9 %); image slots 162 (15.0% of gen); corpus 147.5 MB
+by source: {'gen': 900, 'bfcl': 160, 'm27': 180} (cli = m27: present, see below); by tenant: {'coder': 900, 'bfcl': 160, 'cli': 180}; json_schema sessions 217 (17.5% of all, 20.1% of non-bfcl; v1 13.9 %); thinking sessions 641 (51.7%; v1 50.9 %); image slots 162 (15.0% of gen and of cli, drawn apart: 135 gen, 27 cli); corpus 147.5 MB
 turns per session: {'n': 1240, 'min': 1, 'p50': 5, 'p90': 7, 'max': 14}; by source: {'gen': {4: 182, 7: 182, 6: 241, 9: 84, 5: 211}, 'bfcl': {4: 37, 2: 20, 3: 39, 5: 37, 6: 21, 1: 3, 7: 2, 8: 1}, 'm27': {7: 17, 6: 23, 9: 6, 2: 30, 3: 35, 5: 23, 4: 23, 8: 17, 10: 3, 12: 1, 14: 1, 11: 1}}; tool schemas per session: {'gen': {'n': 900, 'min': 7, 'p50': 7, 'p90': 7, 'max': 7}, 'bfcl': {'n': 160, 'min': 17, 'p50': 29, 'p90': 36, 'max': 39}, 'm27': {'n': 180, 'min': 7, 'p50': 7, 'p90': 7, 'max': 7}}; scrubbed markers: {}
 
 | family | source | first prompt p50 (min-max) | last prompt p50 (min-max) | sum over turns p50 | recorded output per turn p50 |
@@ -56,7 +56,7 @@ v1 for comparison (641 sessions, V4.1 Flash counts): gen first prompt p50 11.4k 
 
 ## Image slots
 
-162 gen sessions carry an image slot on the first user turn (classes alternate screenshot/document, 0.2-2.0 Mpixel; the file is attached by the driver when the baked image set is present): img-0=gen-001, img-1=gen-016, img-2=gen-036, img-3=gen-047, img-4=gen-051, img-5=gen-056, img-6=gen-066, img-7=gen-069, img-8=gen-090, img-9=gen-093, img-10=gen-105, img-11=gen-114 ...
+162 sessions carry an image slot on the first user turn (135 gen, drawn as in v2, and 27 cli, drawn apart; classes alternate screenshot/document, 0.2-2.0 Mpixel; the file is attached by the driver when the baked image set is present): img-0=gen-000, img-1=gen-025, img-2=gen-028, img-3=gen-033, img-4=gen-034, img-5=gen-052, img-6=gen-057, img-7=gen-069, img-8=gen-070, img-9=gen-075, img-10=gen-085, img-11=gen-086 ...
 
 ## Source statistics
 
@@ -160,7 +160,7 @@ v1 for comparison (641 sessions, V4.1 Flash counts): gen first prompt p50 11.4k 
     "jobs": 63
    }
   },
-  "seconds": 56.3
+  "seconds": 54.2
  },
  "bfcl": {
   "sessions": 160,
@@ -214,7 +214,7 @@ v1 for comparison (641 sessions, V4.1 Flash counts): gen first prompt p50 11.4k 
     }
    }
   },
-  "seconds": 15.2,
+  "seconds": 15.1,
   "recordings_dir": "recordings",
   "files": 180,
   "status": "present",
