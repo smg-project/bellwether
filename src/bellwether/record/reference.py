@@ -49,7 +49,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import vendor
+from . import clock, vendor
 from .content_format import ContentFormat, detect_content_format, in_content_format
 
 SOURCE = "hf-template"
@@ -70,6 +70,9 @@ class HfTemplateOracle:
         if vendor_code:
             kwargs["trust_remote_code"] = True
         self.vendor_code = vendor_code
+        # The epoch the templates render at, read once here: what provenance names is what produced the render.
+        self.source_date_epoch = clock.pinned_value()
+        self.rendered_at = clock.pin_template_clock()
         self.tokenizer = load_tokenizer(model, revision, kwargs)
         self.encoder = None if vendor_code else checkpoint_encoder(model, revision)
         template = self.tokenizer.chat_template
@@ -131,6 +134,7 @@ class HfTemplateOracle:
                 else f"transformers:{type(self.tokenizer).__name__}"
             ),
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
+            **({"source_date_epoch": self.source_date_epoch} if self.source_date_epoch else {}),
         }
         if self.vendor_code:
             found |= vendor.packages()

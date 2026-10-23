@@ -375,7 +375,10 @@ reference stays the checkpoint's own files.
     `date_string`. So does Apertus-8B-Instruct-2509's own template when a request has no system
     message. A prompt that changes with the day can be neither a fixture nor compared across two
     runs, so the recorder renders every reference at one fixed date, written in provenance, and
-    vLLM's side gets the same date. How vLLM's side is given it is settled with step 5's recording.
+    vLLM's side gets the same date: the recorder's clock is `SOURCE_DATE_EPOCH` (the reproducible-builds
+    convention); with it set, `strftime_now` renders that instant in UTC for every reference and the
+    provenance's `source_date_epoch` names it; unset, the real day renders. How vLLM's side is given
+    it is settled with step 5's recording.
 - **Where it lives.** In the case's own line, beside `reference`, as `second_references`, keyed by
   the template's file name, so one line holds every result for its case and the two references are
   compared line by line. A case the checkpoint's own template refuses, or that is not applicable to
