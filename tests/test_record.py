@@ -15,12 +15,14 @@ import pytest
 import zstandard
 from conftest import TEMPLATE
 from tokenizers import Tokenizer, decoders, normalizers, processors
+from transformers import ProcessorMixin
 
 from bellwether import storage
 from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.inputs import oracle_inputs
 from bellwether.manifest import find_manifest, load_manifest, load_manifests, slug_for
+from bellwether.record import reference
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.content_format import detect_content_format, in_content_format
@@ -446,6 +448,185 @@ def test_record_writes_each_lines_developer_role_in_its_provenance(tmp_path, tin
     assert line["reference"]["provenance"]["developer_role"] == "system"
     assert line["reference"]["text"].startswith("<|im_start|>system\nAnswer in one word.<|im_end|>")
     assert line["request"]["messages"][0] == DEVELOPER
+
+
+PROCESSOR_TEMPLATE = (
+    "{%- for m in messages %}{{ m['role'] | upper + ': ' + m['content'] + '\\n' }}{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ 'ASSISTANT: ' }}{%- endif %}"
+)
+
+
+def processor_variant(tiny_model, tmp_path_factory, name: str, tokenizer_template: str | None) -> pathlib.Path:
+    """The tiny model with a processor's legacy ``chat_template.json`` beside the tokenizer's own template (or none)."""
+    directory = tiny_variant(tiny_model, tmp_path_factory, name, tokenizer_template or TEMPLATE)
+    if tokenizer_template is None:
+        config = json.loads((directory / "tokenizer_config.json").read_text())
+        del config["chat_template"]
+        (directory / "tokenizer_config.json").write_text(json.dumps(config))
+    (directory / "chat_template.json").write_text(json.dumps({"chat_template": PROCESSOR_TEMPLATE}))
+    return directory
+
+
+class FakeProcessor(ProcessorMixin):
+    """What AutoProcessor builds for a checkpoint with a processor: its chat template is the legacy file's."""
+
+    attributes: list[str] = []
+
+    def __init__(self, chat_template):
+        self.chat_template = chat_template
+
+
+@pytest.fixture
+def processor_builds(monkeypatch):
+    """transformers builds the checkpoint's processor (the test environment has no vision backends to build a real
+    one): AutoProcessor's result is a processor whose template is the legacy file's, as ``ProcessorMixin`` reads it."""
+    monkeypatch.setattr(
+        reference,
+        "built_processor",
+        lambda model, kwargs: FakeProcessor(
+            json.loads((pathlib.Path(model) / "chat_template.json").read_text())["chat_template"]
+        ),
+    )
+
+
+def test_a_request_without_tools_renders_with_the_processors_template_where_the_engine_builds_one(
+    tiny_model, tmp_path_factory, processor_builds
+):
+    """``resolve_chat_template`` in vLLM's renderer takes the processor's template for a request without tools and the
+    tokenizer's for one with tools (an empty list is a request with tools); the processor's template is the legacy
+    ``chat_template.json``, which transformers' processor reads before any template file."""
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-chat", TEMPLATE)
+    oracle = HfTemplateOracle(str(model), "local")
+    without = oracle.render({"messages": [user("Hi")]})
+    assert without.text == "USER: Hi\nASSISTANT: "
+    assert without.template_source == "processor"
+    assert without.input_ids == oracle.tokenizer.encode(without.text, add_special_tokens=False)
+    with_tools = oracle.render({"messages": [user("Hi")], "tools": [WEATHER_TOOL]})
+    assert with_tools.text.startswith("<|im_start|>system\n[")  # the tokenizer's template writes the tools
+    assert with_tools.template_source == "tokenizer"
+    empty = oracle.render({"messages": [user("Hi")], "tools": []})
+    assert (
+        empty.text == "<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n" and empty.template_source == "tokenizer"
+    )
+    provenance = oracle.provenance()
+    assert provenance["processor"] == "built"
+    assert provenance["chat_template_sha256"] == hashlib.sha256(TEMPLATE.encode()).hexdigest()
+    assert provenance["processor_chat_template_sha256"] == hashlib.sha256(PROCESSOR_TEMPLATE.encode()).hexdigest()
+
+
+def test_the_developer_role_and_the_content_format_follow_the_template_the_request_resolves(
+    tiny_model, tmp_path_factory, processor_builds
+):
+    """The engine tests the developer role and detects the content format on the template it resolved, so a request
+    without tools reads them off the processor's template and one with tools off the tokenizer's."""
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-roles", TEMPLATE)
+    oracle = HfTemplateOracle(str(model), "local")
+    assert oracle.developer_role(None) == "system" and oracle.developer_role([WEATHER_TOOL]) == "system"
+    naming = processor_variant(tiny_model, tmp_path_factory, "processor-names-role", TEMPLATE)
+    (naming / "chat_template.json").write_text(
+        json.dumps(
+            {
+                "chat_template": "{%- for m in messages %}"
+                "{{ m['role'] + ('!' if m['role'] == 'developer' else '') }}{%- endfor %}"
+            }
+        )
+    )
+    oracle = HfTemplateOracle(str(naming), "local")
+    assert oracle.developer_role(None) == "as-written" and oracle.developer_role([WEATHER_TOOL]) == "system"
+    assert oracle.render({"messages": [DEVELOPER, user("Hi")]}).text == "developer!user"
+
+
+def test_a_processor_transformers_cannot_build_leaves_the_engine_the_tokenizers_template(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    """``_try_get_processor_chat_template`` catches a failed build and the engine renders with the tokenizer's template
+    for every request (a Qwen2.5-VL fine-tune whose preprocessor names an image processor class transformers 5.17
+    lacks is such a checkpoint); the provenance says the processor was not built."""
+
+    def refuses(model, kwargs):
+        raise ValueError(f"Unrecognized image processor in {model}. Should have a `image_processor_type` key")
+
+    monkeypatch.setattr(reference, "built_processor", refuses)
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-unbuildable", TEMPLATE)
+    oracle = HfTemplateOracle(str(model), "local")
+    for request in ({"messages": [user("Hi")]}, {"messages": [user("Hi")], "tools": [WEATHER_TOOL]}):
+        rendered = oracle.render(request)
+        assert rendered.template_source == "tokenizer" and rendered.text.endswith("<|im_start|>assistant\n")
+    provenance = oracle.provenance()
+    assert provenance["processor"] == "not-built" and "processor_chat_template_sha256" not in provenance
+
+
+def test_a_checkpoint_without_a_processor_class_renders_with_the_tokenizers_template(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    """AutoProcessor gives a tokenizer, not a processor, for a checkpoint without a processor class; the engine then
+    takes no processor template (``isinstance(processor, ProcessorMixin)``)."""
+    monkeypatch.setattr(reference, "built_processor", lambda model, kwargs: object())
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-less", TEMPLATE)
+    rendered = HfTemplateOracle(str(model), "local").render({"messages": [user("Hi")]})
+    assert rendered.template_source == "tokenizer" and rendered.text.endswith("<|im_start|>assistant\n")
+
+
+def test_a_processor_that_is_the_vendors_code_counts_as_the_engine_builds_it_with_that_code(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    def refuses(model, kwargs):
+        raise ValueError(
+            f"The repository {model} contains custom code which must be executed to correctly load the model."
+        )
+
+    monkeypatch.setattr(reference, "built_processor", refuses)
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-remote", TEMPLATE)
+    oracle = HfTemplateOracle(str(model), "local")
+    assert oracle.render({"messages": [user("Hi")]}).text == "USER: Hi\nASSISTANT: "
+    assert oracle.provenance()["processor"] == "remote-code"
+
+
+def test_a_processor_build_that_fails_for_a_missing_backend_is_refused_not_decided(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    def missing(model, kwargs):
+        raise ImportError("Qwen2VLVideoProcessor requires the Torchvision library but it was not found")
+
+    monkeypatch.setattr(reference, "built_processor", missing)
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-no-backend", TEMPLATE)
+    with pytest.raises(RuntimeError, match="backends are missing"):
+        HfTemplateOracle(str(model), "local")
+
+
+def test_a_checkpoint_without_the_processors_template_file_builds_nothing(tiny_model, monkeypatch):
+    def never(model, kwargs):
+        raise AssertionError("no processor is built for a checkpoint without chat_template.json")
+
+    monkeypatch.setattr(reference, "built_processor", never)
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    rendered = oracle.render({"messages": [user("Hi")]})
+    assert rendered.template_source == "tokenizer" and "processor" not in oracle.provenance()
+
+
+def test_a_tokenizer_without_a_template_renders_with_the_processors_file_for_every_request(
+    tiny_model, tmp_path_factory, processor_builds
+):
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-only", None)
+    oracle = HfTemplateOracle(str(model), "local")
+    for request in ({"messages": [user("Hi")]}, {"messages": [user("Hi")], "tools": [WEATHER_TOOL]}):
+        rendered = oracle.render(request)
+        assert rendered.text == "USER: Hi\nASSISTANT: " and rendered.template_source == "processor"
+    provenance = oracle.provenance()
+    assert provenance["chat_template_sha256"] == hashlib.sha256(PROCESSOR_TEMPLATE.encode()).hexdigest()
+    assert "processor_chat_template_sha256" not in provenance
+
+
+def test_record_writes_each_lines_template_source_in_its_provenance(
+    tmp_path, tiny_model, tmp_path_factory, processor_builds
+):
+    rc, out_dir = record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("Hi")]}}]))
+    assert rc == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/render/a"]
+    assert line["reference"]["provenance"]["template_source"] == "tokenizer"
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-recorded", TEMPLATE)
+    out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Sky?")]}, {"content": "Blue."})
+    assert out.template_source == "processor"
 
 
 def test_the_round_trip_renders_a_developer_message_as_the_engine_does(tiny_model):

@@ -101,6 +101,7 @@ class OutputText:
     ids_without_unicode_normalization: bool
     content_format: ContentFormat
     developer_role: str
+    template_source: str
 
 
 class RoundtripOracle:
@@ -173,6 +174,7 @@ class RoundtripOracle:
             ids_without_unicode_normalization,
             self.renderer.content_format(kwargs.get("tools")),
             self.renderer.developer_role(kwargs.get("tools")),
+            self.renderer.template_source(kwargs.get("tools")),
         )
 
     def chat(self, messages: list, kwargs: dict, *, generation_prompt: bool) -> str:

@@ -203,8 +203,12 @@ needs a model (the maintainer, 2026-10-06, #23):
     template that names no developer role as vLLM's renderer hands it: a system message without its `tools`, the
     system messages merged into one at the front (`_convert_developer_to_system` and
     `_consolidate_system_messages` in `vllm/renderers/hf.py`); a template that names the role gets it as written.
-    The request stays recorded as sent; the provenance names the format, the arguments' form
-    (`tool_call_arguments`) and the developer role's (`developer_role`).
+    The template itself is resolved per request as the engine's server resolves it (`resolve_chat_template` in
+    `vllm/renderers/hf.py`): a request without tools renders with the processor's template when the checkpoint
+    ships one (`chat_template.json`, the legacy processor file, read before any template file), a request with
+    tools with the tokenizer's. The request stays recorded as sent; the provenance names the format, the
+    arguments' form (`tool_call_arguments`), the developer role's (`developer_role`) and the template's source
+    (`template_source`), with the hash of each template (`chat_template_sha256`, `processor_chat_template_sha256`).
   - A checkpoint whose prompt format or tokenizer is the vendor's own code is rendered by that code
     instead: an encoder in place of a chat template (DeepSeek V3.2 and V4, Mistral's
     `mistral-common` checkpoints) or a custom tokenizer class (Kimi-K3). That is the vendor-code
