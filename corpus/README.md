@@ -537,3 +537,10 @@ files.
 
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.
+
+## Agentic session corpus
+
+`corpus/agentic/` holds the multi-turn, tool-calling sessions a traffic driver replays against a gateway to measure it: a
+benchmark input, not a `record` input. It carries the generator and the builder, the pinned BFCL source files and the built
+versions, each with its manifest; `corpus/agentic/README.md` has the record format, the composition and the rebuild command.
+`record`, `count`, the import checks and `images check` read `render/`, `parse/` and `image/` only and leave it alone.

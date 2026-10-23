@@ -45,6 +45,9 @@ module-root = "src"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# corpus/agentic/ holds the corpus tools as provenance: the corpus manifests pin them by sha256, so they are kept
+# byte for byte and not reformatted (corpus/agentic/README.md).
+extend-exclude = ["corpus/agentic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
