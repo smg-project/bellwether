@@ -16,9 +16,22 @@ With ``vendor_code``, the tokenizer is the class the checkpoint names in ``auto_
 ``trust_remote_code``: the vendor-code oracle, which refuses outside the sandbox (``vendor``). Without it, a checkpoint
 whose tokenizer is the vendor's code cannot be loaded, and nothing of the vendor's is run.
 
-The template is the tokenizer's, or, when the tokenizer ships none, the ``chat_template`` of
-``chat_template.json``, the processor's file, as transformers' processor and vLLM read it (Qwen3-Omni
-ships its template only there). The tokenizer is ``AutoTokenizer``'s, except when the model config is
+The template is resolved per request as the engine's server resolves it (``resolve_chat_template`` in
+``vllm/renderers/hf.py:263-310`` at v0.31.0): a request without ``tools`` renders with the processor's template
+when the engine gets one, and a request with ``tools`` with the tokenizer's (``tokenizer_config.json``'s or
+``chat_template.jinja``'s). The engine gets a processor template by building the checkpoint's processor through
+transformers' ``AutoProcessor`` (``_try_get_processor_chat_template``, ``:219-260``): a processor transformers knows
+gives its template, the ``chat_template`` of ``chat_template.json`` (the legacy processor file, read before any
+template file, ``processing_utils.py:1384-1391``); a processor that is the vendor's code is built by an engine that
+runs that code, so its template counts too; a processor transformers 5.17 cannot build (a class it lacks) leaves the
+engine the tokenizer's template for every request. ``processor_chat_template`` decides the same way (and refuses to
+decide where the processor's backends, torch, torchvision and pillow, are missing: that is the environment's failure,
+not the checkpoint's). A tokenizer that ships no template renders with the processor's file for every request
+(Qwen3-Omni ships its template only there), as before. The two templates differ on 35 of the 813 recorded checkpoints
+(vision, OCR and audio families; 28 built, 5 the vendor's code, 2 not buildable), where every tool-less prompt the
+engine's server writes comes from the processor's template; the provenance names the source of each line
+(``template_source``), how the processor was had (``processor``) and the hash of both templates. The
+tokenizer is ``AutoTokenizer``'s, except when the model config is
 the vendor's class: ``AutoTokenizer`` builds the config first, which needs that code, and bellwether
 never runs it outside the sandbox. Then the class ``tokenizer_config.json`` names is loaded as ``AutoTokenizer``
 would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Nor does a model config of transformers' own class stop
@@ -83,6 +96,7 @@ class Rendered:
     text: str
     content_format: ContentFormat
     developer_role: str
+    template_source: str
 
 
 class HfTemplateOracle:
@@ -103,6 +117,13 @@ class HfTemplateOracle:
             else checkpoint_encoder(model, revision)
         )
         template = self.tokenizer.chat_template
+        # The processor's template, which the engine's server renders a request without tools with when it builds
+        # the checkpoint's processor (``resolve_chat_template``'s second priority), and how the processor was had;
+        # none under the vendor's code, whose class renders its own format.
+        self.processor_chat_template, self.processor = (
+            (None, None) if vendor_code else processor_chat_template(model, revision, kwargs)
+        )
+        self.tokenizer_renders_the_processors = False
         if template is None and not vendor_code:
             template = processor_template(model, revision)
             if template is None:
@@ -110,11 +131,17 @@ class HfTemplateOracle:
                     f"{model} at {revision} ships no chat template; the hf-template oracle cannot render it"
                 )
             self.tokenizer.chat_template = template
+            self.tokenizer_renders_the_processors = True
         if template is not None and not isinstance(template, str):
             template = json.dumps(template, sort_keys=True)
         # A vendor's class may render its chat format itself (Kimi-K3's does), with no template to hash; its code is
         # pinned by the manifest's inputs instead.
         self.template_sha256 = None if template is None else hashlib.sha256(template.encode("utf-8")).hexdigest()
+        self.processor_template_sha256 = (
+            None
+            if self.processor_chat_template is None or self.tokenizer_renders_the_processors
+            else hashlib.sha256(self.processor_chat_template.encode("utf-8")).hexdigest()
+        )
 
     def render(self, request: dict) -> Rendered:
         continue_final = bool(request.get("continue_final_message", False))
@@ -127,13 +154,21 @@ class HfTemplateOracle:
         }
         content_format = self.content_format(tools)
         messages = self.for_template(request["messages"], tools)
+        # The template the engine's server resolves for this request, handed over explicitly: the processor's for a
+        # request without tools when the checkpoint ships one, else what the tokenizer resolves (None under a
+        # vendor's class that renders its own format: then the class renders as it does).
+        template = self.template_text(tools)
+        if template is not None:
+            kwargs["chat_template"] = template
         text = self.tokenizer.apply_chat_template(messages, tokenize=False, **kwargs)
         if self.encoder is not None:
             ids = self.encoder.encode(str(text), add_special_tokens=False).ids
         else:
             encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
             ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
-        return Rendered([int(i) for i in ids], str(text), content_format, self.developer_role(tools))
+        return Rendered(
+            [int(i) for i in ids], str(text), content_format, self.developer_role(tools), self.template_source(tools)
+        )
 
     def for_template(self, messages: list[dict], tools: list | None) -> list[dict]:
         """``messages`` as the engine hands them to the template for a request with ``tools``: each message's content
@@ -145,14 +180,27 @@ class HfTemplateOracle:
         return with_developer_as_system(prepared, self.template_text(tools))
 
     def template_text(self, tools: list | None) -> str | None:
-        """The source of the template transformers applies to a request with ``tools`` (a checkpoint with named
-        templates has one for requests with tools), as the engine resolves it; None when the tokenizer resolves no
-        template text, as a vendor's class that renders its own format."""
+        """The source of the template the engine's server applies to a request with ``tools``
+        (``resolve_chat_template``, ``vllm/renderers/hf.py:263-310`` at v0.31.0): the processor's template when the
+        request carries no tools (``tools is None``, as the engine tests it: an empty list is a request with tools)
+        and the checkpoint ships one; else the tokenizer's (a checkpoint with named templates has one for requests
+        with tools); None when the tokenizer resolves no template text, as a vendor's class that renders its own
+        format."""
+        if tools is None and self.processor_chat_template is not None:
+            return self.processor_chat_template
         try:
             template = self.tokenizer.get_chat_template(None, tools=tools)
         except Exception:
             return None
         return template if isinstance(template, str) else None
+
+    def template_source(self, tools: list | None) -> str:
+        """Whose template renders a request with ``tools``: ``"processor"`` when the engine's server takes the
+        processor's (a request without tools on a checkpoint that ships the file, or a tokenizer without a template
+        of its own, which renders with the processor's for every request), ``"tokenizer"`` otherwise."""
+        if self.tokenizer_renders_the_processors or (tools is None and self.processor_chat_template is not None):
+            return "processor"
+        return "tokenizer"
 
     def content_format(self, tools: list | None) -> ContentFormat:
         """The content format vLLM selects for the template transformers applies to a request with ``tools``;
@@ -185,6 +233,12 @@ class HfTemplateOracle:
             ),
             "tool_call_arguments": "object",
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
+            **({"processor": self.processor} if self.processor else {}),
+            **(
+                {"processor_chat_template_sha256": self.processor_template_sha256}
+                if self.processor_template_sha256
+                else {}
+            ),
             **({"source_date_epoch": self.source_date_epoch} if self.source_date_epoch else {}),
         }
         if self.vendor_code:
@@ -417,8 +471,71 @@ def vendor_config(model: str, revision: str) -> bool:
     return isinstance(auto_map, dict) and "AutoConfig" in auto_map
 
 
+PROCESSOR_BUILT = "built"
+PROCESSOR_REMOTE_CODE = "remote-code"
+PROCESSOR_NOT_BUILT = "not-built"
+
+
+def built_processor(model: str, kwargs: dict):
+    """What transformers' ``AutoProcessor`` builds for the checkpoint (the engine's ``cached_get_processor``): the
+    processor, or the tokenizer for a checkpoint that has no processor class."""
+    from transformers import AutoProcessor
+
+    return AutoProcessor.from_pretrained(model, **kwargs)
+
+
+def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[str | None, str | None]:
+    """The processor's chat template as the engine's server gets it for a request without tools, and how it was had
+    (``PROCESSOR_BUILT``, ``PROCESSOR_REMOTE_CODE``, ``PROCESSOR_NOT_BUILT``; None and None for a checkpoint
+    without one).
+
+    ``_try_get_processor_chat_template`` (``vllm/renderers/hf.py:219-260`` at v0.31.0) builds the checkpoint's
+    processor and takes its ``chat_template``; a build that fails leaves the engine the tokenizer's template. The
+    legacy ``chat_template.json`` is read first: without it a processor shares ``chat_template.jinja`` with the
+    tokenizer and there is nothing to resolve, so nothing is built. With it, the processor is built as the engine
+    builds it: one transformers knows gives its template (``built``); one that is the vendor's code (the checkpoint's
+    ``auto_map`` names it, transformers refuses it without ``trust_remote_code``) is built by an engine that runs that
+    code, so the file's template counts (``remote-code``); one transformers 5.17 cannot build, a class it lacks, leaves
+    the engine the tokenizer's template (``not-built``). A build that fails for a missing backend (torch, torchvision,
+    pillow) is the environment's failure, not the checkpoint's, and is refused: the recorder decides as the engine does
+    only with the processor's backends installed."""
+    template = processor_template(model, revision)
+    if template is None:
+        return None, None
+    try:
+        processor = built_processor(model, kwargs)
+    except ImportError as err:
+        raise RuntimeError(
+            f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its template "
+            f"cannot be decided; install torch, torchvision and pillow ({err})"
+        ) from err
+    except (
+        Exception
+    ) as err:  # transformers raises ValueError, OSError and its own errors for a processor it cannot build
+        message = str(err)
+        if "contains custom code" in message:
+            return template, PROCESSOR_REMOTE_CODE
+        if "requires" in message or "Could not load any" in message:
+            raise RuntimeError(
+                f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its "
+                f"template cannot be decided; install torch, torchvision and pillow ({message})"
+            ) from err
+        return None, PROCESSOR_NOT_BUILT
+    from transformers import ProcessorMixin
+
+    if not isinstance(processor, ProcessorMixin):
+        return None, PROCESSOR_NOT_BUILT
+    built = getattr(processor, "chat_template", None)
+    if isinstance(built, dict):
+        built = built.get("default")
+    return (built if isinstance(built, str) else template), PROCESSOR_BUILT
+
+
 def processor_template(model: str, revision: str) -> str | None:
-    """The ``chat_template`` of ``chat_template.json``, the processor's template file, if the checkpoint ships one."""
+    """The ``chat_template`` of ``chat_template.json``, the processor's legacy template file, if the checkpoint ships
+    one: what transformers' ``ProcessorMixin`` takes as the processor's template before any template file
+    (``processing_utils.py:1384-1391`` at 5.17.0). A checkpoint whose processor template lives in
+    ``chat_template.jinja`` alone shares that file with the tokenizer, so there is nothing to resolve."""
     path = checkpoint_file(model, revision, "chat_template.json")
     template = json.loads(path.read_text()).get("chat_template") if path is not None else None
     return template if isinstance(template, str) else None
