@@ -100,6 +100,7 @@ class OutputText:
     end_of_turn: dict
     ids_without_unicode_normalization: bool
     content_format: ContentFormat
+    developer_role: str
 
 
 class RoundtripOracle:
@@ -171,13 +172,15 @@ class RoundtripOracle:
             end_of_turn,
             ids_without_unicode_normalization,
             self.renderer.content_format(kwargs.get("tools")),
+            self.renderer.developer_role(kwargs.get("tools")),
         )
 
     def chat(self, messages: list, kwargs: dict, *, generation_prompt: bool) -> str:
         """The template's rendering of ``messages`` as vLLM hands them to the template for the request
         (``HfTemplateOracle.for_template``): each content in the content format the engine selects for the template,
         so a null content is ``[]`` or ``""``, never None, and a tool result is its text; each assistant message's
-        calls as ``as_vllm_gives_it`` gives them."""
+        calls as ``as_vllm_gives_it`` gives them; a developer message as a system message when the template names no
+        developer role."""
         return self.tokenizer.apply_chat_template(
             self.renderer.for_template(messages, kwargs.get("tools")),
             tokenize=False,

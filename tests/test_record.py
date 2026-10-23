@@ -26,7 +26,7 @@ from bellwether.record.chunks import chunk_plans
 from bellwether.record.content_format import detect_content_format, in_content_format
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
-from bellwether.record.reference import HfTemplateOracle, load_tokenizer
+from bellwether.record.reference import HfTemplateOracle, developer_as_system, load_tokenizer
 from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids, next_messages
 from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
@@ -370,6 +370,90 @@ def test_a_history_call_that_is_not_a_function_call_is_refused_as_the_engine_ref
         oracle.render({"messages": [user("Hi"), custom]})
     with pytest.raises(ValueError, match="tool_calls entries must be objects"):
         oracle.render({"messages": [user("Hi"), {"role": "assistant", "content": None, "tool_calls": ["f"]}]})
+
+
+DEVELOPER = {"role": "developer", "content": "Answer in one word."}
+
+
+def test_a_developer_message_reaches_a_template_without_the_role_as_a_system_message(tiny_model):
+    """vLLM's renderer rewrites a developer message to a system message when the template's source names no developer
+    role (``_convert_developer_to_system``), so a template that writes a turn per known role writes the system turn
+    where it skipped or misnamed the unknown one; the reference handed the message over as written."""
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    rendered = oracle.render({"messages": [DEVELOPER, user("Colour of the sky?")]})
+    assert rendered.text == (
+        "<|im_start|>system\nAnswer in one word.<|im_end|>\n"
+        "<|im_start|>user\nColour of the sky?<|im_end|>\n<|im_start|>assistant\n"
+    )
+    assert rendered.developer_role == "system"
+    assert rendered.input_ids == oracle.tokenizer.encode(rendered.text, add_special_tokens=False)
+
+
+def test_a_template_that_names_the_developer_role_gets_the_message_as_written(tiny_model, tmp_path_factory):
+    template = (
+        "{%- for m in messages %}{%- if m['role'] == 'developer' %}{{ '<|dev|>' + m['content'] + '\\n' }}"
+        "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' + m['content'] + '<|im_end|>\\n' }}{%- endif %}{%- endfor %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "developer-chat", template)
+    rendered = HfTemplateOracle(str(model), "local").render({"messages": [DEVELOPER, user("Hi")]})
+    assert rendered.text == "<|dev|>Answer in one word.\n<|im_start|>user\nHi<|im_end|>\n"
+    assert rendered.developer_role == "as-written"
+
+
+def test_the_system_messages_merge_into_one_at_the_front_as_the_engine_merges_them(tiny_model):
+    """``_consolidate_system_messages``: once a developer message is rewritten, every system message's content joins one
+    system message at position 0, a blank line between them, and the other messages follow in their order."""
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    developer = {**DEVELOPER, "tools": [WEATHER_TOOL]}
+    messages = [user("Hi"), {"role": "system", "content": "Be brief."}, developer, user("Sky?")]
+    rendered = oracle.render({"messages": messages})
+    assert rendered.text == (
+        "<|im_start|>system\nBe brief.\n\nAnswer in one word.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n"
+        "<|im_start|>user\nSky?<|im_end|>\n<|im_start|>assistant\n"
+    )
+    assert messages[2]["role"] == "developer" and "tools" in messages[2]  # the request's own objects are untouched
+
+
+def test_a_rewritten_developer_message_loses_its_tools_as_the_engine_drops_them():
+    developer = {**DEVELOPER, "tools": [WEATHER_TOOL], "name": "ops"}
+    assert developer_as_system([developer, user("Hi")]) == [
+        {"role": "system", "content": "Answer in one word.", "name": "ops"},
+        user("Hi"),
+    ]
+    assert developer == {**DEVELOPER, "tools": [WEATHER_TOOL], "name": "ops"}
+
+
+def test_merged_system_messages_reach_a_parts_template_as_one_string(parts_model):
+    """The engine merges system contents into one string, a parts list's texts joined by newlines, so a template of the
+    "openai" format gets the merged message through its string branch; a lone developer message at the front is not
+    merged and keeps its parts list."""
+    oracle = HfTemplateOracle(str(parts_model), "local")
+    merged = oracle.render(
+        {"messages": [{"role": "system", "content": "A"}, {"role": "developer", "content": "B"}, user("Hi")]}
+    )
+    assert merged.text == (
+        "<|im_start|>system\nA\n\nB<|im_end|>\n<|im_start|>user\nHi|<|im_end|>\n<|im_start|>assistant\n"
+    )
+    alone = oracle.render({"messages": [{"role": "developer", "content": "B"}, user("Hi")]})
+    assert alone.text == "<|im_start|>system\nB|<|im_end|>\n<|im_start|>user\nHi|<|im_end|>\n<|im_start|>assistant\n"
+
+
+def test_record_writes_each_lines_developer_role_in_its_provenance(tmp_path, tiny_model):
+    case = {"name": "a", "request": {"messages": [DEVELOPER, user("Hi")]}}
+    rc, out_dir = record(tmp_path, tiny_model, ("common", [case]))
+    assert rc == 0
+    line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/render/a"]
+    assert line["reference"]["provenance"]["developer_role"] == "system"
+    assert line["reference"]["text"].startswith("<|im_start|>system\nAnswer in one word.<|im_end|>")
+    assert line["request"]["messages"][0] == DEVELOPER
+
+
+def test_the_round_trip_renders_a_developer_message_as_the_engine_does(tiny_model):
+    oracle = RoundtripOracle(str(tiny_model), "local")
+    prompt = oracle.chat([DEVELOPER, user("Sky?")], {}, generation_prompt=True)
+    assert prompt.startswith("<|im_start|>system\nAnswer in one word.<|im_end|>\n<|im_start|>user")
+    out = oracle.render_output({"messages": [DEVELOPER, user("Sky?")]}, {"content": "Blue."})
+    assert out.developer_role == "system"
 
 
 def test_record_writes_each_lines_content_format_in_its_provenance(tmp_path, parts_model):

@@ -42,6 +42,14 @@ writes the arguments with ``tojson``, concatenates them to a string or tests a k
 does on the engine, where it was given the request's JSON string before. The provenance names it
 (``tool_call_arguments``).
 
+A ``developer`` message reaches a template that names no developer role as the engine's renderer hands it
+(``with_developer_as_system``, the mirror of ``safe_apply_chat_template`` in ``vllm/renderers/hf.py:800-808`` at
+v0.31.0): the template's source is searched for the quoted word (``_detect_developer_role_support``, ``:510-511``);
+without it every developer message becomes a system message without its ``tools`` (``_convert_developer_to_system``,
+``:514-526``), and the system messages are merged into one at the front, their contents joined by a blank line
+(``_consolidate_system_messages``, ``:529-566``). A template that names the role gets the message as written, and a
+request without a developer message is never merged. The provenance names which (``developer_role``).
+
 The ids of the rendered text come from the checkpoint's ``tokenizer.json`` itself, read with ``tokenizers``, when
 the checkpoint ships one and the vendor's code is not in use: that file is the vendor's shipped encoder. A
 transformers tokenizer class may install its own pre-tokenizer over the file's (``Qwen2Tokenizer`` splits with a
@@ -70,6 +78,7 @@ class Rendered:
     input_ids: list[int]
     text: str
     content_format: ContentFormat
+    developer_role: str
 
 
 class HfTemplateOracle:
@@ -116,24 +125,39 @@ class HfTemplateOracle:
         else:
             encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
             ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
-        return Rendered([int(i) for i in ids], str(text), content_format)
+        return Rendered([int(i) for i in ids], str(text), content_format, self.developer_role(tools))
 
     def for_template(self, messages: list[dict], tools: list | None) -> list[dict]:
         """``messages`` as the engine hands them to the template for a request with ``tools``: each message's content
-        in the format the template takes (``in_content_format``), and each assistant message's tool calls as
-        ``as_vllm_gives_it`` gives them. The request's own objects are never written to."""
+        in the format the template takes (``in_content_format``), each assistant message's tool calls as
+        ``as_vllm_gives_it`` gives them, and a developer message as a system message when the template names no
+        developer role (``with_developer_as_system``). The request's own objects are never written to."""
         prepared = in_content_format(messages, self.content_format(tools))
-        return [as_vllm_gives_it(message) if message.get("role") == "assistant" else message for message in prepared]
+        prepared = [as_vllm_gives_it(m) if m.get("role") == "assistant" else m for m in prepared]
+        return with_developer_as_system(prepared, self.template_text(tools))
 
-    def content_format(self, tools: list | None) -> ContentFormat:
-        """The content format vLLM selects for the template transformers applies to a request with ``tools`` (a
-        checkpoint with named templates has one for requests with tools); "string" when the tokenizer resolves no
-        template, as a vendor's class that renders its own format."""
+    def template_text(self, tools: list | None) -> str | None:
+        """The source of the template transformers applies to a request with ``tools`` (a checkpoint with named
+        templates has one for requests with tools), as the engine resolves it; None when the tokenizer resolves no
+        template text, as a vendor's class that renders its own format."""
         try:
             template = self.tokenizer.get_chat_template(None, tools=tools)
         except Exception:
-            return "string"
-        return detect_content_format(template) if isinstance(template, str) else "string"
+            return None
+        return template if isinstance(template, str) else None
+
+    def content_format(self, tools: list | None) -> ContentFormat:
+        """The content format vLLM selects for the template transformers applies to a request with ``tools``;
+        "string" when the tokenizer resolves no template."""
+        template = self.template_text(tools)
+        return "string" if template is None else detect_content_format(template)
+
+    def developer_role(self, tools: list | None) -> str:
+        """How a developer message reaches the template transformers applies to a request with ``tools``:
+        ``"as-written"`` when the template names the role (or the tokenizer resolves no template), ``"system"`` when
+        the engine's renderer rewrites it (``with_developer_as_system``)."""
+        template = self.template_text(tools)
+        return "as-written" if template is None or names_developer_role(template) else "system"
 
     def provenance(self) -> dict:
         import jinja2
@@ -190,6 +214,74 @@ def as_vllm_gives_it(message: dict) -> dict:
                 arguments = None
         function["arguments"] = arguments if isinstance(arguments, dict) else {}
     return message
+
+
+def names_developer_role(template: str) -> bool:
+    """Whether a template's source names the ``developer`` role, as the engine's renderer tests it
+    (``_detect_developer_role_support``, ``vllm/renderers/hf.py:510-511`` at v0.31.0): the quoted word anywhere in the
+    text, a comment included."""
+    return '"developer"' in template or "'developer'" in template
+
+
+def with_developer_as_system(messages: list[dict], template: str | None) -> list[dict]:
+    """``messages`` as the engine's renderer hands them to the template whose source is ``template``
+    (``safe_apply_chat_template``, ``vllm/renderers/hf.py:800-808`` at v0.31.0): when a developer message is among them
+    and the source names no developer role, each developer message becomes a system message without its ``tools``
+    (``developer_as_system``) and the system messages are merged into one at the front
+    (``consolidated_system_messages``). A template that names the role, or a request without a developer message, gets
+    the messages as they are; so does a tokenizer that resolves no template text (None: a vendor's class rendering its
+    own format), where the engine's renderer never runs."""
+    if template is None or names_developer_role(template):
+        return messages
+    if not any(message.get("role") == "developer" for message in messages):
+        return messages
+    return consolidated_system_messages(developer_as_system(messages))
+
+
+def developer_as_system(messages: list[dict]) -> list[dict]:
+    """Each developer message as a system message without its ``tools``, the other messages as they are
+    (``_convert_developer_to_system``, ``vllm/renderers/hf.py:514-526`` at v0.31.0)."""
+    converted = []
+    for message in messages:
+        if message.get("role") == "developer":
+            system = dict(message)
+            system["role"] = "system"
+            system.pop("tools", None)
+            converted.append(system)
+        else:
+            converted.append(message)
+    return converted
+
+
+def consolidated_system_messages(messages: list[dict]) -> list[dict]:
+    """The system messages merged into one at position 0, as the engine's renderer merges them after the developer
+    rewrite (``_consolidate_system_messages``, ``vllm/renderers/hf.py:529-566`` at v0.31.0): nothing changes while the
+    only system message is the first; otherwise every system message's content that is not empty (a parts list's texts
+    joined by newlines) joins the merged message with a blank line between, as one string, and the other messages
+    follow in their order."""
+    contents: list[str] = []
+    others: list[dict] = []
+    needs_consolidation = False
+    for index, message in enumerate(messages):
+        if message.get("role") == "system":
+            if index > 0 or contents:
+                needs_consolidation = True
+            content = message.get("content", "")
+            if isinstance(content, list):
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and "text" in part:
+                        parts.append(part["text"])
+                    elif isinstance(part, str):
+                        parts.append(part)
+                content = "\n".join(parts)
+            if content:
+                contents.append(content)
+        else:
+            others.append(message)
+    if not needs_consolidation:
+        return messages
+    return [{"role": "system", "content": "\n\n".join(contents)}, *others]
 
 
 def load_tokenizer(model: str, revision: str, kwargs: dict):

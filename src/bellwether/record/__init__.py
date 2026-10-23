@@ -207,8 +207,13 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
                 "source": vendor.SOURCE if oracle.vendor_code else RENDER_SOURCE,
                 "input_ids": rendered.input_ids,
                 "text": rendered.text,
-                # The content format is the template's, resolved per request, so it is the line's, not the run's.
-                "provenance": {**provenance, "content_format": rendered.content_format},
+                # The content format and the developer role's form are the template's, resolved per request, so
+                # they are the line's, not the run's.
+                "provenance": {
+                    **provenance,
+                    "content_format": rendered.content_format,
+                    "developer_role": rendered.developer_role,
+                },
             },
         }
         return line, False
@@ -229,8 +234,12 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
             "finish_reason": output.finish_reason,
             "end_of_turn": output.end_of_turn,
             "text": output.text,
-            # The content format is the template's, resolved per request, as for a render line.
-            "provenance": {**provenance, "content_format": output.content_format},
+            # The content format and the developer role's form are the template's, as for a render line.
+            "provenance": {
+                **provenance,
+                "content_format": output.content_format,
+                "developer_role": output.developer_role,
+            },
         },
     }
     return line, output.ids_without_unicode_normalization
