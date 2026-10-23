@@ -84,8 +84,8 @@ from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
 from . import vendor
-from .content_format import ContentFormat, in_content_format
-from .reference import HfTemplateOracle, checkpoint_file
+from .content_format import ContentFormat
+from .reference import HfTemplateOracle, as_vllm_gives_it, checkpoint_file
 
 SOURCE = "roundtrip"
 GENERATION_CONFIG = "generation_config.json"
@@ -123,7 +123,7 @@ class RoundtripOracle:
                 "a parse case's request must end at the generation prompt; `add_generation_prompt: false` and "
                 "`continue_final_message` cannot be recorded by the round trip"
             )
-        messages = [as_vllm_gives_it(m) if m.get("role") == "assistant" else m for m in request["messages"]]
+        messages = request["messages"]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
@@ -174,12 +174,12 @@ class RoundtripOracle:
         )
 
     def chat(self, messages: list, kwargs: dict, *, generation_prompt: bool) -> str:
-        """The template's rendering of ``messages`` with each one's content as vLLM hands it to the template for the
-        request: in the content format the engine selects for the template (``in_content_format``), so a null content
-        is ``[]`` or ``""``, never None, and a tool result is its text."""
-        content_format = self.renderer.content_format(kwargs.get("tools"))
+        """The template's rendering of ``messages`` as vLLM hands them to the template for the request
+        (``HfTemplateOracle.for_template``): each content in the content format the engine selects for the template,
+        so a null content is ``[]`` or ``""``, never None, and a tool result is its text; each assistant message's
+        calls as ``as_vllm_gives_it`` gives them."""
         return self.tokenizer.apply_chat_template(
-            in_content_format(messages, content_format),
+            self.renderer.for_template(messages, kwargs.get("tools")),
             tokenize=False,
             add_generation_prompt=generation_prompt,
             **kwargs,
@@ -650,33 +650,6 @@ def without_unicode_normalization(normalizer: Normalizer | None) -> Normalizer |
         steps = [step for step in map(without_unicode_normalization, normalizer) if step is not None]
         return normalizers.Sequence(steps) if steps else None
     return normalizer
-
-
-def as_vllm_gives_it(message: dict) -> dict:
-    """A copy of an assistant message as vLLM gives it to the template.
-
-    This mirrors ``_postprocess_messages`` in ``vllm/entrypoints/chat_utils.py:2084`` at v0.31.0, the release whose
-    image bellwether pins: an empty ``tool_calls`` is dropped; a call's arguments become the object they decode to, and
-    anything that does not decode to a JSON object (missing, null, empty, invalid JSON, or JSON of another type)
-    becomes ``{}``.
-    """
-    tool_calls = message.get("tool_calls")
-    if not isinstance(tool_calls, list):
-        return message
-    message = copy.deepcopy(message)
-    if not tool_calls:
-        del message["tool_calls"]
-        return message
-    for call in message["tool_calls"]:
-        function = call["function"]
-        arguments = function.get("arguments")
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = None
-        function["arguments"] = arguments if isinstance(arguments, dict) else {}
-    return message
 
 
 def with_arguments_as_parsers_return_them(message: dict) -> dict:

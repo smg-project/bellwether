@@ -33,6 +33,15 @@ reaches it as a one-item text part list; every other template takes the string),
 differ is rendered as the engine renders it for the request as sent, which stays recorded unchanged. The provenance
 names the format.
 
+An assistant message's tool calls reach the template as the engine hands them (``as_vllm_gives_it``, the mirror of
+``_postprocess_messages`` in ``vllm/entrypoints/chat_utils.py:2084-2158`` at v0.31.0, which the round trip applied to
+parse cases before the render reference did): a call's ``arguments`` become the object they decode to, an object stays
+one, and a missing, empty, malformed or non-object value becomes ``{}``; an empty ``tool_calls`` is dropped; a call
+that is not an object or not of type ``function`` is refused, as the engine refuses the request. So a template that
+writes the arguments with ``tojson``, concatenates them to a string or tests a key in them renders, or fails, as it
+does on the engine, where it was given the request's JSON string before. The provenance names it
+(``tool_call_arguments``).
+
 The ids of the rendered text come from the checkpoint's ``tokenizer.json`` itself, read with ``tokenizers``, when
 the checkpoint ships one and the vendor's code is not in use: that file is the vendor's shipped encoder. A
 transformers tokenizer class may install its own pre-tokenizer over the file's (``Qwen2Tokenizer`` splits with a
@@ -44,6 +53,7 @@ The provenance names the encoder (``encoder``).
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from dataclasses import dataclass
@@ -91,14 +101,15 @@ class HfTemplateOracle:
 
     def render(self, request: dict) -> Rendered:
         continue_final = bool(request.get("continue_final_message", False))
+        tools = request.get("tools")
         kwargs = {
-            "tools": request.get("tools"),
+            "tools": tools,
             "add_generation_prompt": bool(request.get("add_generation_prompt", not continue_final)),
             "continue_final_message": continue_final,
             **dict(request.get("chat_template_kwargs") or {}),
         }
-        content_format = self.content_format(request.get("tools"))
-        messages = in_content_format(request["messages"], content_format)
+        content_format = self.content_format(tools)
+        messages = self.for_template(request["messages"], tools)
         text = self.tokenizer.apply_chat_template(messages, tokenize=False, **kwargs)
         if self.encoder is not None:
             ids = self.encoder.encode(str(text), add_special_tokens=False).ids
@@ -106,6 +117,13 @@ class HfTemplateOracle:
             encoded = self.tokenizer.apply_chat_template(messages, tokenize=True, **kwargs)
             ids = encoded["input_ids"] if hasattr(encoded, "keys") else encoded
         return Rendered([int(i) for i in ids], str(text), content_format)
+
+    def for_template(self, messages: list[dict], tools: list | None) -> list[dict]:
+        """``messages`` as the engine hands them to the template for a request with ``tools``: each message's content
+        in the format the template takes (``in_content_format``), and each assistant message's tool calls as
+        ``as_vllm_gives_it`` gives them. The request's own objects are never written to."""
+        prepared = in_content_format(messages, self.content_format(tools))
+        return [as_vllm_gives_it(message) if message.get("role") == "assistant" else message for message in prepared]
 
     def content_format(self, tools: list | None) -> ContentFormat:
         """The content format vLLM selects for the template transformers applies to a request with ``tools`` (a
@@ -133,12 +151,45 @@ class HfTemplateOracle:
                 if self.encoder is not None
                 else f"transformers:{type(self.tokenizer).__name__}"
             ),
+            "tool_call_arguments": "object",
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
             **({"source_date_epoch": self.source_date_epoch} if self.source_date_epoch else {}),
         }
         if self.vendor_code:
             found |= vendor.packages()
         return found
+
+
+def as_vllm_gives_it(message: dict) -> dict:
+    """A copy of an assistant message as vLLM gives it to the template.
+
+    This mirrors ``_postprocess_messages`` in ``vllm/entrypoints/chat_utils.py:2084-2158`` at v0.31.0, the release
+    whose image bellwether pins: an empty ``tool_calls`` is dropped (``:2097-2100``); a call's arguments become the
+    object they decode to, and anything that does not decode to a JSON object (missing, null, empty, invalid JSON, or
+    JSON of another type) becomes ``{}`` (``:2119-2158``). A call that is not an object, or not of type ``function``,
+    is refused as the engine refuses the request (``:2101-2117``).
+    """
+    tool_calls = message.get("tool_calls")
+    if not isinstance(tool_calls, list):
+        return message
+    message = copy.deepcopy(message)
+    if not tool_calls:
+        del message["tool_calls"]
+        return message
+    for call in message["tool_calls"]:
+        if not isinstance(call, dict):
+            raise ValueError("assistant tool_calls entries must be objects")
+        function = call.get("function")
+        if call.get("type", "function") != "function" or not isinstance(function, dict):
+            raise ValueError("chat completions only support assistant tool_calls of type 'function'")
+        arguments = function.get("arguments")
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                arguments = None
+        function["arguments"] = arguments if isinstance(arguments, dict) else {}
+    return message
 
 
 def load_tokenizer(model: str, revision: str, kwargs: dict):

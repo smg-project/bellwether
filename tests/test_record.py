@@ -332,6 +332,46 @@ def test_a_tool_result_keeps_its_string_in_the_openai_format(parts_model):
     )
 
 
+def test_reference_hands_the_template_a_history_calls_arguments_as_the_object_the_engine_gives(tiny_model):
+    """vLLM decodes an assistant tool call's JSON-string ``arguments`` before the template (``_postprocess_messages``),
+    so a template that writes the call with ``tojson`` writes the object. The round trip did the same for parse cases;
+    the render reference handed the template the request's string, which such a template encoded once more."""
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    call = {"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+    request = {
+        "messages": [
+            user("Weather in Paris?"),
+            {"role": "assistant", "content": None, "tool_calls": [call]},
+            {"role": "tool", "tool_call_id": "call_1", "content": '{"temperature": 18}'},
+        ],
+        "tools": [WEATHER_TOOL],
+    }
+    rendered = oracle.render(request)
+    assert '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>' in rendered.text
+    assert rendered.input_ids == oracle.tokenizer.encode(rendered.text, add_special_tokens=False)
+    assert call["function"]["arguments"] == '{"city": "Paris"}'  # the request is recorded as sent
+    assert oracle.provenance()["tool_call_arguments"] == "object"
+
+
+@pytest.mark.parametrize(
+    "arguments", ["", "{a", '["a"]', "null", None], ids=["empty", "malformed", "array", "null", "missing"]
+)
+def test_a_history_calls_arguments_that_are_no_object_reach_the_template_as_an_empty_object(tiny_model, arguments):
+    function = {"name": "get_time"} if arguments is None else {"name": "get_time", "arguments": arguments}
+    turn = {"role": "assistant", "content": None, "tool_calls": [{"type": "function", "function": function}]}
+    rendered = HfTemplateOracle(str(tiny_model), "local").render({"messages": [user("Time?"), turn]})
+    assert '<tool_call>\n{"name": "get_time", "arguments": {}}\n</tool_call>' in rendered.text
+
+
+def test_a_history_call_that_is_not_a_function_call_is_refused_as_the_engine_refuses_the_request(tiny_model):
+    oracle = HfTemplateOracle(str(tiny_model), "local")
+    custom = {"role": "assistant", "content": None, "tool_calls": [{"type": "custom", "custom": {"name": "f"}}]}
+    with pytest.raises(ValueError, match="only support assistant tool_calls of type 'function'"):
+        oracle.render({"messages": [user("Hi"), custom]})
+    with pytest.raises(ValueError, match="tool_calls entries must be objects"):
+        oracle.render({"messages": [user("Hi"), {"role": "assistant", "content": None, "tool_calls": ["f"]}]})
+
+
 def test_record_writes_each_lines_content_format_in_its_provenance(tmp_path, parts_model):
     rc, out_dir = record(tmp_path, parts_model, ("common", [{"name": "a", "request": {"messages": [user("Hi")]}}]))
     assert rc == 0
