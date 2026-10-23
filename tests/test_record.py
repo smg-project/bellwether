@@ -2852,6 +2852,76 @@ def test_unpack_writes_a_model_that_has_only_hand_written_sets(tmp_path, tiny_mo
     ).read_bytes()
 
 
+def test_unpack_plain_writes_the_hand_written_sets_alone_and_trims_sets_toml(tmp_path, tiny_model, monkeypatch):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-x", [imported("bench-x-0", "X")]),
+    )
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(fixtures), "--out", str(out), "--plain"]) == 0
+    assert asked == []  # the compressed set is neither fetched nor written
+    written = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
+    assert written == ["tiny-chat/manifest.toml", "tiny-chat/render/common.jsonl", "tiny-chat/sets.toml"]
+    assert (out / "tiny-chat" / "render" / "common.jsonl").read_bytes() == (
+        fixtures / "tiny-chat" / "render" / "common.jsonl"
+    ).read_bytes()
+    # The table of the set written, as recorded; the compressed set's table is not in the tree's sets.toml.
+    recorded = set_tables.read(fixtures / "tiny-chat" / "sets.toml")
+    assert set_tables.read(out / "tiny-chat" / "sets.toml") == {("render", "common"): recorded[("render", "common")]}
+    assert ("render", "bench-x") in recorded
+
+
+def test_unpack_sample_sets_adds_every_nth_compressed_set_whole(tmp_path, tiny_model, monkeypatch):
+    record(
+        tmp_path,
+        tiny_model,
+        ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
+        ("bench-a", [imported("bench-a-0", "A")]),
+        ("bench-b", [imported("bench-b-0", "B")]),
+        ("bench-c", [imported("bench-c-0", "C")]),
+    )
+    fixtures = tmp_path / "fixtures"
+    # An unsampled compressed set may stay a pointer: it is never fetched.
+    pointer = fixtures / "tiny-chat" / "render" / "bench-b.jsonl.zst"
+    pointer.write_text(LFS_POINTER)
+    asked: list[list[pathlib.Path]] = []
+    monkeypatch.setattr("bellwether.unpack.fetch", asked.append)
+    out = tmp_path / "plain"
+    argv = ["unpack", "--fixtures", str(fixtures), "--out", str(out), "--plain", "--sample-sets", "2"]
+    assert main(argv) == 0
+    assert asked == []
+    assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == [
+        "bench-a.jsonl",
+        "bench-c.jsonl",
+        "common.jsonl",
+    ]
+    for name in ("bench-a", "bench-c"):
+        source = fixtures / "tiny-chat" / "render" / f"{name}.jsonl.zst"
+        assert (out / "tiny-chat" / "render" / f"{name}.jsonl").read_text() == plain_text(source)
+    assert sorted(set_tables.read(out / "tiny-chat" / "sets.toml")) == [
+        ("render", "bench-a"),
+        ("render", "bench-c"),
+        ("render", "common"),
+    ]
+    # The same tree samples the same sets on the next run, and a sampled pointer is asked for.
+    pointer_a = fixtures / "tiny-chat" / "render" / "bench-a.jsonl.zst"
+    pointer_a.write_text(LFS_POINTER)
+    assert main(argv) == 1
+    assert asked == [[pointer_a]]
+
+
+def test_unpack_sample_sets_needs_plain(tmp_path, tiny_model, capsys):
+    record(tmp_path, tiny_model, ("common", [{"name": "a", "request": {"messages": [user("A")]}}]))
+    out = tmp_path / "plain"
+    assert main(["unpack", "--fixtures", str(tmp_path / "fixtures"), "--out", str(out), "--sample-sets", "3"]) == 1
+    assert "give --plain too" in capsys.readouterr().err
+    assert not out.exists()
+
+
 def test_unpack_model_writes_and_fetches_that_model_only(tmp_path, tiny_model, monkeypatch):
     common = [{"name": "a", "request": {"messages": [user("A")]}}]
     record(tmp_path, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))

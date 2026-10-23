@@ -483,6 +483,10 @@ Each step is its own pull request.
   layout as `fixtures/`, with the hand-written sets beside the benchmark sets, so a consumer points
   at one root. Symphony's fixture test and smg's consumer test read plain JSON Lines after one
   command, and Symphony's dependencies do not change.
+  A consumer that cannot hold the whole tree asks for `--plain` (the hand-written sets alone, every
+  `sets.toml` trimmed to them, nothing fetched) and `--sample-sets N` (every Nth compressed set of
+  the tree besides, fetched and written whole, the same sets on every run of the same tree): the
+  harnesses that check a set's cases against its table read a tree that agrees with itself.
 
 ## Storage
 
