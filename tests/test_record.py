@@ -1299,6 +1299,108 @@ def test_a_template_that_fails_on_the_candidate_records_the_case(tiny_model, tmp
     assert "<parameter=unit>\nnull\n</parameter>" in out.text
 
 
+def quoted_values_model(tiny_model, tmp_path_factory, quote: str = '"') -> pathlib.Path:
+    """A template that writes the turn's calls as a Python list and every value between ``quote`` as ``"%s"`` of it,
+    escaping nothing, as Llama 4's does."""
+    literal = "'\"'" if quote == '"' else '"\'"'
+    call = (
+        "{{ '[' if loop.first }}{{ c['function']['name'] + '(' }}"
+        "{%- for k, v in c['function']['arguments'].items() %}"
+        "{{ k + '=' + " + literal + " }}{{ '%s' | format(v) }}{{ " + literal + " }}{% if not loop.last %}, {% endif %}"
+        "{%- endfor %}{{ ')' }}{{ ', ' if not loop.last else ']' }}"
+    )
+    return tiny_variant(tiny_model, tmp_path_factory, f"quoted-values-{ord(quote)}-chat", assistant_template(call))
+
+
+STRING_CITY_AND_TAGS = {"city": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}}
+QUOTE_INSIDE_TAGS = (
+    "the template writes argument tags of call 0 (get_weather) between two '\"' and a '\"' inside it as it is, so "
+    "no reader can tell where the value ends in the output"
+)
+
+
+def test_a_template_that_quotes_every_value_fails_a_case_whose_string_holds_a_quote(tiny_model, tmp_path_factory):
+    # Llama 4 writes `city="Paris, the "City of Light""`: the quote inside the value is the byte that ends it, so no
+    # reader can tell where the value ends; the engines' own readers give the turn back as text.
+    model = quoted_values_model(tiny_model, tmp_path_factory)
+    reason = (
+        "the template writes argument city of call 0 (get_weather) between two '\"' and a '\"' inside it as it "
+        "is, so no reader can tell where the value ends in the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(model, STRING_UNIT, {"city": 'Paris, the "City of Light"', "unit": "celsius"})
+
+
+def test_a_template_that_quotes_every_value_fails_a_case_whose_nested_string_holds_a_quote(
+    tiny_model, tmp_path_factory
+):
+    # A list is written as Python's repr between the quotes, `tags="['a', 'the "b"']"`: the quote inside an element
+    # ends the whole value just the same.
+    model = quoted_values_model(tiny_model, tmp_path_factory)
+    with pytest.raises(ValueError, match=re.escape(QUOTE_INSIDE_TAGS)):
+        call_weather(model, STRING_CITY_AND_TAGS, {"city": "Paris", "tags": ["a", 'the "b"']})
+
+
+def test_a_template_that_quotes_every_value_fails_a_case_whose_nested_string_holds_an_apostrophe(
+    tiny_model, tmp_path_factory
+):
+    # Python's repr quotes an element that holds a `'` with `"`, `tags="['a', "O'Brien"]"`: the quote is repr's,
+    # and it ends the value just the same.
+    model = quoted_values_model(tiny_model, tmp_path_factory)
+    with pytest.raises(ValueError, match=re.escape(QUOTE_INSIDE_TAGS)):
+        call_weather(model, STRING_CITY_AND_TAGS, {"city": "Paris", "tags": ["a", "O'Brien"]})
+
+
+def test_a_template_that_quotes_every_value_records_a_case_whose_values_hold_no_quote_of_its_own(
+    tiny_model, tmp_path_factory
+):
+    # The other quote, a backslash at the value's end and a list without apostrophes are written as they are, and a
+    # reader that takes the characters between the quotes as they are gets them back.
+    model = quoted_values_model(tiny_model, tmp_path_factory)
+    out = call_weather(model, STRING_CITY_AND_TAGS, {"city": "O'Brien's", "tags": ["a", "b"]})
+    assert out.text == "[get_weather(city=\"O'Brien's\", tags=\"['a', 'b']\")]"
+    out = call_weather(model, STRING_UNIT, {"city": "dir C:\\", "unit": "N/A"})
+    assert out.text == '[get_weather(city="dir C:\\", unit="N/A")]'
+
+
+def test_a_template_that_quotes_every_value_with_single_quotes_fails_a_case_whose_string_holds_one(
+    tiny_model, tmp_path_factory
+):
+    model = quoted_values_model(tiny_model, tmp_path_factory, quote="'")
+    reason = (
+        'the template writes argument city of call 0 (get_weather) between two "\'" and a "\'" inside it as it '
+        "is, so no reader can tell where the value ends in the output"
+    )
+    with pytest.raises(ValueError, match=re.escape(reason)):
+        call_weather(model, STRING_UNIT, {"city": "O'Brien", "unit": "celsius"})
+    # The other quote is not the one around the value.
+    out = call_weather(model, STRING_UNIT, {"city": 'the "City of Light"', "unit": "celsius"})
+    assert out.text == "[get_weather(city='the \"City of Light\"', unit='celsius')]"
+
+
+def test_a_template_that_escapes_a_quote_records_a_case_whose_string_holds_one(tiny_model):
+    # JSON writes the quote as `\\"`: the value's end is unmistakable.
+    out = call_weather(tiny_model, STRING_CITY_AND_TAGS, {"city": 'the "City of Light"', "tags": ["O'Brien"]})
+    assert '"city": "the \\"City of Light\\"", "tags": ["O\'Brien"]' in out.text
+
+
+def test_a_template_that_writes_a_string_between_tags_records_a_case_whose_string_holds_a_quote(tagged_model):
+    # Qwen3.5 to 3.8 write a string as it is between tags: a quote is just a character of the value.
+    out = call_weather(tagged_model, STRING_UNIT, {"city": 'the "City of Light"', "unit": "celsius"})
+    assert '<parameter=city>\nthe "City of Light"\n</parameter>' in out.text
+
+
+def test_a_template_that_writes_the_arguments_as_python_records_a_string_whose_quote_repr_does_not_use(
+    tiny_model, tmp_path_factory
+):
+    # Python's repr quotes a string that holds a `'` with `"` and the other way round: the quotes around the value are
+    # the value's own, not the template's, and a reader takes the value back.
+    call = "{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] | string + '</tool_call>' }}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "python-repr-chat", assistant_template(call))
+    out = call_weather(model, STRING_CITY_AND_TAGS, {"city": 'the "City of Light"', "tags": ["O'Brien"]})
+    assert out.text == "<tool_call>get_weather {'city': 'the \"City of Light\"', 'tags': [\"O'Brien\"]}</tool_call>"
+
+
 def test_roundtrip_records_the_text_each_output_token_contributes(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     out = oracle.render_output({"messages": [user("Hi")]}, {"reasoning_content": "r", "content": "Café 🌍"})
