@@ -456,6 +456,13 @@ PROCESSOR_TEMPLATE = (
 )
 
 
+PROCESSOR_TEMPLATE_WITH_END_OF_TURN = (
+    "{%- for m in messages %}{{ m['role'] | upper + ': ' + m['content'] }}"
+    "{%- if m['role'] == 'assistant' %}{{ '<|im_end|>' }}{%- endif %}{{ '\\n' }}{%- endfor %}"
+    "{%- if add_generation_prompt %}{{ 'ASSISTANT: ' }}{%- endif %}"
+)
+
+
 def processor_variant(tiny_model, tmp_path_factory, name: str, tokenizer_template: str | None) -> pathlib.Path:
     """The tiny model with a processor's legacy ``chat_template.json`` beside the tokenizer's own template (or none)."""
     directory = tiny_variant(tiny_model, tmp_path_factory, name, tokenizer_template or TEMPLATE)
@@ -480,13 +487,19 @@ class FakeProcessor(ProcessorMixin):
 def processor_builds(monkeypatch):
     """transformers builds the checkpoint's processor (the test environment has no vision backends to build a real
     one): AutoProcessor's result is a processor whose template is the legacy file's, as ``ProcessorMixin`` reads it."""
-    monkeypatch.setattr(
-        reference,
-        "built_processor",
-        lambda model, kwargs: FakeProcessor(
-            json.loads((pathlib.Path(model) / "chat_template.json").read_text())["chat_template"]
-        ),
-    )
+    monkeypatch.setattr(reference, "built_processor", lambda model, kwargs: FakeProcessor(processors_template(model)))
+
+
+def processors_template(model: str) -> str:
+    """The template transformers' ``ProcessorMixin`` reads for ``model``: ``processor_config.json``'s ``chat_template``
+    key when the file carries one (``processing_utils.py:1434-1440`` at 5.17.0), else ``chat_template.json``'s."""
+    for name in ("processor_config.json", "chat_template.json"):
+        path = pathlib.Path(model) / name
+        if path.is_file():
+            template = json.loads(path.read_text()).get("chat_template")
+            if isinstance(template, str):
+                return template
+    raise AssertionError(f"{model} ships no processor template")
 
 
 def test_a_request_without_tools_renders_with_the_processors_template_where_the_engine_builds_one(
@@ -604,6 +617,64 @@ def test_a_checkpoint_without_the_processors_template_file_builds_nothing(tiny_m
     assert rendered.template_source == "tokenizer" and "processor" not in oracle.provenance()
 
 
+CONFIG_TEMPLATE = "{%- for m in messages %}{{ m['role'] + '> ' + m['content'] + '\\n' }}{%- endfor %}"
+
+
+def test_a_processor_template_inside_processor_config_json_is_the_processors_before_any_file(
+    tiny_model, tmp_path_factory, processor_builds
+):
+    """transformers' ``ProcessorMixin`` honors a ``chat_template`` key inside ``processor_config.json`` (deprecated,
+    with a warning) before ``chat_template.json`` and ``chat_template.jinja``; the engine's processor therefore
+    renders a request without tools with that template, and so does the oracle."""
+    alone = tiny_variant(tiny_model, tmp_path_factory, "processor-config-alone", TEMPLATE)
+    (alone / "processor_config.json").write_text(json.dumps({"chat_template": CONFIG_TEMPLATE, "size": 1}))
+    rendered = HfTemplateOracle(str(alone), "local").render({"messages": [user("Hi")]})
+    assert rendered.text == "user> Hi\n" and rendered.template_source == "processor"
+    both = processor_variant(tiny_model, tmp_path_factory, "processor-config-and-file", TEMPLATE)
+    (both / "processor_config.json").write_text(json.dumps({"chat_template": CONFIG_TEMPLATE}))
+    assert HfTemplateOracle(str(both), "local").render({"messages": [user("Hi")]}).text == "user> Hi\n"
+    without_key = processor_variant(tiny_model, tmp_path_factory, "processor-config-without-key", TEMPLATE)
+    (without_key / "processor_config.json").write_text(json.dumps({"size": 1}))
+    assert (
+        HfTemplateOracle(str(without_key), "local").render({"messages": [user("Hi")]}).text == "USER: Hi\nASSISTANT: "
+    )
+
+
+def test_the_round_trip_renders_a_tool_less_parse_case_with_the_processors_template(
+    tiny_model, tmp_path_factory, processor_builds
+):
+    """The parse corpus' round trip renders the prompt and the assistant turn with the template the engine's server
+    resolves for the request, the processor's for one without tools, as the render oracle does (the two oracles
+    hand ``apply_chat_template`` the same template text, not the tokenizer's default)."""
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-roundtrip", TEMPLATE)
+    oracle = RoundtripOracle(str(model), "local")
+    assert oracle.chat([user("Sky?")], {}, generation_prompt=True) == "USER: Sky?\nASSISTANT: "
+    turn = oracle.chat([user("Sky?"), {"role": "assistant", "content": "Blue."}], {}, generation_prompt=False)
+    assert turn == "USER: Sky?\nASSISTANT: Blue.\n"
+    with_tools = oracle.chat([user("Sky?")], {"tools": [WEATHER_TOOL]}, generation_prompt=True)
+    assert with_tools.endswith("<|im_start|>assistant\n")
+
+
+def test_a_requires_message_about_anything_but_a_backend_is_the_checkpoints_failure(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    """Only a backend transformers names (torch, torchvision, pillow) makes a failed build the environment's: a
+    ``requires`` about a config key is the checkpoint's own failure, which the engine meets too, so the tokenizer's
+    template stands and nothing is refused."""
+
+    def refuses(model, kwargs):
+        raise ValueError("Loading this processor requires a `image_processor_type` key in its preprocessor config")
+
+    monkeypatch.setattr(reference, "built_processor", refuses)
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-requires-key", TEMPLATE)
+    oracle = HfTemplateOracle(str(model), "local")
+    assert oracle.render({"messages": [user("Hi")]}).template_source == "tokenizer"
+    assert oracle.provenance()["processor"] == "not-built"
+    assert reference.is_missing_backend("Qwen2VLVideoProcessor requires the Torchvision library but it was not found")
+    assert reference.is_missing_backend("Could not load any image processor class in the list")
+    assert not reference.is_missing_backend("requires a `image_processor_type` key")
+
+
 def test_a_tokenizer_without_a_template_renders_with_the_processors_file_for_every_request(
     tiny_model, tmp_path_factory, processor_builds
 ):
@@ -624,9 +695,12 @@ def test_record_writes_each_lines_template_source_in_its_provenance(
     assert rc == 0
     line = read_fixture_file(out_dir / "common.jsonl")["tiny-chat/render/a"]
     assert line["reference"]["provenance"]["template_source"] == "tokenizer"
+    # The round trip renders the turn with the processor's template, so that template must end the assistant's turn
+    # with a stop id, as a checkpoint's own does; without one the recorder refuses the case, by design.
     model = processor_variant(tiny_model, tmp_path_factory, "processor-recorded", TEMPLATE)
+    (model / "chat_template.json").write_text(json.dumps({"chat_template": PROCESSOR_TEMPLATE_WITH_END_OF_TURN}))
     out = RoundtripOracle(str(model), "local").render_output({"messages": [user("Sky?")]}, {"content": "Blue."})
-    assert out.template_source == "processor"
+    assert out.template_source == "processor" and out.text == "Blue."
 
 
 def test_the_round_trip_renders_a_developer_message_as_the_engine_does(tiny_model):

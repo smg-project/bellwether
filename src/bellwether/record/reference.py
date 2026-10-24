@@ -484,6 +484,26 @@ def built_processor(model: str, kwargs: dict):
     return AutoProcessor.from_pretrained(model, **kwargs)
 
 
+# Where transformers' ``ProcessorMixin`` reads the processor's own template, in its order of precedence (a
+# ``chat_template.jinja`` is the tokenizer's file too, so it never makes the processor's template a different one).
+PROCESSOR_TEMPLATE_FILES = ("processor_config.json", "chat_template.json")
+
+# The backends a processor build needs that transformers names when one is not installed; the message of the error.
+PROCESSOR_BACKENDS = ("torch", "torchvision", "pillow", "pil ")
+
+
+def is_missing_backend(message: str) -> bool:
+    """Whether a processor build failed for a backend the environment lacks, read from the error's message: transformers
+    5.17.0 says ``X requires the Torchvision library but it was not found`` (an ImportError, or a ValueError when the
+    build resolves its classes) and ``Could not load any image processor class`` for a candidate it cannot import. A
+    ``requires`` about anything but a backend (a config key, ``trust_remote_code``) is the checkpoint's failure, which
+    the engine meets too, and is not a missing backend."""
+    lower = message.lower()
+    if "could not load any" in lower:
+        return True
+    return "requires" in lower and any(name in lower for name in PROCESSOR_BACKENDS)
+
+
 def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[str | None, str | None]:
     """The processor's chat template as the engine's server gets it for a request without tools, and how it was had
     (``PROCESSOR_BUILT``, ``PROCESSOR_REMOTE_CODE``, ``PROCESSOR_NOT_BUILT``; None and None for a checkpoint
@@ -491,7 +511,8 @@ def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[st
 
     ``_try_get_processor_chat_template`` (``vllm/renderers/hf.py:219-260`` at v0.31.0) builds the checkpoint's
     processor and takes its ``chat_template``; a build that fails leaves the engine the tokenizer's template. The
-    legacy ``chat_template.json`` is read first: without it a processor shares ``chat_template.jinja`` with the
+    processor's own template (``processor_template``: a ``chat_template`` key in ``processor_config.json``, else the
+    legacy ``chat_template.json``) is read first: without one a processor shares ``chat_template.jinja`` with the
     tokenizer and there is nothing to resolve, so nothing is built. With it, the processor is built as the engine
     builds it: one transformers knows gives its template (``built``); one that is the vendor's code (the checkpoint's
     ``auto_map`` names it, transformers refuses it without ``trust_remote_code``) is built by an engine that runs that
@@ -515,7 +536,7 @@ def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[st
         message = str(err)
         if "contains custom code" in message:
             return template, PROCESSOR_REMOTE_CODE
-        if "requires" in message or "Could not load any" in message:
+        if is_missing_backend(message):
             raise RuntimeError(
                 f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its "
                 f"template cannot be decided; install torch, torchvision and pillow ({message})"
@@ -532,13 +553,17 @@ def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[st
 
 
 def processor_template(model: str, revision: str) -> str | None:
-    """The ``chat_template`` of ``chat_template.json``, the processor's legacy template file, if the checkpoint ships
-    one: what transformers' ``ProcessorMixin`` takes as the processor's template before any template file
-    (``processing_utils.py:1384-1391`` at 5.17.0). A checkpoint whose processor template lives in
+    """The processor's own template, if the checkpoint ships one, in the order transformers' ``ProcessorMixin`` takes
+    it (``processing_utils.py`` at 5.17.0): a ``chat_template`` key inside ``processor_config.json`` first
+    (lines 1434-1440: the key, deprecated but honored, wins over every template file), else the ``chat_template`` of
+    ``chat_template.json``, the legacy template file (lines 1384-1391). A checkpoint whose processor template lives in
     ``chat_template.jinja`` alone shares that file with the tokenizer, so there is nothing to resolve."""
-    path = checkpoint_file(model, revision, "chat_template.json")
-    template = json.loads(path.read_text()).get("chat_template") if path is not None else None
-    return template if isinstance(template, str) else None
+    for filename in PROCESSOR_TEMPLATE_FILES:
+        path = checkpoint_file(model, revision, filename)
+        template = json.loads(path.read_text()).get("chat_template") if path is not None else None
+        if isinstance(template, str):
+            return template
+    return None
 
 
 def checkpoint_file(model: str, revision: str, filename: str) -> Path | None:

@@ -8,7 +8,8 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
   named templates in ``additional_chat_templates/``, each ``<name>.jinja`` there, of which transformers takes
   ``tool_use`` when a request has tools;
 - from ``chat_template.json``, only its ``chat_template`` value, since no oracle reads the file's bytes: vLLM reads it
-  through the processor, parsed, and transformers' tokenizer does not open it;
+  through the processor, parsed, and transformers' tokenizer does not open it; from ``processor_config.json`` the same
+  key, which transformers' processor takes before any template file, and only when the file carries it;
 - the token ids the end of a turn depends on (``STOP_IDS``), so that sampling defaults do not split a group: from
   ``generation_config.json``, or, for a checkpoint that ships none, from ``config.json`` as
   ``GenerationConfig.from_model_config`` reads it, ``text_config`` included;
@@ -52,6 +53,7 @@ NAMED_TEMPLATES = "additional_chat_templates"  # transformers' CHAT_TEMPLATE_DIR
 STOP_IDS = ("bos_token_id", "eos_token_id", "pad_token_id")
 NARROWED = {
     "chat_template.json": ("chat_template",),
+    "processor_config.json": ("chat_template",),
     "generation_config.json": STOP_IDS,
     "config.json": ("model_type", "tokenizer_class"),
 }
@@ -67,7 +69,7 @@ def oracle_inputs(model: str, revision: str) -> dict[str, str]:
     """``{file: sha256}`` for each oracle input the checkpoint has at ``revision``, sorted by file name; a named
     template is keyed by its path, ``additional_chat_templates/<name>.jinja``."""
     directory = checkpoint_dir(model, revision)
-    names = [name for name in FILES if (directory / name).is_file()]
+    names = [name for name in FILES if (directory / name).is_file() and _is_input(directory / name)]
     if (directory / NAMED_TEMPLATES).is_dir():
         names += [
             f"{NAMED_TEMPLATES}/{path.name}"
@@ -126,6 +128,19 @@ def checkpoint_dir(model: str, revision: str) -> Path:
     except FileNotFoundError as err:
         raise FileNotFoundError(f"{model} at {revision}: {err}") from err
     return Path(found)
+
+
+def _is_input(path: Path) -> bool:
+    """Whether a file the checkpoint ships is one the oracle reads: every file but ``processor_config.json``, which is
+    an input only when it carries a ``chat_template`` (the key the processor's template is read from); without one the
+    file holds nothing an oracle reads, and the groups recorded before it was fetched keep their inputs."""
+    if path.name != "processor_config.json":
+        return True
+    try:
+        loaded = json.loads(path.read_bytes())
+    except ValueError:
+        return False
+    return isinstance(loaded, dict) and isinstance(loaded.get("chat_template"), str)
 
 
 def _sha256(path: Path, stop_ids_from_config: bool) -> str:
