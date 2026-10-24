@@ -58,6 +58,19 @@ def test_a_narrowed_file_is_hashed_over_the_canonical_json_of_its_fields_absent_
     assert inputs["config.json"] == sha256(config.encode())
 
 
+def test_processor_config_json_is_an_input_only_when_it_carries_a_chat_template(checkpoint):
+    """transformers' processor takes a ``chat_template`` key inside ``processor_config.json`` before any template file,
+    so the key is an oracle input; a ``processor_config.json`` without one holds nothing an oracle reads, and the
+    groups recorded before the file was fetched keep their inputs."""
+    before = oracle_inputs(str(checkpoint), "local")
+    (checkpoint / "processor_config.json").write_text(json.dumps({"size": 1}))
+    assert oracle_inputs(str(checkpoint), "local") == before
+    (checkpoint / "processor_config.json").write_text(json.dumps({"chat_template": "{{ messages }}", "size": 1}))
+    inputs = oracle_inputs(str(checkpoint), "local")
+    assert inputs["processor_config.json"] == sha256(json.dumps({"chat_template": "{{ messages }}"}).encode())
+    assert {k: v for k, v in inputs.items() if k != "processor_config.json"} == before
+
+
 def test_chat_template_json_is_hashed_over_its_template_so_its_whitespace_does_not_split_a_group(checkpoint):
     # No oracle reads the file's bytes: vLLM reads it through the processor, parsed, and takes its chat_template.
     path = checkpoint / "chat_template.json"
