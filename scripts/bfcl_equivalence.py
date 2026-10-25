@@ -72,10 +72,12 @@ def check_single_turn(wheel: zipfile.ZipFile) -> list[str]:
             else:
                 failures.append(f"tools differ: {row['id']}")
             answer = answers.get(row["id"])
-            if answer is None or (bfcl.language(category) != "python" and not bfcl.string_valued(answer)):
+            if answer is None:
                 continue
+            if row["id"] == "simple_java_64":
+                continue  # BFCL's dict_checker grades this row wrongly (#26)
             try:
-                message = bfcl.message_for(answer, row["function"])
+                message = bfcl.message_for(answer, row["function"], category)
             except bfcl.Unanswerable:
                 unanswerable += 1
                 continue
