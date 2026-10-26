@@ -27,8 +27,12 @@
 
 A call that refuses cases ends with status 1 and is not a failure. One that fails is: status 1 with no case refused
 (an error the recorder reports and stops on, such as a checkpoint it cannot read), a traceback, or a status other than
-0 and 1, such as a kill. The script then exits 1 once every other call has finished, and says how much memory the
-largest recorder held.
+0 and 1, such as a kill. A call the environment refused is a group refusal, neither refused cases nor a crash: the
+recorder's refusal of a group is a ``RuntimeError`` (the processor's backends missing) or an ``ImportError`` (a package
+the processor imports absent), raised before any case, as the last line of a traceback, or against the cases, as a
+``not recorded`` line's reason, which status 1 alone would pass off as cases the template refused with the group
+recorded. The call is reported as refused as a group with its reason, the summary lists it, and the script exits 1 once
+every other call has finished, saying how much memory the largest recorder held.
 """
 
 from __future__ import annotations
@@ -68,6 +72,13 @@ SETS_PER_CALL = {
     "swebench": 8,
 }
 RECORDED = re.compile(r": (\d+) cases recorded")
+# The environment's refusal of the whole group, as the last line of the recorder's traceback or as a case's reason: a
+# RuntimeError (the recorder's own refusals: the processor's backends) or an ImportError (a package it could not
+# import). A template's refusal of a case is a jinja2 TemplateError (TemplateRuntimeError among them), a ValueError or
+# a TypeError, never one of these two.
+GROUP_REFUSAL = re.compile(
+    r"^(?:not recorded \S+: )?(?:[\w.]+\.)?(?:RuntimeError|ImportError|ModuleNotFoundError): (.+)$", re.M
+)
 # Files an oracle looks up by name beside the oracle inputs, such as the parse oracle's generation config for the end
 # of turn. Offline, a file the checkpoint does not ship must be known to be absent: the Hub's answer marks it so in
 # the cache (``.no_exist``), and the commit's file list alone does not.
@@ -157,13 +168,18 @@ def call_corpus(kind: str, call: list[Path]) -> Iterator[Path]:
         yield directory
 
 
-def outcome(status: int, stdout: str, stderr: str) -> tuple[int, int, bool]:
-    """Cases recorded, cases refused, and whether the call failed: refusing cases ends a call with status 1, and so
-    does an error the recorder reports and stops on, which refuses none."""
+def outcome(status: int, stdout: str, stderr: str) -> tuple[int, int, bool, str | None]:
+    """Cases recorded, cases refused, whether the call crashed, and the reason the environment refused the group when
+    it did (``GROUP_REFUSAL``, read from a call that ended with status 1 alone): refusing cases ends a call with
+    status 1, and so does an error the recorder reports and stops on, which refuses none, and so does a group refusal,
+    which is neither of the two and is read first."""
     recorded = sum(int(match.group(1)) for match in RECORDED.finditer(stdout))
     refused = sum(1 for line in stderr.splitlines() if line.startswith("not recorded "))
+    group = GROUP_REFUSAL.search(stderr) if status == 1 else None
+    if group is not None:
+        return recorded, refused, False, group.group(1)
     crashed = status not in (0, 1) or (status == 1 and not refused) or "Traceback (most recent call last)" in stderr
-    return recorded, refused, crashed
+    return recorded, refused, crashed, None
 
 
 def largest_child_gb() -> float:
@@ -208,22 +224,33 @@ def command(model: str, kind: str, fixtures: Path, corpus: Path, names: list[str
 
 
 def record(
-    slug: str, model: str, kind: str, call: list[Path], fixtures: Path, failures: list[str], sandbox: str | None = None
+    slug: str,
+    model: str,
+    kind: str,
+    call: list[Path],
+    fixtures: Path,
+    failures: list[str],
+    refusals: list[str],
+    sandbox: str | None = None,
 ) -> None:
-    """One recorder call, on a corpus directory that links its sets alone."""
+    """One recorder call, on a corpus directory that links its sets alone; a crash goes to ``failures``, a group
+    refusal with its reason to ``refusals``."""
     names = [set_name(path) for path in call]
     with call_corpus(kind, call) as directory:
         args = command(model, kind, fixtures, directory, names, sandbox)
         start = time.monotonic()
         env = {**os.environ, "HF_HUB_OFFLINE": "1"}
         done = subprocess.run(args, capture_output=True, text=True, env=env)
-    recorded, refused, crashed = outcome(done.returncode, done.stdout, done.stderr)
+    recorded, refused, crashed, group = outcome(done.returncode, done.stdout, done.stderr)
     span = f"{names[0]}..{names[-1]}" if len(names) > 1 else names[0]
     say(
         f"{slug} {kind} {span}: {recorded} recorded, {refused} refused, status {done.returncode}, "
         f"{time.monotonic() - start:.0f} s"
     )
-    if crashed:
+    if group is not None:
+        refusals.append(f"{slug} {kind} {span}: {group}")
+        say(f"{slug} {kind} {span} refused as a group, by the environment and not by the template: {group}")
+    elif crashed:
         failures.append(f"{slug} {kind} {span}")
         say(f"{slug} {kind} {span} crashed:\n{done.stderr[-4000:]}")
 
@@ -261,16 +288,20 @@ def main() -> int:
 
         say(f"{args.slug}: the sandbox's base image is {base_image()}")
     failures: list[str] = []
+    refusals: list[str] = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [
-            pool.submit(record, args.slug, model, kind, call, args.fixtures, failures, sandbox)
+            pool.submit(record, args.slug, model, kind, call, args.fixtures, failures, refusals, sandbox)
             for kind, call in pending
         ]
     for future in futures:
         future.result()  # raises what this script, not the recorder, ran into, once every call has finished
     say(f"{args.slug}: the largest recorder held {largest_child_gb():.1f} GB")
+    if refusals:
+        say(f"{len(refusals)} call(s) refused as a group, by the environment: {'; '.join(refusals)}")
     if failures:
         say(f"{len(failures)} call(s) crashed: {'; '.join(failures)}")
+    if refusals or failures:
         return 1
     say(f"{args.slug}: every call of {', '.join(args.sources)} finished")
     return 0

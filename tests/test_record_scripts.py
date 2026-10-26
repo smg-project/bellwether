@@ -171,14 +171,43 @@ def test_a_call_that_refused_cases_is_not_a_failure_and_one_that_crashed_is():
     record = load("record_sources")
     out = "/f/render/glaive-v2-00.jsonl.zst: 4990 cases recorded\n/f/render/glaive-v2-01.jsonl.zst: 10 cases recorded\n"
     refused = "not recorded m/render/a: ValueError: the template trims the message's content\n"
-    assert record.outcome(1, out, refused) == (5000, 1, False)
-    assert record.outcome(0, out, "") == (5000, 0, False)
+    assert record.outcome(1, out, refused) == (5000, 1, False, None)
+    assert record.outcome(0, out, "") == (5000, 0, False, None)
     crashed = "Traceback (most recent call last):\n  ...\nMemoryError\n"
-    assert record.outcome(1, "", crashed) == (0, 0, True)
-    assert record.outcome(-9, out, "") == (5000, 0, True)
+    assert record.outcome(1, "", crashed) == (0, 0, True, None)
+    assert record.outcome(-9, out, "") == (5000, 0, True, None)
     # Status 1 stands for refused cases only when some were refused: an error the recorder reports and stops on is not.
     stopped = "bellwether record: cannot read the oracle inputs of org/M at 0123abcd: the cache holds no list\n"
-    assert record.outcome(1, "", stopped) == (0, 0, True)
+    assert record.outcome(1, "", stopped) == (0, 0, True, None)
+
+
+def test_a_group_level_error_is_a_group_refusal_neither_refused_cases_nor_a_crash():
+    """A RuntimeError or ImportError is the environment's refusal of the whole group (the processor's backends, a
+    package the processor imports), never a template's refusal of a case: as the last line of a traceback it was a
+    crash before, and as every case's reason it passed for cases the template refused, with the group counted as
+    recorded under status 1."""
+    record = load("record_sources")
+    out = "/f/render/common.jsonl: 0 cases recorded\n"
+    reason = (
+        "org/M at 0123abcd: the processor's backends are missing, so whether the engine renders its template cannot "
+        "be decided; install num2words (Package `num2words` is required to run the processor)"
+    )
+    before_any_case = f"Traceback (most recent call last):\n  ...\nRuntimeError: {reason}\n"
+    assert record.outcome(1, "", before_any_case) == (0, 0, False, reason)
+    against_every_case = (
+        "not recorded m/render/a: ImportError: No module named 'num2words'\n"
+        "not recorded m/render/b: ImportError: No module named 'num2words'\n"
+    )
+    assert record.outcome(1, out, against_every_case) == (0, 2, False, "No module named 'num2words'")
+    # A template's refusal is a case's, whatever its class is called; a traceback of another class is a crash.
+    template = "not recorded m/render/a: TemplateRuntimeError: the template trims the message's content\n"
+    assert record.outcome(1, out, template) == (0, 1, False, None)
+    jinja = "Traceback (most recent call last):\n  ...\njinja2.exceptions.TemplateRuntimeError: x\n"
+    assert record.outcome(1, "", jinja) == (0, 0, True, None)
+    # A call that ended with status 0 refused nothing, whatever its log says.
+    assert record.outcome(0, out, f"RuntimeError: {reason}\n") == (0, 0, False, None)
+    # A recorder killed after it printed the line crashed: the refusal is read from status 1 alone.
+    assert record.outcome(-9, "", before_any_case) == (0, 0, True, None)
 
 
 def test_the_largest_recorder_is_measured_from_the_children_that_ended():
