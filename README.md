@@ -9,6 +9,8 @@
 Bellwether holds expected values for several consumers in smg: the tokenizer crate (encoding and
 incremental decoding), the gRPC router's request path, and Symphony's parsers.
 `docs/benchmark-sets.md` says how they are recorded and read.
+`docs/image-sets.md` is the design of the image side: a corpus of images and one pixel reference per
+processor family, which the pull requests it lists deliver.
 
 Does SMG send the engine the same prompt tokens the model vendor's own code would, and does it
 turn the engine's tokens back into the same response? Bellwether answers that without a GPU.
