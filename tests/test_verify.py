@@ -1050,11 +1050,11 @@ def test_a_run_that_cannot_give_verdicts_exits_2_and_writes_no_report(tmp_path, 
         (fixtures / "m1" / "sets.toml").write_text('[render.bench]\nform = "zstd"\ncases = 1\n')
         message = str(fixtures / "m1" / "render" / "bench.jsonl.zst")
     elif problem == "reference without ids":
+        # The case schema refuses this line, so it is written as a file from elsewhere would be, not by the writer.
         reference = {"source": "hf-template", "text": "<u>Bye.</u><a>"}
-        write_fixture_file(
-            fixtures / "m1" / "render" / "bye.jsonl", {"m1/render/bye": {**CASE_LINE, "reference": reference}}
-        )
-        message = "m1/render/bye"
+        line = {**CASE_LINE, "id": "m1/render/bye", "reference": reference}
+        (fixtures / "m1" / "render" / "bye.jsonl").write_text(json.dumps(line) + "\n")
+        message = "m1/render/bye: the reference has no list of integer input_ids"
     else:
         write_fixture_file(fixtures / "m1" / "render" / "again.jsonl", {"m1/render/hello": CASE_LINE})
         message = "m1/render/hello"
