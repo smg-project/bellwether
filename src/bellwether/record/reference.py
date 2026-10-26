@@ -33,8 +33,11 @@ engine's server writes comes from the processor's template; the provenance names
 (``template_source``), how the processor was had (``processor``) and the hash of both templates. The
 tokenizer is ``AutoTokenizer``'s, except when the model config is
 the vendor's class: ``AutoTokenizer`` builds the config first, which needs that code, and bellwether
-never runs it outside the sandbox. Then the class ``tokenizer_config.json`` names is loaded as ``AutoTokenizer``
-would choose it (Phi-4-multimodal's ``GPT2TokenizerFast``). Nor does a model config of transformers' own class stop
+never runs it outside the sandbox. Then the class is chosen from the two names ``AutoTokenizer`` reads, as it chooses
+it: the ``tokenizer_class`` of ``tokenizer_config.json`` (Phi-4-multimodal's ``GPT2TokenizerFast``), unless transformers
+registers a class for the config's ``model_type`` and lists the type among those whose hub class is wrong, where the
+registered class wins (``phi3`` and ``phimoe`` name ``LlamaTokenizer`` and are encoded by the ``tokenizers`` backend,
+the file's pipeline, as the engine encodes them). Nor does a model config of transformers' own class stop
 the tokenizer when that class's validators refuse the checkpoint's values (ZAYA1's and an OLMo-3 fine-tune's rope
 settings): ``AutoTokenizer`` is given a config of the same model type to choose the class by. Neither applies with
 ``vendor_code``: the vendor's class loads as the checkpoint names it, and renders with its own template or none
@@ -359,7 +362,7 @@ def load_tokenizer(model: str, revision: str, kwargs: dict):
         config = json.loads(path.read_text()) if path is not None else {}
         named = config.get("tokenizer_class")
         if "auto_map" not in config and isinstance(named, str):
-            return auto_tokenizer_class(named).from_pretrained(model, **kwargs)
+            return auto_tokenizer_class(named, model_type(model, revision)).from_pretrained(model, **kwargs)
     # A checkpoint that ships no config.json (Mistral's own layout): online, transformers takes the 404 for an empty
     # model config and goes on; offline, as the recorder runs, it cannot tell a file the cache marks absent from one it
     # never fetched, and refuses. The empty config it would have built loads the same tokenizer either way.
@@ -417,19 +420,50 @@ def config_stand_in(model: str, revision: str):
     return config
 
 
-def auto_tokenizer_class(named: str):
-    """The class ``AutoTokenizer`` loads for the ``tokenizer_class`` that ``tokenizer_config.json`` names, as
-    ``tokenization_auto.py`` chooses it at transformers 5.17.0 (lines 875-938): a trailing ``Fast`` is dropped, the
-    name is looked up as it is, then with ``Fast``; the Python base it finds for ``PreTrainedTokenizer``, which has no
-    vocabulary of its own, becomes the ``tokenizers`` backend, and so does a name transformers does not ship."""
+# The classes ``AutoTokenizer`` never returns for a hub class name it overrides: a registered backend is the file's
+# pipeline, not a class of its own (``tokenization_auto.py`` at transformers 5.17.0, lines 831-837 and 846-849).
+BACKEND_CLASSES = ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast", "MistralCommonBackend")
+
+
+def auto_tokenizer_class(named: str, model_type: str | None = None):
+    """The class ``AutoTokenizer`` loads for the ``tokenizer_class`` that ``tokenizer_config.json`` names on a
+    checkpoint of the model config's ``model_type``, as ``tokenization_auto.py`` chooses it at transformers 5.17.0. The
+    type is read first (lines 815-860): when transformers registers a tokenizer class for it that is not the named one,
+    the named class is overridden, by the registered class when the type is listed among those whose hub
+    ``tokenizer_class`` is wrong (``MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS``: ``phi3``, ``phimoe``, ``deepseek_v3``,
+    ``minimax_m2``...), by the ``tokenizers`` backend when the registered class is a backend. Otherwise the name decides
+    (lines 875-938): a trailing ``Fast`` is dropped, the name is looked up as it is, then with ``Fast``; the Python base
+    it finds for ``PreTrainedTokenizer``, which has no vocabulary of its own, becomes the ``tokenizers`` backend, and so
+    does a name transformers does not ship."""
     from transformers import TokenizersBackend
-    from transformers.models.auto.tokenization_auto import tokenizer_class_from_name
+    from transformers.models.auto.tokenization_auto import (
+        MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS,
+        TOKENIZER_MAPPING_NAMES,
+        tokenizer_class_from_name,
+    )
 
     name = named.removesuffix("Fast")
+    registered = TOKENIZER_MAPPING_NAMES.get(model_type) if model_type else None
+    if registered is not None and registered.removesuffix("Fast") != name:
+        registered = registered.removesuffix("Fast")
+        if registered not in BACKEND_CLASSES:
+            chosen = registered if model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS else name
+            tokenizer_class = tokenizer_class_from_name(chosen)
+            if tokenizer_class is not None and tokenizer_class.__name__ not in BACKEND_CLASSES[:3]:
+                return tokenizer_class
+        return TokenizersBackend
     tokenizer_class = tokenizer_class_from_name(name) or tokenizer_class_from_name(f"{name}Fast")
     if tokenizer_class is None or tokenizer_class.__name__ == "PythonBackend":
         return TokenizersBackend
     return tokenizer_class
+
+
+def model_type(model: str, revision: str) -> str | None:
+    """The ``model_type`` of the checkpoint's ``config.json``, the key ``AutoTokenizer`` chooses the class by first;
+    None without the file or the key."""
+    path = checkpoint_file(model, revision, "config.json")
+    value = json.loads(path.read_text()).get("model_type") if path is not None else None
+    return value if isinstance(value, str) else None
 
 
 def class_rebuilds_the_pipeline(tokenizer, model: str, revision: str) -> bool:
