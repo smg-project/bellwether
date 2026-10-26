@@ -71,7 +71,10 @@ for now; embedding, reranking and classification models are out.
     from the generation config only its token ids (`eos_token_id`, `bos_token_id`, `pad_token_id`),
     so sampling defaults do not split a group. From `chat_template.json` they take only its
     `chat_template` value, which vLLM reads through the processor; no oracle reads the file's
-    bytes. A checkpoint that ships no generation config has the
+    bytes. From `processor_config.json` they take its `chat_template`, which the processor takes
+    before any template file, and `processor_class` and `auto_map`, which decide whether
+    transformers builds the processor and so whose template the engine's server renders a request
+    without tools with. A checkpoint that ships no generation config has the
     end of turn read those ids from `config.json`, through `GenerationConfig.from_model_config`
     (`text_config` included), so there they count as part of `config.json`.
   - **Membership.** The manifest lists each input with its sha256, and membership is equality of

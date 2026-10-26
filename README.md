@@ -889,7 +889,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ui-venus-navi-72b](fixtures/ui-venus-navi-72b/sets.toml) | inclusionAI/UI-Venus-Navi-72B @ 32e9fb08 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ultravox-v0-5-llama-3-1-8b](fixtures/ultravox-v0-5-llama-3-1-8b/sets.toml) | fixie-ai/ultravox-v0_5-llama-3_1-8b @ 94aa77f7 | 2 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ultravox-v0-6-gemma-3-27b](fixtures/ultravox-v0-6-gemma-3-27b/sets.toml) | fixie-ai/ultravox-v0_6-gemma-3-27b @ 17a79bc5 | 1 | 3 | 238484 | 184969 | 533016 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [ultravox-v0-6-llama-3-3-70b](fixtures/ultravox-v0-6-llama-3-3-70b/sets.toml) | fixie-ai/ultravox-v0_6-llama-3_3-70b @ 48ce3117 | 2 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [ultravox-v0-6-llama-3-3-70b](fixtures/ultravox-v0-6-llama-3-3-70b/sets.toml) | fixie-ai/ultravox-v0_6-llama-3_3-70b @ 48ce3117 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ultravox-v0-6-qwen-3-32b](fixtures/ultravox-v0-6-qwen-3-32b/sets.toml) | fixie-ai/ultravox-v0_6-qwen-3-32b @ 783a0292 | 1 | 3 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ultravox-v0-7-glm-4-6](fixtures/ultravox-v0-7-glm-4-6/sets.toml) | fixie-ai/ultravox-v0_7-glm-4_6 @ a849a095 | 2 | 2 | 238494 | 492389 | 364862 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [unireason-med](fixtures/unireason-med/sets.toml) | IQuestLab/UniReason-Med @ 68d7c25b | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -924,9 +924,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1282 | | 361288427 | 266945375 | 108981858 | |
+| all | | 1281 | | 361288427 | 266945375 | 108981858 | |
 
-121 more groups (188 checkpoints) have a manifest and nothing recorded yet.
+122 more groups (189 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
@@ -987,13 +987,14 @@ HF_HUB_OFFLINE=1 uv run bellwether manifests
 Reads the list of checkpoints committed beside the manifests, `fixtures/models.tsv` (`--models` names another file):
 one `model<TAB>revision<TAB>downloads<TAB>day<TAB>tier` row per checkpoint, with the Hub's downloads over the last 30
 days and the day they were read. It computes each one's oracle inputs (the tokenizer files, the chat templates, and the
-few fields of `config.json`, `generation_config.json` and `chat_template.json` that the oracles read) at the pinned
-revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and writes every checkpoint's
-`fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the recorded one if there is one,
-else its most-downloaded member's. The others' manifests name the group and hold no fixtures. It prints each group with
-its members and their tiers. Run again over the same list, it writes the same files, so a change to the list is
-reviewed as a diff of the list and the manifests. `fixtures/README.md` describes both. `models.jsonl` (below) is
-another list: what the engines' registries name, with no revision or downloads until the Hub is read.
+few fields of `config.json`, `generation_config.json`, `chat_template.json` and `processor_config.json` that the oracles
+read) at the pinned revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and writes
+every checkpoint's `fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the recorded one
+if there is one, else its most-downloaded member's. The others' manifests name the group and hold no fixtures. It
+prints each group with its members and their tiers. Run again over the same list, it writes the same files, so a
+change to the list is reviewed as a diff of the list and the manifests. `fixtures/README.md` describes both.
+`models.jsonl` (below) is another list: what the engines' registries name, with no revision or downloads until the Hub
+is read.
 
 ## Recording render fixtures
 
