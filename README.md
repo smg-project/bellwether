@@ -1016,7 +1016,12 @@ plain-content sha256 in `fixtures/qwen3-8b/sets.toml`. `--set NAME` records only
 case the file holds the request, the prompt token ids, the rendered text and the oracle versions. A
 re-run replaces each reference, keeps the witnesses already recorded for an unchanged request, and
 removes cases and sets the corpus no longer has. A case the template cannot render is reported on
-stderr and left out, and the command exits 1. Engine witnesses (`--oracle vllm|sglang`) run on Linux
+stderr and left out, and the command exits 1. A request without tools renders with the processor's
+template when the checkpoint ships one, as the engine's server does, which builds the processor: that
+needs the processor's backends installed beside the recorder, as the engine's image ships them, torch,
+torchvision and pillow, and what a processor imports itself (SmolVLM's `num2words`); a build that
+fails for one of them is the environment's failure, not the checkpoint's, and the run stops naming the
+package to install. Engine witnesses (`--oracle vllm|sglang`) run on Linux
 inside the engine's image and are the second half of M2.
 
 ## Recording parse fixtures (the round trip)

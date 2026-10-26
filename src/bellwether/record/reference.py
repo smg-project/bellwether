@@ -25,9 +25,11 @@ gives its template, the ``chat_template`` of ``chat_template.json`` (the legacy 
 template file, ``processing_utils.py:1384-1391``); a processor that is the vendor's code is built by an engine that
 runs that code, so its template counts too; a processor transformers 5.17 cannot build (a class it lacks) leaves the
 engine the tokenizer's template for every request. ``processor_chat_template`` decides the same way (and refuses to
-decide where the processor's backends, torch, torchvision and pillow, are missing: that is the environment's failure,
-not the checkpoint's). A tokenizer that ships no template renders with the processor's file for every request
-(Qwen3-Omni ships its template only there), as before. The two templates differ on 35 of the 813 recorded checkpoints
+decide where the processor's backends are missing, torch, torchvision and pillow, or a package the processor imports
+itself, SmolVLM's ``num2words``, all of which the engine's image ships: that is the environment's failure, not the
+checkpoint's, and the refusal names the package to install when the error names one, ``missing_package``). A
+tokenizer that ships no template renders with the processor's file for every request (Qwen3-Omni ships its template
+only there), as before. The two templates differ on 35 of the 813 recorded checkpoints
 (vision, OCR and audio families; 28 built, 5 the vendor's code, 2 not buildable), where every tool-less prompt the
 engine's server writes comes from the processor's template; the provenance names the source of each line
 (``template_source``), how the processor was had (``processor``) and the hash of both templates. The
@@ -84,6 +86,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -523,7 +526,23 @@ def built_processor(model: str, kwargs: dict):
 PROCESSOR_TEMPLATE_FILES = ("processor_config.json", "chat_template.json")
 
 # The backends a processor build needs that transformers names when one is not installed; the message of the error.
-PROCESSOR_BACKENDS = ("torch", "torchvision", "pillow", "pil ")
+PROCESSOR_BACKENDS = ("torch", "torchvision", "pillow", "pil ", "num2words")
+# What a processor build needs beside transformers, as the engine's image ships it: the backends, and what a processor
+# imports itself (SmolVLM's num2words). The refusal names the list when the error names no package.
+PROCESSOR_PACKAGES = "torch, torchvision, pillow and num2words"
+# How an error names the package it misses: Python's words for a module it could not import, a processor's for a
+# package it asks for by name (SmolVLM's ``Package `num2words` is required to run SmolVLM processor``), transformers'
+# for a backend (``requires the Torchvision library but it was not found``).
+MISSING_PACKAGE = (
+    re.compile(r"No module named ['\"`]?([A-Za-z0-9_][A-Za-z0-9_.-]*)"),
+    re.compile(r"[Pp]ackage ['\"`]?([A-Za-z0-9_][A-Za-z0-9_.-]*)['\"`]? is required"),
+    re.compile(r"requires the ([A-Za-z0-9_.-]+) library"),
+)
+# transformers' names for the backends whose package pip calls otherwise.
+BACKEND_PACKAGES = {"pytorch": "torch", "pil": "pillow"}
+# The top-level modules of the processors' own packages (PIL is pillow's): a symbol missing from one of them is the
+# package at another release, the environment's failure; a symbol missing from transformers is a class it lacks.
+PROCESSOR_MODULES = frozenset({"torch", "torchvision", "pil", "num2words"})
 
 
 def is_missing_backend(message: str) -> bool:
@@ -536,6 +555,49 @@ def is_missing_backend(message: str) -> bool:
     if "could not load any" in lower:
         return True
     return "requires" in lower and any(name in lower for name in PROCESSOR_BACKENDS)
+
+
+def missing_package(err: BaseException) -> str | None:
+    """The package the error says is missing, as pip names it, or None when it names none: the module Python could not
+    import (a ``ModuleNotFoundError``'s ``name``, or ``No module named 'num2words'``), the package a processor asks for
+    by name (SmolVLM's ``Package `num2words` is required to run SmolVLM processor``) or the backend transformers names
+    (``requires the Torchvision library``; ``the PyTorch library`` is torch, ``the PIL library`` pillow). The top-level
+    module names the package (``torchvision.transforms`` is torchvision's)."""
+    name = getattr(err, "name", None)
+    if not isinstance(name, str) or not name:
+        message = str(err)
+        found = next((match for match in (pattern.search(message) for pattern in MISSING_PACKAGE) if match), None)
+        name = found.group(1) if found else None
+    if not name:
+        return None
+    package = name.split(".")[0].lower()
+    return BACKEND_PACKAGES.get(package, package)
+
+
+def is_missing_dependency(err: ImportError) -> bool:
+    """Whether an ``ImportError`` from a processor build is the environment's failure, not the checkpoint's: a module
+    that is absent (``ModuleNotFoundError``), a package or backend the error asks for by name (``MISSING_PACKAGE``,
+    ``is_missing_backend``), or a symbol missing from one of the processors' own packages (``PROCESSOR_MODULES``:
+    torchvision at another release). A symbol missing from transformers or from any other module is a class the
+    installed release lacks: the engine's build fails the same way and falls back to the tokenizer's template."""
+    message = str(err)
+    if isinstance(err, ModuleNotFoundError) or is_missing_backend(message):
+        return True
+    if any(pattern.search(message) for pattern in MISSING_PACKAGE):
+        return True
+    name = getattr(err, "name", None)
+    return isinstance(name, str) and name.split(".")[0].lower() in PROCESSOR_MODULES
+
+
+def backends_refusal(model: str, revision: str, err: BaseException) -> RuntimeError:
+    """The refusal of a processor build that failed for the environment, not the checkpoint: it says what to install,
+    the package the error names (``missing_package``) or, when it names none, the processors' list
+    (``PROCESSOR_PACKAGES``), and carries the error's own words."""
+    package = missing_package(err)
+    return RuntimeError(
+        f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its template "
+        f"cannot be decided; install {package or PROCESSOR_PACKAGES} ({err})"
+    )
 
 
 def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[str | None, str | None]:
@@ -552,18 +614,20 @@ def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[st
     ``auto_map`` names it, transformers refuses it without ``trust_remote_code``) is built by an engine that runs that
     code, so the file's template counts (``remote-code``); one transformers 5.17 cannot build, a class it lacks, leaves
     the engine the tokenizer's template (``not-built``). A build that fails for a missing backend (torch, torchvision,
-    pillow) is the environment's failure, not the checkpoint's, and is refused: the recorder decides as the engine does
-    only with the processor's backends installed."""
+    pillow) or a package the processor imports itself (num2words) is the environment's failure, not the checkpoint's,
+    and is refused, naming the package to install (``backends_refusal``): the recorder decides as the engine does only
+    with the processor's backends installed. An ``ImportError`` that names no missing module or package, a symbol the
+    installed transformers no longer exports, is a class it lacks and is ``not-built`` like the other build errors
+    (``is_missing_dependency``)."""
     template = processor_template(model, revision)
     if template is None:
         return None, None
     try:
         processor = built_processor(model, kwargs)
     except ImportError as err:
-        raise RuntimeError(
-            f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its template "
-            f"cannot be decided; install torch, torchvision and pillow ({err})"
-        ) from err
+        if not is_missing_dependency(err):
+            return None, PROCESSOR_NOT_BUILT
+        raise backends_refusal(model, revision, err) from err
     except (
         Exception
     ) as err:  # transformers raises ValueError, OSError and its own errors for a processor it cannot build
@@ -571,10 +635,7 @@ def processor_chat_template(model: str, revision: str, kwargs: dict) -> tuple[st
         if "contains custom code" in message:
             return template, PROCESSOR_REMOTE_CODE
         if is_missing_backend(message):
-            raise RuntimeError(
-                f"{model} at {revision}: the processor's backends are missing, so whether the engine renders its "
-                f"template cannot be decided; install torch, torchvision and pillow ({message})"
-            ) from err
+            raise backends_refusal(model, revision, err) from err
         return None, PROCESSOR_NOT_BUILT
     from transformers import ProcessorMixin
 

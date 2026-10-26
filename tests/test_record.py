@@ -607,6 +607,55 @@ def test_a_processor_build_that_fails_for_a_missing_backend_is_refused_not_decid
         HfTemplateOracle(str(model), "local")
 
 
+def test_the_refusal_names_the_package_the_error_names_else_the_processors_environment(
+    tiny_model, tmp_path_factory, monkeypatch
+):
+    """The refusal says what to install: the package the error names, as pip names it (a processor asking for one by
+    name, a module Python could not import, a backend transformers names), else the processors' whole environment
+    list, which names what a processor imports itself (num2words) beside the backends."""
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-named-package", TEMPLATE)
+
+    def refusal(err: BaseException) -> str:
+        def fails(model, kwargs):
+            raise err
+
+        monkeypatch.setattr(reference, "built_processor", fails)
+        with pytest.raises(RuntimeError, match="backends are missing") as raised:
+            HfTemplateOracle(str(model), "local")
+        return str(raised.value)
+
+    asks = "Package `num2words` is required to run SmolVLM processor. Install it with `pip install num2words`."
+    assert refusal(ImportError(asks)).endswith(f"; install num2words ({asks})")
+    assert "; install num2words (No module named 'num2words')" in refusal(
+        ModuleNotFoundError("No module named 'num2words'", name="num2words")
+    )
+    assert "; install torchvision (" in refusal(ValueError("X requires the Torchvision library but it was not found"))
+    assert "; install torch (" in refusal(ImportError("X requires the PyTorch library but it was not found"))
+    assert "; install pillow (" in refusal(ImportError("X requires the PIL library but it was not found"))
+    nameless = "Could not load any image processor class in the list"
+    assert refusal(ValueError(nameless)).endswith(f"; install torch, torchvision, pillow and num2words ({nameless})")
+    submodule = ImportError("cannot import name 'x'", name="torchvision.transforms")
+    assert reference.missing_package(submodule) == "torchvision"
+    assert reference.missing_package(OSError("no such file")) is None
+
+
+def test_a_symbol_transformers_lacks_is_not_built_not_a_refusal(tiny_model, tmp_path_factory, monkeypatch):
+    """An ``ImportError`` that names no missing module or package, a symbol the installed transformers no longer
+    exports, is a class it lacks: the engine's build fails the same way and the processor is not built; a symbol
+    missing from one of the processors' own packages, or a module that is absent, is the environment's and refused."""
+
+    def lacks(model, kwargs):
+        raise ImportError("cannot import name 'FooProcessor' from 'transformers'", name="transformers")
+
+    monkeypatch.setattr(reference, "built_processor", lacks)
+    model = processor_variant(tiny_model, tmp_path_factory, "processor-missing-symbol", TEMPLATE)
+    assert HfTemplateOracle(str(model), "local").provenance()["processor"] == "not-built"
+    assert not reference.is_missing_dependency(ImportError("cannot import name 'x'", name="transformers.models.x"))
+    assert reference.is_missing_dependency(ImportError("cannot import name 'x'", name="torchvision.transforms"))
+    assert reference.is_missing_dependency(ModuleNotFoundError("No module named 'num2words'", name="num2words"))
+    assert reference.is_missing_dependency(ImportError("X requires the PyTorch library but it was not found"))
+
+
 def test_a_checkpoint_without_the_processors_template_file_builds_nothing(tiny_model, monkeypatch):
     def never(model, kwargs):
         raise AssertionError("no processor is built for a checkpoint without chat_template.json")
