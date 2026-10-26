@@ -9,7 +9,10 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
   ``tool_use`` when a request has tools;
 - from ``chat_template.json``, only its ``chat_template`` value, since no oracle reads the file's bytes: vLLM reads it
   through the processor, parsed, and transformers' tokenizer does not open it; from ``processor_config.json`` the same
-  key, which transformers' processor takes before any template file, and only when the file carries it;
+  key, which transformers' processor takes before any template file, and ``processor_class`` and ``auto_map``, the two
+  keys that decide whether transformers builds the checkpoint's processor, which decides whose template the render
+  reference resolves for a request without tools, as the engine's server does (``bellwether.record.reference``); the
+  file is an input only when it carries one of the three;
 - the token ids the end of a turn depends on (``STOP_IDS``), so that sampling defaults do not split a group: from
   ``generation_config.json``, or, for a checkpoint that ships none, from ``config.json`` as
   ``GenerationConfig.from_model_config`` reads it, ``text_config`` included;
@@ -53,7 +56,7 @@ NAMED_TEMPLATES = "additional_chat_templates"  # transformers' CHAT_TEMPLATE_DIR
 STOP_IDS = ("bos_token_id", "eos_token_id", "pad_token_id")
 NARROWED = {
     "chat_template.json": ("chat_template",),
-    "processor_config.json": ("chat_template",),
+    "processor_config.json": ("chat_template", "processor_class", "auto_map"),
     "generation_config.json": STOP_IDS,
     "config.json": ("model_type", "tokenizer_class"),
 }
@@ -132,15 +135,17 @@ def checkpoint_dir(model: str, revision: str) -> Path:
 
 def _is_input(path: Path) -> bool:
     """Whether a file the checkpoint ships is one the oracle reads: every file but ``processor_config.json``, which is
-    an input only when it carries a ``chat_template`` (the key the processor's template is read from); without one the
-    file holds nothing an oracle reads, and the groups recorded before it was fetched keep their inputs."""
+    an input only when it carries one of the keys an oracle reads (its ``NARROWED`` fields: ``chat_template``, the key
+    the processor's template is read from, or ``processor_class`` or ``auto_map``, which decide whether the processor
+    builds); without any of them the file holds nothing an oracle reads, and the groups recorded before it was fetched
+    keep their inputs."""
     if path.name != "processor_config.json":
         return True
     try:
         loaded = json.loads(path.read_bytes())
     except ValueError:
         return False
-    return isinstance(loaded, dict) and isinstance(loaded.get("chat_template"), str)
+    return isinstance(loaded, dict) and any(loaded.get(key) is not None for key in NARROWED[path.name])
 
 
 def _sha256(path: Path, stop_ids_from_config: bool) -> str:

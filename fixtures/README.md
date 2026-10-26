@@ -68,9 +68,12 @@ fixtures. The one exception is `local`, accepted only when `model` is an absolut
 directory, such as the tests' tiny model, has no commits to pin, and a Hugging Face id is never an absolute path.
 `[inputs]` lists every file the oracle reads, each with its sha256: the tokenizer files, the chat template files, and
 each named template (`additional_chat_templates/<name>.jinja`, of which transformers takes `tool_use` when a request has
-tools). Three JSON files are read only in part, so each is hashed over the canonical JSON (`json.dumps(...,
+tools). Four JSON files are read only in part, so each is hashed over the canonical JSON (`json.dumps(...,
 sort_keys=True)`, a missing field as null) of the fields read, `bellwether.inputs.NARROWED`: `chat_template.json` over
-its `chat_template`, the template vLLM reads through the processor; `generation_config.json` over `bos_token_id`,
+its `chat_template`, the template vLLM reads through the processor; `processor_config.json` over its `chat_template`,
+which the processor takes before any template file, and `processor_class` and `auto_map`, which decide whether
+transformers builds the processor and so whose template the engine's server renders a request without tools with (the
+file is an input only when it carries one of the three); `generation_config.json` over `bos_token_id`,
 `eos_token_id` and `pad_token_id`, so that sampling defaults do not split a group; and `config.json` over `model_type`
 and `tokenizer_class`. A checkpoint that ships no `generation_config.json` has the end of a turn read its token ids from
 `config.json`, as `GenerationConfig.from_model_config` reads them (`text_config` included, with the defaults of the

@@ -58,17 +58,42 @@ def test_a_narrowed_file_is_hashed_over_the_canonical_json_of_its_fields_absent_
     assert inputs["config.json"] == sha256(config.encode())
 
 
-def test_processor_config_json_is_an_input_only_when_it_carries_a_chat_template(checkpoint):
+def test_processor_config_json_is_an_input_only_when_it_carries_a_key_an_oracle_reads(checkpoint):
     """transformers' processor takes a ``chat_template`` key inside ``processor_config.json`` before any template file,
-    so the key is an oracle input; a ``processor_config.json`` without one holds nothing an oracle reads, and the
-    groups recorded before the file was fetched keep their inputs."""
+    so the key is an oracle input, hashed with the two keys that decide whether the processor builds, the absent ones
+    as null; a ``processor_config.json`` with none of the three holds nothing an oracle reads, and the groups recorded
+    before the file was fetched keep their inputs."""
     before = oracle_inputs(str(checkpoint), "local")
-    (checkpoint / "processor_config.json").write_text(json.dumps({"size": 1}))
+    (checkpoint / "processor_config.json").write_text(json.dumps({"size": 1, "image_mean": [0.5, 0.5, 0.5]}))
     assert oracle_inputs(str(checkpoint), "local") == before
     (checkpoint / "processor_config.json").write_text(json.dumps({"chat_template": "{{ messages }}", "size": 1}))
     inputs = oracle_inputs(str(checkpoint), "local")
-    assert inputs["processor_config.json"] == sha256(json.dumps({"chat_template": "{{ messages }}"}).encode())
+    narrowed = {"auto_map": None, "chat_template": "{{ messages }}", "processor_class": None}
+    assert inputs["processor_config.json"] == sha256(json.dumps(narrowed, sort_keys=True).encode())
     assert {k: v for k, v in inputs.items() if k != "processor_config.json"} == before
+
+
+def test_processor_config_json_is_an_input_when_it_names_the_processor_class_or_its_vendor_code(checkpoint):
+    """Whether transformers builds the checkpoint's processor decides whose template the render reference resolves for
+    a request without tools, and ``processor_class`` and ``auto_map`` decide that: each makes the file an input, hashed
+    over the three fields with the absent ones as null, so two checkpoints whose processors build differently never
+    share a group."""
+    before = oracle_inputs(str(checkpoint), "local")
+    (checkpoint / "processor_config.json").write_text(json.dumps({"processor_class": "AcmeProcessor", "size": 1}))
+    inputs = oracle_inputs(str(checkpoint), "local")
+    narrowed = {"auto_map": None, "chat_template": None, "processor_class": "AcmeProcessor"}
+    assert inputs["processor_config.json"] == sha256(json.dumps(narrowed, sort_keys=True).encode())
+    assert {k: v for k, v in inputs.items() if k != "processor_config.json"} == before
+    auto_map = {"AutoProcessor": "processing_acme.AcmeProcessor"}
+    (checkpoint / "processor_config.json").write_text(json.dumps({"auto_map": auto_map, "size": 1}))
+    narrowed = {"auto_map": auto_map, "chat_template": None, "processor_class": None}
+    with_vendor_code = oracle_inputs(str(checkpoint), "local")["processor_config.json"]
+    assert with_vendor_code == sha256(json.dumps(narrowed, sort_keys=True).encode())
+    (checkpoint / "processor_config.json").write_text(
+        json.dumps({"processor_class": "AcmeProcessor", "auto_map": auto_map})
+    )
+    both = oracle_inputs(str(checkpoint), "local")["processor_config.json"]
+    assert len({inputs["processor_config.json"], with_vendor_code, both}) == 3
 
 
 def test_chat_template_json_is_hashed_over_its_template_so_its_whitespace_does_not_split_a_group(checkpoint):
