@@ -134,11 +134,7 @@ class RoundtripOracle:
         self.prompt_last_role = messages[-1].get("role") if messages else None
         prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
-        # A prompt encoder gets the turn as the vendor's own tests hand it, each call's arguments the JSON object
-        # string a parser returns (DeepSeek V3.2's module decodes that string itself); a template gets the object the
-        # engine's postprocessing gives it.
-        gives_it = as_the_encoder_takes_it if self.renderer.prompt_encoder is not None else as_vllm_gives_it
-        assistant = {"role": "assistant", **gives_it(message)}
+        assistant = {"role": "assistant", **self.as_given(message)}
         self.check_no_stop_id_in_the_message(assistant)
         rendered = self.chat([*messages, assistant], kwargs, generation_prompt=False)
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
@@ -274,6 +270,16 @@ class RoundtripOracle:
         tokenizer.encode_special_tokens = self.tokenizer.split_special_tokens
         return tokenizer
 
+    def as_given(self, message: dict) -> dict:
+        """The assistant turn as the renderer takes it, for the case's own render and for every variant the checks
+        render: a prompt encoder gets it as the vendor's own tests hand it, each call's arguments the JSON object
+        string a parser returns (DeepSeek V3.2's module decodes that string itself, and refuses an object); a template
+        gets the object the engine's postprocessing gives it. One choice for every site, so that a check's variant
+        renders under the encoder instead of failing in it and being skipped."""
+        if self.renderer.prompt_encoder is not None:
+            return as_the_encoder_takes_it(message)
+        return as_vllm_gives_it(message)
+
     def check_every_call_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
         """Every call of the message must reach the rendered turn.
 
@@ -284,7 +290,7 @@ class RoundtripOracle:
         """
         for index, call in enumerate(message.get("tool_calls") or []):
             for change, what in ((renamed, "renaming"), (with_marker_argument, "adding an argument to")):
-                variant = {"role": "assistant", **as_vllm_gives_it(change(message, index))}
+                variant = {"role": "assistant", **self.as_given(change(message, index))}
                 try:
                     again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
@@ -309,7 +315,7 @@ class RoundtripOracle:
             text = message.get(part)
             if not isinstance(text, str) or not text:
                 continue
-            variant = {"role": "assistant", **as_vllm_gives_it({**message, part: text + MARKER})}
+            variant = {"role": "assistant", **self.as_given({**message, part: text + MARKER})}
             try:
                 again = self.chat([*messages, variant], kwargs, generation_prompt=False)
             except Exception:
@@ -338,7 +344,7 @@ class RoundtripOracle:
             for edge, char, rest in (("first", text[0], text[1:]), ("last", text[-1], text[:-1])):
                 if not char.isspace():
                     continue
-                variant = {"role": "assistant", **as_vllm_gives_it({**message, part: rest})}
+                variant = {"role": "assistant", **self.as_given({**message, part: rest})}
                 try:
                     again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
@@ -361,7 +367,7 @@ class RoundtripOracle:
         for index, call in enumerate(message.get("tool_calls") or []):
             arguments = json.loads(call["function"]["arguments"])
             for path, value in argument_entries(arguments):
-                variant = {"role": "assistant", **as_vllm_gives_it(without_entry(message, index, path))}
+                variant = {"role": "assistant", **self.as_given(without_entry(message, index, path))}
                 try:
                     again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                 except Exception:
@@ -408,7 +414,7 @@ class RoundtripOracle:
             for name, value in json.loads(call["function"]["arguments"]).items():
                 types = declared_types(tools, function, name)
                 for candidate in same_text_candidates(value, types):
-                    variant = {"role": "assistant", **as_vllm_gives_it(with_argument(message, index, name, candidate))}
+                    variant = {"role": "assistant", **self.as_given(with_argument(message, index, name, candidate))}
                     try:
                         again = self.chat([*messages, variant], kwargs, generation_prompt=False)
                     except Exception:
@@ -467,7 +473,7 @@ class RoundtripOracle:
     def render_variant(self, messages: list, kwargs: dict, message: dict) -> str | None:
         """The conversation rendered with ``message`` as its final turn, as the checks render their variants of the
         case's message; None when the template fails on it."""
-        variant = {"role": "assistant", **as_vllm_gives_it(message)}
+        variant = {"role": "assistant", **self.as_given(message)}
         try:
             return self.chat([*messages, variant], kwargs, generation_prompt=False)
         except Exception:

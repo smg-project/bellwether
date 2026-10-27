@@ -296,6 +296,38 @@ def test_in_the_sandbox_the_round_trip_renders_the_turn_through_the_encoder(enco
     assert oracle.provenance()["tool_call_arguments"] == "string"
 
 
+def test_in_the_sandbox_the_checks_render_their_variants_of_a_call_carrying_turn_through_the_encoder(
+    encoder_checkpoint,
+):
+    """The checks' variant renders take the turn as the encoder takes it (each call's arguments the JSON string),
+    like the case's own render: handed the object a template gets, the encoder refused every variant and every check
+    skipped the call-carrying case, so a lossy encoder was recorded unchecked."""
+    oracle = RoundtripOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+    message = {"role": "assistant", "tool_calls": [call]}
+    rendered = oracle.render_variant(REQUEST["messages"], {"tools": [TOOL]}, message)
+    assert rendered is not None and rendered.endswith('<call get_weather {"city": "Paris"}><|im_end|>\n')
+    # An encoder that writes nothing for the arguments: the first check that changes them (adding one) sees the same
+    # turn and refuses the case, where before the fix every check skipped it.
+    encoder = oracle.renderer.prompt_encoder
+    render = encoder.render
+
+    def without_arguments(messages, tools, kwargs, last_role=None):
+        stripped = [
+            {**m, "tool_calls": [{**c, "function": {**c["function"], "arguments": "{}"}} for c in m["tool_calls"]]}
+            if m.get("tool_calls")
+            else m
+            for m in messages
+        ]
+        return render(stripped, tools, kwargs, last_role)
+
+    encoder.render = without_arguments
+    with pytest.raises(
+        ValueError, match="does not render every tool call: adding an argument to call 0 \\(get_weather\\)"
+    ):
+        oracle.render_output({**REQUEST, "tools": [TOOL]}, message)
+
+
 def test_the_round_trip_keeps_the_requests_last_role_for_the_appended_turn(encoder_checkpoint):
     """DeepSeek V3.2's mode drops earlier reasoning after a user turn: the appended assistant turn must not flip it,
     or the turn would not extend the prompt."""
