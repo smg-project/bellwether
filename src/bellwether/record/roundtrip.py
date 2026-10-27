@@ -129,9 +129,16 @@ class RoundtripOracle:
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
         # As the engine's own renderer for the checkpoint hands them to the class, when it has one (Kimi K3's).
         kwargs = self.renderer.engine_kwargs(request, kwargs)
+        # The role the request ends on: a prompt encoder that reads it (DeepSeek V3.2's drops earlier reasoning after
+        # a user turn) reads the request's for the appended turn too, so that the turn extends the prompt.
+        self.prompt_last_role = messages[-1].get("role") if messages else None
         prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
-        assistant = {"role": "assistant", **as_vllm_gives_it(message)}
+        # A prompt encoder gets the turn as the vendor's own tests hand it, each call's arguments the JSON object
+        # string a parser returns (DeepSeek V3.2's module decodes that string itself); a template gets the object the
+        # engine's postprocessing gives it.
+        gives_it = as_the_encoder_takes_it if self.renderer.prompt_encoder is not None else as_vllm_gives_it
+        assistant = {"role": "assistant", **gives_it(message)}
         self.check_no_stop_id_in_the_message(assistant)
         rendered = self.chat([*messages, assistant], kwargs, generation_prompt=False)
         self.check_every_call_is_rendered(messages, kwargs, message, rendered)
@@ -186,8 +193,14 @@ class RoundtripOracle:
         calls as ``as_vllm_gives_it`` gives them; a developer message as a system message when the template names no
         developer role; rendered with the template the engine's server resolves for the request
         (``HfTemplateOracle.template_text``: the processor's for a request without tools when the checkpoint ships
-        one), handed over explicitly as the render oracle hands it."""
+        one), handed over explicitly as the render oracle hands it. A checkpoint with a prompt encoder renders through
+        it instead, the messages as sent, as the render oracle does."""
         tools = kwargs.get("tools")
+        if self.renderer.prompt_encoder is not None:
+            # The encoder closes a trailing assistant turn and opens the assistant's after any other; it reads no
+            # generation-prompt flag, as the engine's mode reads none.
+            last_role = getattr(self, "prompt_last_role", None)
+            return self.renderer.prompt_encoder.render(messages, tools, kwargs, last_role)
         template = self.renderer.template_text(tools)
         if template is not None:
             kwargs = {**kwargs, "chat_template": template}
@@ -681,6 +694,18 @@ def with_arguments_as_parsers_return_them(message: dict) -> dict:
         function = call["function"]
         function["arguments"] = json.dumps(json.loads(function["arguments"]), ensure_ascii=False)
     return message
+
+
+def as_the_encoder_takes_it(message: dict) -> dict:
+    """A copy of an assistant message as a prompt encoder takes it: the calls checked as ``as_vllm_gives_it`` checks
+    them (objects of type ``function``), an empty ``tool_calls`` dropped, and each call's arguments left the string the
+    corpus gives (``check_parse_call_arguments``), which the vendor's module decodes itself."""
+    checked = as_vllm_gives_it(message)
+    if "tool_calls" not in checked:
+        return checked
+    for call, given in zip(checked["tool_calls"], message["tool_calls"], strict=True):
+        call["function"]["arguments"] = given["function"]["arguments"]
+    return checked
 
 
 def check_parse_call_arguments(message: dict) -> None:
