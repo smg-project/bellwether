@@ -29,7 +29,7 @@ A call that refuses cases ends with status 1 and is not a failure. One that fail
 (an error the recorder reports and stops on, such as a checkpoint it cannot read), a traceback, or a status other than
 0 and 1, such as a kill. A call the environment refused is a group refusal, neither refused cases nor a crash: the
 recorder's refusal of a group is a ``RuntimeError`` (the processor's backends missing) or an ``ImportError`` (a package
-the processor imports absent), raised before any case, as the last line of a traceback, or against the cases, as a
+the processor imports absent), raised before any case, as a traceback's exception line, or against the cases, as a
 ``not recorded`` line's reason, which status 1 alone would pass off as cases the template refused with the group
 recorded. The call is reported as refused as a group with its reason, the summary lists it, and the script exits 1 once
 every other call has finished, saying how much memory the largest recorder held.
@@ -76,8 +76,9 @@ RECORDED = re.compile(r": (\d+) cases recorded")
 # RuntimeError (the recorder's own refusals: the processor's backends) or an ImportError (a package it could not
 # import). A template's refusal of a case is a jinja2 TemplateError (TemplateRuntimeError among them), a ValueError or
 # a TypeError, never one of these two.
+TRACEBACK = "Traceback (most recent call last)"
 GROUP_REFUSAL = re.compile(
-    r"^(?:not recorded \S+: )?(?:[\w.]+\.)?(?:RuntimeError|ImportError|ModuleNotFoundError): (.+)$", re.M
+    r"^(?:not recorded \S+: )?(?:[\w.]+\.)?(?P<cls>RuntimeError|ImportError|ModuleNotFoundError): (?P<reason>.*)$", re.M
 )
 # Files an oracle looks up by name beside the oracle inputs, such as the parse oracle's generation config for the end
 # of turn. Offline, a file the checkpoint does not ship must be known to be absent: the Hub's answer marks it so in
@@ -168,17 +169,48 @@ def call_corpus(kind: str, call: list[Path]) -> Iterator[Path]:
         yield directory
 
 
+def group_refusal(stderr: str) -> str | None:
+    """The reason the environment refused the group, or None. A traceback is read by the exception line of its last
+    section alone, the first line at column 0 after the header (the frames are indented; a message's continuation
+    lines follow it, so stderr's last line is not it): a chained traceback (a refusal handled, another exception
+    raised) carries the earlier sections as what led there, not what ended the call, and a crash that ends one is a
+    crash. Without a traceback the ``not recorded`` lines are read line by line, the first refusal's reason standing
+    for the group. A message that begins with a newline (the library starts its backend messages so) leaves the
+    exception line blank after the class: its first line is the reason then."""
+    if TRACEBACK in stderr:
+        lines = stderr.rsplit(TRACEBACK, 1)[-1].splitlines()[1:]
+        start = next((i for i, line in enumerate(lines) if line and not line[0].isspace()), len(lines))
+        text = "\n".join(lines[start:])
+        match = GROUP_REFUSAL.match(text)
+    else:
+        text = stderr
+        match = GROUP_REFUSAL.search(text)
+    if match is None:
+        return None
+    reason = match["reason"].strip()
+    if reason:
+        return reason
+    # Blank after the class, the message begins on the next line: its first line is the reason, read no further than
+    # the next case's ``not recorded`` line (a traceback's section has none); the class names a message with no words.
+    for line in text[match.end() :].splitlines():
+        if line.startswith("not recorded "):
+            break
+        if line.strip():
+            return line.strip()
+    return match["cls"]
+
+
 def outcome(status: int, stdout: str, stderr: str) -> tuple[int, int, bool, str | None]:
     """Cases recorded, cases refused, whether the call crashed, and the reason the environment refused the group when
-    it did (``GROUP_REFUSAL``, read from a call that ended with status 1 alone): refusing cases ends a call with
+    it did (``group_refusal``, read from a call that ended with status 1 alone): refusing cases ends a call with
     status 1, and so does an error the recorder reports and stops on, which refuses none, and so does a group refusal,
     which is neither of the two and is read first."""
     recorded = sum(int(match.group(1)) for match in RECORDED.finditer(stdout))
     refused = sum(1 for line in stderr.splitlines() if line.startswith("not recorded "))
-    group = GROUP_REFUSAL.search(stderr) if status == 1 else None
+    group = group_refusal(stderr) if status == 1 else None
     if group is not None:
-        return recorded, refused, False, group.group(1)
-    crashed = status not in (0, 1) or (status == 1 and not refused) or "Traceback (most recent call last)" in stderr
+        return recorded, refused, False, group
+    crashed = status not in (0, 1) or (status == 1 and not refused) or TRACEBACK in stderr
     return recorded, refused, crashed, None
 
 
