@@ -193,6 +193,59 @@ def test_the_deepseek_v4_mode_puts_the_tools_on_the_first_system_message(encoder
     assert oracle.render(without).text.startswith("<|im_start|>effort=high\ntools=get_weather\nuser:")
 
 
+def test_the_deepseek_v32_mode_gets_the_messages_as_its_renderer_hands_them(encoder_checkpoint):
+    """The engine's V3.2 renderer parses the request in the string content format before its mode renders: the text
+    parts of a list content joined with a newline, a part of another kind written as the model's placeholder (refused
+    here), an assistant's call arguments the JSON text of the object they decode to, an empty tool_calls dropped."""
+    oracle = HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    parts = {"messages": [{"role": "user", "content": [{"type": "text", "text": "A"}, {"type": "text", "text": "B"}]}]}
+    assert oracle.render(parts).text == "<|im_start|>user:A\nB<|im_end|>\nassistant:"
+    assert isinstance(parts["messages"][0]["content"], list), "the request was written to"
+    image = {"messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]}]}
+    with pytest.raises(ValueError, match="placeholder"):
+        oracle.render(image)
+    call = {"id": "call0", "type": "function", "function": {"name": "get_weather", "arguments": '{ "city" : "Paris" }'}}
+    history = [
+        {"role": "user", "content": "Weather?"},
+        {"role": "assistant", "content": "", "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": "call0", "content": "18"},
+        {"role": "user", "content": "Thanks"},
+    ]
+    spaced = oracle.render({"messages": history, "tools": [TOOL]}).text
+    compact = dict(call, function={**call["function"], "arguments": '{"city": "Paris"}'})
+    history[1] = {**history[1], "tool_calls": [compact]}
+    assert spaced == oracle.render({"messages": history, "tools": [TOOL]}).text
+    assert '<call get_weather {"city": "Paris"}>' in spaced
+    shaped = vendor.as_the_renderer_hands_them([{"role": "assistant", "content": "ok", "tool_calls": []}], "string")
+    assert shaped == [{"role": "assistant", "content": "ok"}]
+
+
+def test_the_deepseek_v4_mode_gets_the_messages_as_its_renderer_hands_them(encoder_checkpoint):
+    """The engine's V4 renderer parses the request in the openai content format: a list content stays a list for the
+    vendor's module; the arguments shaping is the same, with an argument string that is not a JSON object coerced to
+    ``{}`` as the engine coerces it."""
+    with_architecture(encoder_checkpoint, V4)
+    oracle = HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    broken = {"id": "call0", "type": "function", "function": {"name": "get_weather", "arguments": "not json"}}
+    history = [
+        {"role": "user", "content": "Weather?"},
+        {"role": "assistant", "content": "", "tool_calls": [broken]},
+        {"role": "tool", "tool_call_id": "call0", "content": "18"},
+        {"role": "user", "content": "Thanks"},
+    ]
+    assert "<call get_weather {}>" in oracle.render({"messages": history, "tools": [TOOL]}).text
+    assert history[1]["tool_calls"][0]["function"]["arguments"] == "not json", "the request was written to"
+    parts = [{"type": "text", "text": "A"}, {"type": "text", "text": "B"}]
+    shaped = vendor.as_the_renderer_hands_them([{"role": "user", "content": parts}], "openai")
+    assert shaped == [{"role": "user", "content": parts}]
+    kept = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{"type": "function", "function": {"name": "f", "arguments": {"a": 1}}}],
+    }
+    assert vendor.as_the_renderer_hands_them([kept], "openai") == [kept]
+
+
 def test_the_deepseek_v41_mode_normalizes_the_messages_and_checks_the_effort(encoder_checkpoint):
     with_architecture(encoder_checkpoint, V41)
     oracle = HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)

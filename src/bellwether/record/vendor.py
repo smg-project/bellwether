@@ -5,8 +5,10 @@ A checkpoint may ship a prompt encoder in place of a chat template: a module und
 engine's server renders such a checkpoint with its own copy of the module through a tokenizer mode picked by the
 architecture (``ENCODER_RENDERERS``), never with a template. The vendor-code oracle runs the checkpoint's own module
 (``prompt_encoder``), inside the sandbox only, and calls it as the engine's mode does (``ENCODER_RULES``, one rule per
-mode, each the mirror of the engine's wrapper at v0.31.0); the text is tokenized with the checkpoint's tokenizer and
-no special tokens added, as the mode tokenizes it.
+mode, each the mirror of the engine's wrapper at v0.31.0), on the messages as the engine's renderer hands them to the
+mode (``as_the_renderer_hands_them``: ``parse_chat_messages`` in the mode's content format, then
+``_postprocess_messages``); the text is tokenized with the checkpoint's tokenizer and no special tokens added, as the
+mode tokenizes it.
 
 Some checkpoints render or tokenize through code from their own repository: a tokenizer class that
 ``tokenizer_config.json`` names in ``auto_map``, such as Kimi-K3's tiktoken tokenizer, which renders its chat format
@@ -34,6 +36,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 
@@ -91,13 +94,64 @@ def encoder_kwargs(kwargs: dict, reasoning_effort: object = None) -> dict:
     return kwargs
 
 
+# The part types the engine's string content format writes as their text, joined with a newline
+# (``vllm/entrypoints/chat_utils.py:1814-1853`` at v0.31.0); any other part takes the model's own placeholder there.
+_TEXT_PARTS = ("text", "input_text", "output_text")
+
+
+def as_the_renderer_hands_them(messages: list, content_format: str) -> list:
+    """A deep copy of ``messages`` as the engine's renderer for a prompt-encoder checkpoint hands them to its tokenizer
+    mode (``vllm/renderers/deepseek_v32.py:38-52`` and ``deepseek_v4.py:44-58`` at v0.31.0: ``parse_chat_messages`` in
+    the mode's ``content_format``, then ``_postprocess_messages``, ``chat_utils.py:2084-2158``): under the ``string``
+    format a list content becomes its text parts joined with a newline (a part of another type is refused: the engine
+    writes the model's placeholder there, which the oracle does not derive); under ``openai`` the list stays. An
+    assistant's empty ``tool_calls`` is dropped; a call whose arguments are a string gets the JSON text of the object
+    they decode to (anything that does not decode to an object becomes ``{}``, as the engine coerces it), which the
+    vendor's module decodes again; an object-form argument stays as given (the engine takes it as it is, the vendor's
+    modules read a string and refuse it: the refusal is recorded as such)."""
+    shaped = []
+    for message in copy.deepcopy(messages):
+        content = message.get("content")
+        if content_format == "string" and isinstance(content, list):
+            texts = []
+            for part in content:
+                kind = part.get("type") if isinstance(part, dict) else None
+                if kind not in _TEXT_PARTS:
+                    raise ValueError(
+                        f"the engine's string content format writes a {kind!r} part as the model's placeholder, which "
+                        "the prompt-encoder oracle does not derive"
+                    )
+                texts.append(str(part.get("text", "")))
+            message["content"] = "\n".join(texts)
+        calls = message.get("tool_calls")
+        if message.get("role") == "assistant" and isinstance(calls, list):
+            if not calls:
+                del message["tool_calls"]
+            for call in calls:
+                function = call.get("function") if isinstance(call, dict) else None
+                if not isinstance(function, dict) or call.get("type", "function") != "function":
+                    raise ValueError(
+                        "the engine takes assistant tool_calls of type 'function' only; the request is refused"
+                    )
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    try:
+                        decoded = json.loads(arguments)
+                    except ValueError:
+                        decoded = {}
+                    function["arguments"] = json.dumps(decoded if isinstance(decoded, dict) else {}, ensure_ascii=False)
+        shaped.append(message)
+    return shaped
+
+
 def deepseek_v32(module, messages: list, tools: list | None, kwargs: dict, last_role: str | None = None) -> str:
-    """``encode_messages`` as the ``deepseek_v32`` mode calls it (``vllm/tokenizers/deepseek_v32.py:22-57``): thinking
-    on under ``thinking`` or ``enable_thinking``, off by default; the request's tools on a new leading system message;
-    earlier reasoning dropped when the conversation's last message is a user turn (``last_role``, the request's, for
-    the round trip's renders of the appended turn); the generation-prompt flags are not read."""
+    """``encode_messages`` as the ``deepseek_v32`` mode calls it (``vllm/tokenizers/deepseek_v32.py:22-57``) on the
+    messages its renderer hands it (``as_the_renderer_hands_them``, the ``string`` content format): thinking on under
+    ``thinking`` or ``enable_thinking``, off by default; the request's tools on a new leading system message; earlier
+    reasoning dropped when the conversation's last message is a user turn (``last_role``, the request's, for the round
+    trip's renders of the appended turn); the generation-prompt flags are not read."""
     thinking = bool(kwargs.get("thinking", False) or kwargs.get("enable_thinking", False))
-    messages = copy.deepcopy(messages)
+    messages = as_the_renderer_hands_them(messages, "string")
     drop_thinking = (last_role or messages[-1]["role"]) == "user"
     if tools:
         messages.insert(0, {"role": "system", "tools": copy.deepcopy(tools)})
@@ -110,12 +164,13 @@ def deepseek_v4(module, messages: list, tools: list | None, kwargs: dict, last_r
     unless ``thinking`` or ``enable_thinking`` says off; tools on the first system message, made when there is none;
     the effort: no string gives ``high`` when thinking and none otherwise, ``none`` switches to chat, ``max`` stays,
     ``low``, ``minimal`` and ``medium`` become ``low``, anything else ``high``; ``drop_thinking`` as the request's
-    kwarg, true by default."""
+    kwarg, true by default. The messages as its renderer hands them (``as_the_renderer_hands_them``, the ``openai``
+    content format: a list content stays a list)."""
     thinking = bool(kwargs.get("thinking")) or bool(kwargs.get("enable_thinking"))
     if "thinking" not in kwargs and "enable_thinking" not in kwargs:
         thinking = True
     mode = "thinking" if thinking else "chat"
-    messages = copy.deepcopy(messages)
+    messages = as_the_renderer_hands_them(messages, "openai")
     if tools:
         index = next((i for i, m in enumerate(messages) if m.get("role") == "system"), None)
         if index is None:
