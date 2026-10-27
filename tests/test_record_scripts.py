@@ -208,6 +208,42 @@ def test_a_group_level_error_is_a_group_refusal_neither_refused_cases_nor_a_cras
     assert record.outcome(0, out, f"RuntimeError: {reason}\n") == (0, 0, False, None)
     # A recorder killed after it printed the line crashed: the refusal is read from status 1 alone.
     assert record.outcome(-9, "", before_any_case) == (0, 0, True, None)
+    # A traceback is read by its final exception: a refusal handled and followed by another error is that error's
+    # crash; an ImportError that caused the refusal leaves the refusal's own words as the reason.
+    handled = f"{before_any_case}\nDuring handling of the above exception, another exception occurred:\n\n"
+    handled += "Traceback (most recent call last):\n  ...\nValueError: the case could not be written\n"
+    assert record.outcome(1, "", handled) == (0, 0, True, None)
+    caused = "Traceback (most recent call last):\n  ...\nImportError: No module named 'num2words'\n\n"
+    caused += f"The above exception was the direct cause of the following exception:\n\n{before_any_case}"
+    assert record.outcome(1, "", caused) == (0, 0, False, reason)
+    # The recorder's backends refusal carries the processor error's own words, and the library begins and ends its
+    # backend messages with a newline, so the exception line ends at the refusal's open parenthesis and the
+    # traceback's last line is a lone ')': the exception is the first column-0 line after the indented frames and
+    # its reason that line's; the continuation lines of a handled one sit before the bridge.
+    backends = reason.replace("num2words (Package `num2words` is required to run the processor)", "torchvision (")
+    words = (
+        "LlavaProcessor requires the Torchvision library but it was not found in your environment. Check out the\n"
+        "installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your "
+        "environment.\nPlease note that you may need to restart your runtime after installation.\n"
+    )
+    spanning = (
+        'Traceback (most recent call last):\n  File "record.py", line 9, in <module>\n    build()\n'
+        f"RuntimeError: {backends}\n{words})\n"
+    )
+    assert record.outcome(1, "", spanning) == (0, 0, False, backends)
+    handled = f"{spanning}\nDuring handling of the above exception, another exception occurred:\n\n"
+    handled += "Traceback (most recent call last):\n  ...\nValueError: the case could not be written\n"
+    assert record.outcome(1, "", handled) == (0, 0, True, None)
+    # The library's message raised as is leaves the exception line blank after the class: its first line is the
+    # reason.
+    bare = f"Traceback (most recent call last):\n  ...\nImportError: \n{words}\n"
+    assert record.outcome(1, "", bare) == (0, 0, False, words.splitlines()[0])
+    # A case's reason that begins with a newline is read from its first line too, and a case's line with no words
+    # after the class leaves the next case's line alone: the class is the reason.
+    spilled = f"not recorded m/render/a: ImportError: \n{words}not recorded m/render/b: ImportError: \n{words}"
+    assert record.outcome(1, out, spilled) == (0, 2, False, words.splitlines()[0])
+    empty = "not recorded m/render/a: ImportError: \nnot recorded m/render/b: ValueError: the template trims it\n"
+    assert record.outcome(1, out, empty) == (0, 2, False, "ImportError")
 
 
 def test_the_largest_recorder_is_measured_from_the_children_that_ended():
