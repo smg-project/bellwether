@@ -488,6 +488,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [llama-3.2-11b-vision-instruct](fixtures/llama-3.2-11b-vision-instruct/sets.toml) | meta-llama/Llama-3.2-11B-Vision-Instruct @ 9eb2daaa | 1 | 3 | 508776 | 458203 | 140096 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [llama-3.2-1b-instruct](fixtures/llama-3.2-1b-instruct/sets.toml) | meta-llama/Llama-3.2-1B-Instruct @ 92131767 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [llama-3.2-1b-instruct-fp8](fixtures/llama-3.2-1b-instruct-fp8/sets.toml) | RedHatAI/Llama-3.2-1B-Instruct-FP8 @ 6b92f622 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [llama-3.3-70b-instruct](fixtures/llama-3.3-70b-instruct/sets.toml) | meta-llama/Llama-3.3-70B-Instruct @ 6f6073b4 | 1 | 3 | 22 | 14 | 16 | hand-written |
 | [llama-3.3-nemotron-70b-reward](fixtures/llama-3.3-nemotron-70b-reward/sets.toml) | nvidia/Llama-3.3-Nemotron-70B-Reward @ 2500cf14 | 3 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [llama-3.3-nemotron-70b-reward-principle](fixtures/llama-3.3-nemotron-70b-reward-principle/sets.toml) | nvidia/Llama-3.3-Nemotron-70B-Reward-Principle @ ac3e237f | 3 | 2 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [llama-4-maverick-17b-128e-instruct](fixtures/llama-4-maverick-17b-128e-instruct/sets.toml) | meta-llama/Llama-4-Maverick-17B-128E-Instruct @ 73d14711 | 1 | 3 | 531736 | 576438 | 341 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -876,7 +877,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [trinity-mini-base](fixtures/trinity-mini-base/sets.toml) | arcee-ai/Trinity-Mini-Base @ b08c4f60 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [trinity-nano-base](fixtures/trinity-nano-base/sets.toml) | arcee-ai/Trinity-Nano-Base @ 923a95db | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [trinity-nano-preview](fixtures/trinity-nano-preview/sets.toml) | arcee-ai/Trinity-Nano-Preview @ b576b32b | 1 | 2 | 531736 | 576774 | 5 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [turntaking-pretraining-it-multilingual-3c](fixtures/turntaking-pretraining-it-multilingual-3c/sets.toml) | fixie-ai/turntaking-pretraining-it-multilingual-3c @ ba1bd74d | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [turntaking-pretraining-it-multilingual-3c](fixtures/turntaking-pretraining-it-multilingual-3c/sets.toml) | fixie-ai/turntaking-pretraining-it-multilingual-3c @ ba1bd74d | 2 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ui-mate-9b](fixtures/ui-mate-9b/sets.toml) | tencent/UI-Mate-9B @ 05dd5f29 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ui-tars-1.5-7b](fixtures/ui-tars-1.5-7b/sets.toml) | ByteDance-Seed/UI-TARS-1.5-7B @ 683d002d | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ui-tars-2b-sft](fixtures/ui-tars-2b-sft/sets.toml) | ByteDance-Seed/UI-TARS-2B-SFT @ f366a1db | 3 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -924,7 +925,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1281 | | 361288427 | 266945375 | 108981858 | |
+| all | | 1283 | | 361288449 | 266945389 | 108981874 | |
 
 122 more groups (189 checkpoints) have a manifest and nothing recorded yet.
 
