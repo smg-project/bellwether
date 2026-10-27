@@ -43,7 +43,14 @@ the file's pipeline, as the engine encodes them). Nor does a model config of tra
 the tokenizer when that class's validators refuse the checkpoint's values (ZAYA1's and an OLMo-3 fine-tune's rope
 settings): ``AutoTokenizer`` is given a config of the same model type to choose the class by. Neither applies with
 ``vendor_code``: the vendor's class loads as the checkpoint names it, and renders with its own template or none
-(Kimi-K3's).
+(Kimi-K3's). A vendor-code checkpoint the engine's server renders with a renderer of its own gets the request's
+kwargs as that renderer hands them to the class: Kimi K3's turns the engine's ``enable_thinking`` alias into the
+class's ``thinking``, a ``reasoning_effort`` (the request's kwarg or its top-level field) into ``thinking_effort``,
+``none`` switching thinking off, and refuses an effort the class does not know (``vendor.kimi_k3_kwargs``, the mirror
+of ``_apply_k3_thinking_kwargs`` in ``vllm/renderers/kimi_k3.py:48-66`` and of ``build_chat_params`` in
+``vllm/entrypoints/openai/chat_completion/protocol.py:568-596`` at v0.31.0); the provenance names the renderer
+(``engine_renderer``). The bare call rendered the engine's spellings as if absent: thinking stayed on under
+``enable_thinking: false``, and ``reasoning_effort: low`` left the default ``thinking_effort=max`` directive.
 
 The template gets each message's content in the format vLLM selects for the template from its source
 (``content_format``: a template that loops over a message's content takes a list of typed parts, and string content
@@ -117,6 +124,9 @@ class HfTemplateOracle:
         self.source_date_epoch = clock.pinned_value()
         self.rendered_at = clock.pin_template_clock()
         self.tokenizer = load_tokenizer(model, revision, kwargs)
+        # The engine's own renderer for the checkpoint, whose kwargs rewrite the oracle applies before the class renders
+        # (``engine_kwargs``); None for a template, which the engine's server renders as the request gives the kwargs.
+        self.engine_renderer = vendor.engine_renderer(architectures(model, revision)) if vendor_code else None
         self.encoder = (
             None
             if vendor_code or class_rebuilds_the_pipeline(self.tokenizer, model, revision)
@@ -158,6 +168,7 @@ class HfTemplateOracle:
             "continue_final_message": continue_final,
             **dict(request.get("chat_template_kwargs") or {}),
         }
+        kwargs = self.engine_kwargs(request, kwargs)
         content_format = self.content_format(tools)
         messages = self.for_template(request["messages"], tools)
         # The template the engine's server resolves for this request, handed over explicitly: the processor's for a
@@ -175,6 +186,14 @@ class HfTemplateOracle:
         return Rendered(
             [int(i) for i in ids], str(text), content_format, self.developer_role(tools), self.template_source(tools)
         )
+
+    def engine_kwargs(self, request: dict, kwargs: dict) -> dict:
+        """The template ``kwargs`` of ``request`` as the engine's server hands them to the checkpoint's class: rewritten
+        by the engine's own renderer for the checkpoint when it has one (Kimi K3's, ``vendor.kimi_k3_kwargs``, which
+        reads the request's top-level ``reasoning_effort`` too), as given for every other checkpoint."""
+        if self.engine_renderer == "kimi_k3":
+            return vendor.kimi_k3_kwargs(kwargs, request.get("reasoning_effort"))
+        return kwargs
 
     def for_template(self, messages: list[dict], tools: list | None) -> list[dict]:
         """``messages`` as the engine hands them to the template for a request with ``tools``: each message's content
@@ -239,6 +258,7 @@ class HfTemplateOracle:
             ),
             "tool_call_arguments": "object",
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
+            **({"engine_renderer": self.engine_renderer} if self.engine_renderer else {}),
             **({"processor": self.processor} if self.processor else {}),
             **(
                 {"processor_chat_template_sha256": self.processor_template_sha256}
@@ -467,6 +487,14 @@ def model_type(model: str, revision: str) -> str | None:
     path = checkpoint_file(model, revision, "config.json")
     value = json.loads(path.read_text()).get("model_type") if path is not None else None
     return value if isinstance(value, str) else None
+
+
+def architectures(model: str, revision: str) -> list[str]:
+    """The ``architectures`` of the checkpoint's ``config.json``, by which the engine's server picks a renderer of its
+    own for the checkpoint (``vllm/config/model.py:702-719`` at v0.31.0); empty without the file or the key."""
+    path = checkpoint_file(model, revision, "config.json")
+    value = json.loads(path.read_text()).get("architectures") if path is not None else None
+    return [name for name in value if isinstance(name, str)] if isinstance(value, list) else []
 
 
 def class_rebuilds_the_pipeline(tokenizer, model: str, revision: str) -> bool:

@@ -127,6 +127,8 @@ class RoundtripOracle:
             )
         messages = request["messages"]
         kwargs = {"tools": request.get("tools"), **dict(request.get("chat_template_kwargs") or {})}
+        # As the engine's own renderer for the checkpoint hands them to the class, when it has one (Kimi K3's).
+        kwargs = self.renderer.engine_kwargs(request, kwargs)
         prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
         assistant = {"role": "assistant", **as_vllm_gives_it(message)}

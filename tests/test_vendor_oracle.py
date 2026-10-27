@@ -64,6 +64,24 @@ class EncoderTokenizer(ByteTokenizer):
         if add_generation_prompt:
             text += "<|im_start|>assistant\\n"
         return self.encode(text, add_special_tokens=False) if tokenize else text
+
+
+class ThinkingTokenizer(ByteTokenizer):
+    # Reads the thinking kwargs as Kimi-K3's class reads them (`thinking`, `thinking_effort`, the effort defaulting to
+    # max and checked against the class's three), and writes what it read into the prompt; every other kwarg is ignored.
+
+    def apply_chat_template(
+        self, conversation, tools=None, tokenize=True, add_generation_prompt=False, thinking=True, **kwargs
+    ):
+        kwargs.setdefault("thinking_effort", "max")
+        effort = kwargs["thinking_effort"]
+        assert effort in ("low", "high", "max"), f"Unsupported thinking_effort={effort!r}"
+        text = f"<|effort|>{effort}\\n" if thinking else ""
+        for m in conversation:
+            text += f"<|im_start|>{m['role']}\\n{m['content']}<|im_end|>\\n"
+        if add_generation_prompt:
+            text += "<|im_start|>assistant\\n" + ("<think>" if thinking else "")
+        return self.encode(text, add_special_tokens=False) if tokenize else text
 """
 TEMPLATE = (
     "{% for m in messages %}<|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>\n{% endfor %}"
@@ -95,6 +113,24 @@ def vendor_checkpoint(tmp_path, monkeypatch) -> pathlib.Path:
 
 
 REQUEST = {"messages": [{"role": "user", "content": "café"}]}
+KIMI_K3 = "KimiK3ForConditionalGeneration"  # the architecture the engine's server renders with its Kimi K3 renderer
+
+
+def with_thinking_class(checkpoint: pathlib.Path, architecture: str) -> None:
+    """Make the checkpoint's class the one that reads the thinking kwargs, with no template, under ``architecture``."""
+    config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    config["auto_map"] = {"AutoTokenizer": ["tokenization_byte.ThinkingTokenizer", None]}
+    config["tokenizer_class"] = "ThinkingTokenizer"
+    del config["chat_template"]
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps(config))
+    (checkpoint / "config.json").write_text(json.dumps({"model_type": "x", "architectures": [architecture]}))
+
+
+@pytest.fixture
+def kimi_k3_checkpoint(vendor_checkpoint, monkeypatch) -> pathlib.Path:
+    monkeypatch.setenv(vendor.SANDBOX_ENV, "1")
+    with_thinking_class(vendor_checkpoint, KIMI_K3)
+    return vendor_checkpoint
 
 
 def without_a_template(checkpoint: pathlib.Path) -> None:
@@ -132,6 +168,98 @@ def test_in_the_sandbox_the_vendor_tokenizer_renders(vendor_checkpoint, monkeypa
     assert len(rendered.input_ids) == 3 + len("user\ncafé\n".encode()) + len(b"assistant\n")
     assert oracle.provenance()["tokenizer_class"] == "ByteTokenizer"
     assert oracle.provenance()["oracle"] == "vendor-code"
+
+
+@pytest.mark.parametrize(
+    ("request_fields", "rendered"),
+    [
+        # The engine's alias becomes the class's own kwarg: thinking off, no effort directive, the response opener.
+        pytest.param(
+            {"chat_template_kwargs": {"enable_thinking": False}},
+            "<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n",
+            id="enable-thinking-off",
+        ),
+        pytest.param(
+            {"chat_template_kwargs": {"enable_thinking": True}},
+            "<|effort|>max\n<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n<think>",
+            id="enable-thinking-on",
+        ),
+        # A reasoning effort in the kwargs is the class's thinking effort; `none` switches thinking off.
+        pytest.param(
+            {"chat_template_kwargs": {"reasoning_effort": "low"}},
+            "<|effort|>low\n<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n<think>",
+            id="reasoning-effort-low",
+        ),
+        pytest.param(
+            {"chat_template_kwargs": {"reasoning_effort": "none"}},
+            "<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n",
+            id="reasoning-effort-none",
+        ),
+        # The request's top-level reasoning_effort reaches the kwargs too, over one of the same name in them.
+        pytest.param(
+            {"reasoning_effort": "high", "chat_template_kwargs": {"reasoning_effort": "low"}},
+            "<|effort|>high\n<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n<think>",
+            id="top-level-reasoning-effort",
+        ),
+        pytest.param(
+            {"reasoning_effort": "none"},
+            "<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n",
+            id="top-level-reasoning-effort-none",
+        ),
+        # The class's own kwargs win over the engine's spellings.
+        pytest.param(
+            {
+                "chat_template_kwargs": {
+                    "thinking": True,
+                    "enable_thinking": False,
+                    "thinking_effort": "low",
+                    "reasoning_effort": "high",
+                }
+            },
+            "<|effort|>low\n<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n<think>",
+            id="the-class-kwargs-win",
+        ),
+    ],
+)
+def test_in_the_sandbox_a_kimi_k3_checkpoint_gets_the_kwargs_as_the_engines_renderer_hands_them(
+    kimi_k3_checkpoint, request_fields, rendered
+):
+    oracle = HfTemplateOracle(str(kimi_k3_checkpoint), "local", vendor_code=True)
+    assert oracle.render({**REQUEST, **request_fields}).text == rendered
+    assert oracle.provenance()["engine_renderer"] == "kimi_k3"
+
+
+def test_in_the_sandbox_a_kimi_k3_checkpoint_refuses_an_effort_the_engines_renderer_refuses(kimi_k3_checkpoint):
+    oracle = HfTemplateOracle(str(kimi_k3_checkpoint), "local", vendor_code=True)
+    with pytest.raises(ValueError, match="Kimi K3 supports thinking_effort values: low, high, max"):
+        oracle.render({**REQUEST, "chat_template_kwargs": {"thinking_effort": "medium"}})
+    with pytest.raises(ValueError, match="thinking_effort"):
+        oracle.render({**REQUEST, "reasoning_effort": "medium"})
+
+
+def test_in_the_sandbox_a_vendor_class_of_another_architecture_gets_the_kwargs_as_the_request_gives_them(
+    vendor_checkpoint, monkeypatch
+):
+    """The engine's server renders every other vendor-code checkpoint through the class with the request's kwargs:
+    the alias reaches a class that does not read it, and thinking stays on."""
+    monkeypatch.setenv(vendor.SANDBOX_ENV, "1")
+    with_thinking_class(vendor_checkpoint, "OtherForCausalLM")
+    oracle = HfTemplateOracle(str(vendor_checkpoint), "local", vendor_code=True)
+    rendered = oracle.render({**REQUEST, "chat_template_kwargs": {"enable_thinking": False}})
+    assert rendered.text == "<|effort|>max\n<|im_start|>user\ncafé<|im_end|>\n<|im_start|>assistant\n<think>"
+    assert "engine_renderer" not in oracle.provenance()
+
+
+def test_in_the_sandbox_the_round_trip_of_a_kimi_k3_checkpoint_renders_with_the_engines_kwargs(kimi_k3_checkpoint):
+    """The parse oracle's prompt and turn come from the same rewrite: under the engine's alias the generation prompt
+    opens no thought, and the output is the message alone."""
+    from bellwether.record.roundtrip import RoundtripOracle
+
+    oracle = RoundtripOracle(str(kimi_k3_checkpoint), "local", vendor_code=True)
+    request = {**REQUEST, "chat_template_kwargs": {"enable_thinking": False}}
+    output = oracle.render_output(request, {"content": "Paris."})
+    assert output.text == "Paris."
+    assert oracle.provenance()["engine_renderer"] == "kimi_k3"
 
 
 def test_without_the_vendor_flag_a_vendor_tokenizer_is_never_loaded(vendor_checkpoint, monkeypatch):
