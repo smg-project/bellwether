@@ -340,3 +340,23 @@ def test_the_round_trip_keeps_the_requests_last_role_for_the_appended_turn(encod
     request = {"messages": history, "chat_template_kwargs": {"thinking": True}}
     output = oracle.render_output(request, {"role": "assistant", "reasoning_content": "Prime.", "content": "Yes."})
     assert output.text == "Prime.</think>Yes." and output.end_of_turn["stop_id"] == 2
+
+
+def test_a_reasoning_carrying_case_under_a_chat_mode_request_is_refused_through_the_encoder(encoder_checkpoint):
+    """The ``deepseek_v32`` mode is thinking-off unless the request switches it on, and a chat-mode turn carries no
+    reasoning: a case whose message states ``reasoning_content`` is refused as the reasoning probes are, a call-carrying
+    one too (its variant renders go through the encoder since ``as_given``; handed the object a template gets, the
+    encoder raised on them and the check was skipped, and four such cases were once recorded without their reasoning).
+    The same message under the mode's switch records the reasoning and its closer, after the request's last role kept
+    the prompt a prefix."""
+    oracle = RoundtripOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+    message = {"role": "assistant", "reasoning_content": "The user asks about Paris.", "tool_calls": [call]}
+    with pytest.raises(ValueError, match="does not render the message's reasoning"):
+        oracle.render_output({**REQUEST, "tools": [TOOL]}, message)
+    with pytest.raises(ValueError, match="does not render the message's reasoning"):
+        oracle.render_output(REQUEST, {"role": "assistant", "reasoning_content": "Nothing to say.", "content": "Hi."})
+    thinking = {**REQUEST, "tools": [TOOL], "chat_template_kwargs": {"thinking": True}}
+    output = oracle.render_output(thinking, message)
+    assert output.text == 'The user asks about Paris.</think><call get_weather {"city": "Paris"}>'
+    assert output.finish_reason == "tool_calls" and output.end_of_turn["stop_id"] == 2
