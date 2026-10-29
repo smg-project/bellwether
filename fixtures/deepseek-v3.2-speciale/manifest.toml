@@ -1,0 +1,11 @@
+model    = "deepseek-ai/DeepSeek-V3.2-Speciale"
+revision = "c562883eda916fd699a44bbf1f4987a53b96008b"
+tier     = 2
+group    = "deepseek-v3.2"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"config.json"                = "cde5ca904bf2a9c548c00db859d6c003f78c0886992e81bccb63dff404dd1e5d"
+"encoding/encoding_dsv32.py" = "5e068c2ba2a6e5ebe37a49bb005650c507e7935d77a32f3f7c11ee071498b370"
+"generation_config.json"     = "91fb14e3500c52b9ab71cc9270c3a8421b5ade9580ed0b16716eca62cb6b2b93"
+"tokenizer.json"             = "cd050be35cae877f8f0aa847f45aa87e23835a56ca32b29b28545597852784e5"
+"tokenizer_config.json"      = "b5de6cc1c6758d02c0d3cec0efa062f1161654475458003f6f293f6ef28acdaa"

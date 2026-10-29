@@ -50,7 +50,12 @@ class's ``thinking``, a ``reasoning_effort`` (the request's kwarg or its top-lev
 of ``_apply_k3_thinking_kwargs`` in ``vllm/renderers/kimi_k3.py:48-66`` and of ``build_chat_params`` in
 ``vllm/entrypoints/openai/chat_completion/protocol.py:568-596`` at v0.31.0); the provenance names the renderer
 (``engine_renderer``). The bare call rendered the engine's spellings as if absent: thinking stayed on under
-``enable_thinking: false``, and ``reasoning_effort: low`` left the default ``thinking_effort=max`` directive.
+``enable_thinking: false``, and ``reasoning_effort: low`` left the default ``thinking_effort=max`` directive. A
+vendor-code checkpoint that ships a prompt encoder in place of a template (DeepSeek V3.2's
+``encoding/encoding_dsv32.py``, V4's ``encoding_dsv4.py``; ``inputs.vendor_encoder``) is rendered by that module,
+called as the engine's tokenizer mode for the architecture calls it (``vendor.prompt_encoder``,
+``vendor.ENCODER_RULES``), the text encoded with no special tokens added as the mode encodes it; the provenance names
+the module and its hash (``encoder_module``, ``encoder_sha256``) and the line's ``template_source`` is ``encoder``.
 
 The template gets each message's content in the format vLLM selects for the template from its source
 (``content_format``: a template that loops over a message's content takes a list of typed parts, and string content
@@ -97,6 +102,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from bellwether.inputs import checkpoint_dir, vendor_encoder
+
 from . import clock, vendor
 from .content_format import ContentFormat, detect_content_format, in_content_format
 
@@ -127,6 +134,14 @@ class HfTemplateOracle:
         # The engine's own renderer for the checkpoint, whose kwargs rewrite the oracle applies before the class renders
         # (``engine_kwargs``); None for a template, which the engine's server renders as the request gives the kwargs.
         self.engine_renderer = vendor.engine_renderer(architectures(model, revision)) if vendor_code else None
+        # The checkpoint's prompt encoder when it ships one in place of a template (DeepSeek V3.2's, V4's): loaded in
+        # the sandbox only, called as the engine's tokenizer mode for the architecture calls it; None otherwise.
+        self.prompt_encoder = vendor.prompt_encoder(model, revision, self.engine_renderer) if vendor_code else None
+        if not vendor_code and vendor_encoder(checkpoint_dir(model, revision)) is not None:
+            raise ValueError(
+                f"{model} at {revision} ships a prompt encoder the engine's server renders with; its reference is the "
+                "vendor-code oracle, recorded with `bellwether sandbox-record`"
+            )
         self.encoder = (
             None
             if vendor_code or class_rebuilds_the_pipeline(self.tokenizer, model, revision)
@@ -152,6 +167,8 @@ class HfTemplateOracle:
             template = json.dumps(template, sort_keys=True)
         # A vendor's class may render its chat format itself (Kimi-K3's does), with no template to hash; its code is
         # pinned by the manifest's inputs instead.
+        if self.prompt_encoder is not None:
+            template = None  # the encoder renders every request; a template the checkpoint ships too is not read
         self.template_sha256 = None if template is None else hashlib.sha256(template.encode("utf-8")).hexdigest()
         self.processor_template_sha256 = (
             None
@@ -169,6 +186,11 @@ class HfTemplateOracle:
             **dict(request.get("chat_template_kwargs") or {}),
         }
         kwargs = self.engine_kwargs(request, kwargs)
+        if self.prompt_encoder is not None:
+            # The encoder renders the request as sent and the mode encodes its text with no special tokens added.
+            text = self.prompt_encoder.render(request["messages"], tools, kwargs)
+            ids = self.tokenizer.encode(text, add_special_tokens=False)
+            return Rendered([int(i) for i in ids], text, "string", "as-written", "encoder")
         content_format = self.content_format(tools)
         messages = self.for_template(request["messages"], tools)
         # The template the engine's server resolves for this request, handed over explicitly: the processor's for a
@@ -193,6 +215,8 @@ class HfTemplateOracle:
         reads the request's top-level ``reasoning_effort`` too), as given for every other checkpoint."""
         if self.engine_renderer == "kimi_k3":
             return vendor.kimi_k3_kwargs(kwargs, request.get("reasoning_effort"))
+        if self.prompt_encoder is not None:
+            return vendor.encoder_kwargs(kwargs, request.get("reasoning_effort"))
         return kwargs
 
     def for_template(self, messages: list[dict], tools: list | None) -> list[dict]:
@@ -222,7 +246,10 @@ class HfTemplateOracle:
     def template_source(self, tools: list | None) -> str:
         """Whose template renders a request with ``tools``: ``"processor"`` when the engine's server takes the
         processor's (a request without tools on a checkpoint that ships the file, or a tokenizer without a template
-        of its own, which renders with the processor's for every request), ``"tokenizer"`` otherwise."""
+        of its own, which renders with the processor's for every request), ``"encoder"`` for a checkpoint whose
+        prompt encoder renders every request, ``"tokenizer"`` otherwise."""
+        if self.prompt_encoder is not None:
+            return "encoder"
         if self.tokenizer_renders_the_processors or (tools is None and self.processor_chat_template is not None):
             return "processor"
         return "tokenizer"
@@ -256,9 +283,14 @@ class HfTemplateOracle:
                 if self.encoder is not None
                 else f"transformers:{type(self.tokenizer).__name__}"
             ),
-            "tool_call_arguments": "object",
+            "tool_call_arguments": "string" if self.prompt_encoder is not None else "object",
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
             **({"engine_renderer": self.engine_renderer} if self.engine_renderer else {}),
+            **(
+                {"encoder_module": self.prompt_encoder.name, "encoder_sha256": self.prompt_encoder.sha256}
+                if self.prompt_encoder is not None
+                else {}
+            ),
             **({"processor": self.processor} if self.processor else {}),
             **(
                 {"processor_chat_template_sha256": self.processor_template_sha256}

@@ -19,7 +19,11 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
 - from ``config.json``, the two fields that choose the tokenizer class;
 - for a checkpoint whose tokenizer class is the vendor's own code (``tokenizer_config.json`` names it in ``auto_map``),
   every Python file and vocabulary file at the repository's root (``VENDOR_SUFFIXES``): the class may import any of
-  them, and the vendor-code oracle runs it in a sandbox that holds only files the manifest lists.
+  them, and the vendor-code oracle runs it in a sandbox that holds only files the manifest lists;
+- for a checkpoint that ships no chat template but a prompt encoder, the vendor's module under ``encoding/`` whose
+  ``encode_messages`` renders the chat format (DeepSeek V3.2 and V4; ``ENCODER_PATTERN``): the engine's server renders
+  such a checkpoint with its own copy of that module, never with a template, and the vendor-code oracle runs the
+  checkpoint's own in the sandbox, as the engine's tokenizer mode for the architecture calls it.
 
 A whole file is hashed as its bytes. A narrowed file is hashed over the canonical JSON of only its fields,
 ``json.dumps(..., sort_keys=True)`` with a field the file lacks written as null, so anyone can recompute it; for a
@@ -66,6 +70,20 @@ PATTERNS = (*FILES, f"{NAMED_TEMPLATES}/*.jinja")
 # modules, which the class may import, and the vocabulary formats such classes read.
 VENDOR_SUFFIXES = (".py", ".model", ".tiktoken", ".vocab", ".bpe")
 VENDOR_PATTERNS = tuple(f"*{suffix}" for suffix in VENDOR_SUFFIXES)
+# The prompt encoder of a checkpoint that ships no chat template: the vendor's module under ``encoding/`` named
+# ``encoding*.py`` (its tests there are ``test_encoding*.py``, never fetched), the one that defines ``encode_messages``.
+ENCODER_DIR = "encoding"
+ENCODER_PATTERN = f"{ENCODER_DIR}/encoding*.py"
+ENCODER_ENTRY = "def encode_messages("
+# The engine's tokenizer mode per architecture the engine's server renders with a copy of the checkpoint's prompt
+# encoder, whatever else the checkpoint ships (``vllm/config/model.py:709-717`` at v0.31.0): such a checkpoint's
+# reference is its encoder even when it ships a template too (DeepSeek-V4.1-Flash ships both).
+ENCODER_MODES = {
+    "DeepseekV32ForCausalLM": "deepseek_v32",
+    "DeepseekV4ForCausalLM": "deepseek_v4",
+    "DeepseekV4ForConditionalGeneration": "deepseek_v4",
+    "DeepseekV41ForCausalLM": "deepseek_v41",
+}
 
 
 def oracle_inputs(model: str, revision: str) -> dict[str, str]:
@@ -85,6 +103,9 @@ def oracle_inputs(model: str, revision: str) -> dict[str, str]:
             for path in directory.iterdir()
             if path.is_file() and path.suffix in VENDOR_SUFFIXES and path.name not in names
         ]
+    encoder = vendor_encoder(directory)
+    if encoder is not None:
+        names.append(encoder)
     stop_ids_from_config = "generation_config.json" not in names
     return {name: _sha256(directory / name, stop_ids_from_config) for name in sorted(names)}
 
@@ -103,6 +124,57 @@ def vendor_tokenizer(directory: Path) -> bool:
     return isinstance(auto_map, dict) and "AutoTokenizer" in auto_map
 
 
+def ships_a_template(directory: Path) -> bool:
+    """Whether the checkpoint ships a chat template anywhere the reference oracle reads one: the ``chat_template`` of
+    ``tokenizer_config.json``, ``processor_config.json`` or ``chat_template.json``, a ``chat_template.jinja``, or a
+    named template. Read as JSON and by name; nothing in the repository is run."""
+    for name in ("tokenizer_config.json", "processor_config.json", "chat_template.json"):
+        path = directory / name
+        if not path.is_file():
+            continue
+        try:
+            loaded = json.loads(path.read_bytes())
+        except ValueError:
+            continue
+        if isinstance(loaded, dict) and loaded.get("chat_template") is not None:
+            return True
+    if (directory / "chat_template.jinja").is_file():
+        return True
+    named = directory / NAMED_TEMPLATES
+    return named.is_dir() and any(path.suffix == ".jinja" for path in named.iterdir() if path.is_file())
+
+
+def encoder_architecture(directory: Path) -> bool:
+    """Whether ``config.json`` names an architecture the engine's server renders with the checkpoint's prompt encoder
+    (``ENCODER_MODES``). Read as JSON; nothing in the repository is run."""
+    path = directory / "config.json"
+    if not path.is_file():
+        return False
+    try:
+        config = json.loads(path.read_bytes())
+    except ValueError:
+        return False
+    architectures = config.get("architectures") if isinstance(config, dict) else None
+    return isinstance(architectures, list) and any(name in ENCODER_MODES for name in architectures)
+
+
+def vendor_encoder(directory: Path) -> str | None:
+    """The checkpoint's prompt encoder, keyed by its path (``encoding/encoding_dsv32.py``): the one module matching
+    ``ENCODER_PATTERN`` whose text defines ``encode_messages``, for a checkpoint that ships no chat template or whose
+    architecture the engine renders with the encoder whatever it ships (``encoder_architecture``). None for any other
+    checkpoint with a template, whose template stays its reference, and for one with no such module or more than one.
+    Read as text; nothing in the repository is run."""
+    encoders = directory / ENCODER_DIR
+    if not encoders.is_dir() or (ships_a_template(directory) and not encoder_architecture(directory)):
+        return None
+    found = sorted(
+        path.name
+        for path in encoders.glob("encoding*.py")
+        if path.is_file() and ENCODER_ENTRY in path.read_text(encoding="utf-8", errors="replace")
+    )
+    return f"{ENCODER_DIR}/{found[0]}" if len(found) == 1 else None
+
+
 def checkpoint_dir(model: str, revision: str) -> Path:
     """The directory holding the checkpoint's oracle inputs at ``revision``: the model itself when it is a directory,
     else its snapshot in the Hugging Face cache."""
@@ -119,6 +191,11 @@ def checkpoint_dir(model: str, revision: str) -> Path:
         found = snapshot_download(model, revision=revision, allow_patterns=list(PATTERNS), local_files_only=offline)
         if vendor_tokenizer(Path(found)):
             patterns = [*PATTERNS, *VENDOR_PATTERNS]
+            found = snapshot_download(model, revision=revision, allow_patterns=patterns, local_files_only=offline)
+        elif not ships_a_template(Path(found)) or encoder_architecture(Path(found)):
+            # A checkpoint without a template, or of an architecture the engine renders with an encoder, may ship a
+            # prompt encoder: its module is fetched when there is one, and nothing else of its directory.
+            patterns = [*PATTERNS, ENCODER_PATTERN]
             found = snapshot_download(model, revision=revision, allow_patterns=patterns, local_files_only=offline)
         if offline:
             get_cached_repo_tree(model, revision=revision)
