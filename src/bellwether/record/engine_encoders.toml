@@ -1,0 +1,27 @@
+# The engine's copies of the prompt encoders: the modules vLLM renders the DeepSeek encoder families with. The engine's
+# server never reads the module a checkpoint ships under `encoding/`: it picks a tokenizer mode by architecture
+# (`bellwether.inputs.ENCODER_MODES`) and the mode imports the engine's own copy. So the reference for such a checkpoint
+# is the engine's copy: `bellwether sandbox-record` fetches the mode's file from the repository at the commit below,
+# checks the sha256 of its bytes and stages it into the run image, where `record.vendor.prompt_encoder` loads it in
+# place of the checkpoint's module (docs/benchmark-sets.md, "Running vendor code"). Each sha256 was checked against
+# GitHub's blob id when the file was read. Re-read at each new engine pin; the diff of this file is the review.
+
+schema_version = 1
+
+[vllm]
+repo = "vllm-project/vllm"
+ref = "v0.31.0"
+commit = "db9527a46873454610df6dbedf79a36d6bf1a7f6"
+
+# One table per tokenizer mode: the engine's copy at the commit (its path there, the sha256 of its bytes).
+[encoders.deepseek_v32]
+path = "vllm/tokenizers/deepseek_v32_encoding.py"
+sha256 = "1bade67606d54952ae652a4f71f44065041ef0842ad1b5420ed82f8159502bc8"
+
+[encoders.deepseek_v4]
+path = "vllm/tokenizers/deepseek_v4_encoding.py"
+sha256 = "aa407637bd2e58f20a16f781ea0bc519d06f74bed49deadaecb5aa5756d7230e"
+
+[encoders.deepseek_v41]
+path = "vllm/tokenizers/deepseek_v41_encoding.py"
+sha256 = "477f22ac250b43c12bd19bb3c93f934d6637b06410b8cb7ccba0862d1049dee8"

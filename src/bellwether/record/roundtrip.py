@@ -755,9 +755,15 @@ def with_arguments_as_parsers_return_them(message: dict) -> dict:
 
 def as_the_encoder_takes_it(message: dict) -> dict:
     """A copy of an assistant message as a prompt encoder takes it: the calls checked as ``as_vllm_gives_it`` checks
-    them (objects of type ``function``), an empty ``tool_calls`` dropped, and each call's arguments left the string the
-    corpus gives (``check_parse_call_arguments``), which the vendor's module decodes itself."""
+    them (objects of type ``function``), an empty ``tool_calls`` dropped, each call's arguments left the string the
+    corpus gives (``check_parse_call_arguments``), which the vendor's module decodes itself, and the message's
+    ``reasoning_content`` handed as ``reasoning`` too: the engine's conversation carries an assistant's reasoning under
+    both keys and the engine's copies of the encoders read ``reasoning`` (``vendor.as_the_renderer_hands_them``)."""
     checked = as_vllm_gives_it(message)
+    if checked is message:  # no calls to check: the request's own object is never written to
+        checked = dict(message)
+    if checked.get("reasoning_content") is not None and checked.get("reasoning") is None:
+        checked["reasoning"] = checked["reasoning_content"]
     if "tool_calls" not in checked:
         return checked
     for call, given in zip(checked["tool_calls"], message["tool_calls"], strict=True):

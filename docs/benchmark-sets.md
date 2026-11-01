@@ -216,7 +216,13 @@ needs a model (the maintainer, 2026-10-06, #23):
     instead: an encoder in place of a chat template (DeepSeek V3.2 and V4, Mistral's
     `mistral-common` checkpoints) or a custom tokenizer class (Kimi-K3). That is the vendor-code
     oracle, run as "Running vendor code" says; it is the first authority in the manifest's order,
-    and for these models it is the Hugging Face side.
+    and for these models it is the Hugging Face side. A prompt encoder renders in the copy the
+    engine's server renders it with (vLLM's `vllm/tokenizers/<mode>_encoding.py` at the pinned
+    release, `src/bellwether/record/engine_encoders.toml`), never in the checkpoint's own copy,
+    which the server never reads, and it renders every checkpoint of an architecture the engine
+    picks the mode for, a template beside the module or a template alone (DeepSeek-V3.2-Exp ships
+    no module); the provenance names the copy (`encoder_module`, `encoder_sha256`,
+    `encoder_source`).
 - **vLLM:** `vllm launch render <model>`, the GPU-less render server, in vLLM's official image
   pinned by tag and digest: `vllm/vllm-openai:v0.31.0` (db9527a4), index digest
   `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
@@ -570,9 +576,14 @@ inside a sandbox: `bellwether sandbox-record` (`src/bellwether/sandbox.py`).
    inputs include every Python file at the repository's root and its vocabulary files (`.model`,
    `.tiktoken`, `.vocab`, `.bpe`). Each file must have the sha256 the manifest lists, and no input
    the manifest does not list may appear, or nothing runs.
-2. **A context of only those files.** The run image's build context holds the listed files in the
-   cache's layout, the corpus of the one kind recorded, and the group's fixtures. Nothing else is
-   in it.
+2. **A context of only those files, and the engine's copy of the encoder.** The run image's build
+   context holds the listed files in the cache's layout, the corpus of the one kind recorded, and
+   the group's fixtures. For a checkpoint of an architecture the engine renders with a prompt
+   encoder (`bellwether.inputs.ENCODER_MODES`), a module of its own shipped or not, it also holds the engine's
+   copy of that encoder, fetched from the engine's repository at the commit
+   `src/bellwether/record/engine_encoders.toml` pins and checked against the sha256 pinned there,
+   read-only under `/engine`: the oracle renders with it, never with the checkpoint's module.
+   Nothing else is in it.
 3. **Two images.** The base image (`docker/vendor/Dockerfile`) is `python:3.12-slim`, pinned by
    digest, with bellwether itself and the packages `uv.lock` pins for it and its `vendor` extra
    (`tiktoken`), installed by hash. The run image adds the context, and is removed after the run.
@@ -586,7 +597,8 @@ inside a sandbox: `bellwether sandbox-record` (`src/bellwether/sandbox.py`).
    brings back those sets alone, their files and tables, so runs at once keep each other's sets. The
    container, the volume and the run image are removed whatever the outcome.
 
-At benchmark scale the `sandbox-record` workflow records these groups, on the `bellwether-sandbox`
+At benchmark scale the `sandbox-record` workflow records these groups (the plan takes a group whose
+oracle inputs hold a `.py` file or whose manifest names an `encoder`), on the `bellwether-sandbox`
 runners, which run Docker in a sidecar. It cuts each source into calls as the `record` workflow does
 (`scripts/record_sources.py --sandbox`): each call is one `sandbox-record` run of a few sets, under a
 memory limit large enough for tau2's sets, and the group's new sets go to `record/<slug>/<run id>`.

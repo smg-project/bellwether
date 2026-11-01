@@ -1,9 +1,9 @@
 [parse.common]
 form = "plain"
-cases = 3
-rejected = 13
-plain_bytes = 6039
-plain_sha256 = "5b7ae4ee3e6f9344f671e83545a32f86e52a76459c1fa097cdb6fa36ead81d49"
+cases = 11
+rejected = 5
+plain_bytes = 56567
+plain_sha256 = "cbed25050e9bd4063b591b390335ab729e8cf13c45addb00f8b8ce9b92167e1a"
 generate_stop_ids = [1]
 generate_stop_ids_from = "generation_config.json"
 
@@ -988,6 +988,15 @@ plain_sha256 = "a2d886bb3748f9409356d22518fbd81cde2be4a8937efb9c2f78598cf94c2dbb
 generate_stop_ids = [1]
 generate_stop_ids_from = "generation_config.json"
 
+[parse.turns]
+form = "plain"
+cases = 8
+rejected = 4
+plain_bytes = 39320
+plain_sha256 = "0b4da6d96ec987efe19629c75657b1b77be998b73ba4fc9fccb9aa78b4d7d87f"
+generate_stop_ids = [1]
+generate_stop_ids_from = "generation_config.json"
+
 [render.bfcl-irrelevance]
 form = "zstd"
 cases = 240
@@ -1109,10 +1118,10 @@ plain_sha256 = "2cf38e743055f9749aa315f04952fe69855af02b052ed891cf66277f0d347fbe
 
 [render.common]
 form = "plain"
-cases = 19
-rejected = 5
-plain_bytes = 24140
-plain_sha256 = "b27c811d14d1ec89eb455ed95389a647f7525ee9cf4b7eedd7027ddb0220c93b"
+cases = 24
+rejected = 0
+plain_bytes = 66946
+plain_sha256 = "9e1a315b05275dc75cb7b5379210a546acdcfe628537bb13b0cac4a4e79d9333"
 
 [render.glaive-v2-00]
 form = "zstd"

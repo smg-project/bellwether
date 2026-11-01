@@ -4,8 +4,10 @@ or the slugs named, each as its slug, model and revision.
     python3 scripts/record_plan.py [--sandbox] [<slug> ...] >> "$GITHUB_OUTPUT"
 
 A member's manifest (one with ``group``) is not a job: the recorder records a group once, with its primary, and
-refuses the member. A group whose oracle inputs hold the vendor's code (a ``.py`` file, Kimi-K3's) is left out and
-named on stderr: it is recorded in the sandbox (``bellwether sandbox-record``), not on a runner. With ``--sandbox``
+refuses the member. A group whose oracle inputs hold the vendor's code (a ``.py`` file, Kimi-K3's), or whose manifest
+names an ``encoder`` (the engine's tokenizer mode that renders the architecture with the engine's copy of a prompt
+encoder, DeepSeek V3.2's and V4's), is left out and named on stderr: it is recorded in the sandbox (``bellwether
+sandbox-record``), not on a runner. With ``--sandbox``
 the matrix is those groups instead, for the ``sandbox-record`` workflow, and a slug named that is not one stops the
 run. A slug with no manifest, or a member's, stops the run. The script imports nothing beyond the standard library,
 so it runs before the project's environment exists.
@@ -35,7 +37,8 @@ def groups(root: Path, wanted: list[str]) -> tuple[list[dict], list[dict]]:
             members[slug] = data["group"]
             continue
         group = {"slug": slug, "model": data["model"], "revision": data["revision"]}
-        (vendor if any(name.endswith(".py") for name in data.get("inputs", {})) else found).append(group)
+        sandboxed = any(name.endswith(".py") for name in data.get("inputs", {})) or "encoder" in data
+        (vendor if sandboxed else found).append(group)
     if wanted and members:
         named = (f"{slug} is recorded with its group's primary, {primary}" for slug, primary in members.items())
         raise SystemExit("; ".join(named))
@@ -51,12 +54,13 @@ def main() -> int:
     found, vendor = groups(ROOT, wanted)
     if sandbox:
         if wanted and found:
-            named = (f"{group['slug']}: no vendor code among its oracle inputs" for group in found)
+            named = (f"{group['slug']}: no vendor code among its oracle inputs and no encoder" for group in found)
             raise SystemExit(f"{'; '.join(named)}; record it with the record workflow")
         found = vendor
     for group in [] if sandbox else vendor:
         print(
-            f"{group['slug']}: the vendor's code is among its oracle inputs; use `bellwether sandbox-record`",
+            f"{group['slug']}: the vendor's code is among its oracle inputs, or the engine's encoder renders it; "
+            "use `bellwether sandbox-record`",
             file=sys.stderr,
         )
     print(f"groups={json.dumps(found, separators=(',', ':'))}")

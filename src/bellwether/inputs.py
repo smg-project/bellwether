@@ -22,8 +22,13 @@ recorded once (docs/benchmark-sets.md, "Which models"). The inputs are:
   them, and the vendor-code oracle runs it in a sandbox that holds only files the manifest lists;
 - for a checkpoint that ships no chat template but a prompt encoder, the vendor's module under ``encoding/`` whose
   ``encode_messages`` renders the chat format (DeepSeek V3.2 and V4; ``ENCODER_PATTERN``): the engine's server renders
-  such a checkpoint with its own copy of that module, never with a template, and the vendor-code oracle runs the
-  checkpoint's own in the sandbox, as the engine's tokenizer mode for the architecture calls it.
+  such a checkpoint with its own copy of that module, never with a template and never with the checkpoint's, and the
+  vendor-code oracle runs the engine's copy in the sandbox, as the engine's tokenizer mode for the architecture calls
+  it (``record/engine_encoders.toml`` pins the copy); the checkpoint's module stays an input because a revision that
+  changes it is one to read again against the engine's copy. The engine picks the mode by architecture alone
+  (``ENCODER_MODES``), so a checkpoint of such an architecture renders through the engine's copy whatever it ships: a
+  template beside the module (DeepSeek-V4.1-Flash) or a template and no module at all (DeepSeek-V3.2-Exp);
+  ``encoder_mode`` names the mode, and the vendor-code oracle and ``sandbox-record`` read it.
 
 A whole file is hashed as its bytes. A narrowed file is hashed over the canonical JSON of only its fields,
 ``json.dumps(..., sort_keys=True)`` with a field the file lacks written as null, so anyone can recompute it; for a
@@ -144,18 +149,27 @@ def ships_a_template(directory: Path) -> bool:
     return named.is_dir() and any(path.suffix == ".jinja" for path in named.iterdir() if path.is_file())
 
 
-def encoder_architecture(directory: Path) -> bool:
-    """Whether ``config.json`` names an architecture the engine's server renders with the checkpoint's prompt encoder
-    (``ENCODER_MODES``). Read as JSON; nothing in the repository is run."""
+def encoder_mode(directory: Path) -> str | None:
+    """The engine's tokenizer mode for the checkpoint's architecture when the engine's server renders it with its copy
+    of a prompt encoder (``ENCODER_MODES``, over ``config.json``'s ``architectures``); None for every other checkpoint.
+    Read as JSON; nothing in the repository is run."""
     path = directory / "config.json"
     if not path.is_file():
-        return False
+        return None
     try:
         config = json.loads(path.read_bytes())
     except ValueError:
-        return False
+        return None
     architectures = config.get("architectures") if isinstance(config, dict) else None
-    return isinstance(architectures, list) and any(name in ENCODER_MODES for name in architectures)
+    if not isinstance(architectures, list):
+        return None
+    return next((ENCODER_MODES[name] for name in architectures if name in ENCODER_MODES), None)
+
+
+def encoder_architecture(directory: Path) -> bool:
+    """Whether ``config.json`` names an architecture the engine's server renders with its copy of a prompt encoder
+    (``encoder_mode``)."""
+    return encoder_mode(directory) is not None
 
 
 def vendor_encoder(directory: Path) -> str | None:

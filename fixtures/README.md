@@ -79,7 +79,10 @@ and `tokenizer_class`. A checkpoint that ships no `generation_config.json` has t
 `config.json`, as `GenerationConfig.from_model_config` reads them (`text_config` included, with the defaults of the
 class transformers has for its `model_type`), so there `config.json` is hashed over those three ids as well. Every other
 member's manifest adds `group = "<primary's slug>"` and has no `[smg]` or `[engines]`, since its fixtures are its
-group's. The parser tables of a new group are left out until someone maps them. A manifest that `bellwether manifests`
+group's. A checkpoint of an architecture the engine's server renders with its own copy of a prompt encoder (DeepSeek
+V3.2's and V4's, `bellwether.inputs.ENCODER_MODES`) adds `encoder = "<the engine's tokenizer mode>"`, a module of its
+own shipped or not: its group is recorded in the sandbox (`bellwether sandbox-record`), where the recording plan sends it
+by this line. The parser tables of a new group are left out until someone maps them. A manifest that `bellwether manifests`
 creates has no `[authority]`: the order above predates the two sources of truth (`docs/benchmark-sets.md`, "Recording"),
 and restating it for each checkpoint is the sponsor's call.
 

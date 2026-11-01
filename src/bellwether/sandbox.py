@@ -6,10 +6,15 @@ container that holds bellwether, the checkpoint's files and the corpus, and noth
 
 1. **Download, then check.** On the host, the checkpoint's files are read into the Hugging Face cache at the manifest's
    revision, with the token if there is one (``inputs.checkpoint_dir``). Every one of them, every Python file
-   included, must have the sha256 the manifest lists, or nothing runs.
-2. **A context of only those files.** A build context is staged with exactly the files the manifest lists, in the
-   cache's layout with the commit's file list and the cache's marks for files the repository does not have, the corpus
-   of the one kind recorded, and the group's fixtures.
+   included, must have the sha256 the manifest lists, and the manifest's ``encoder`` line must name the tokenizer
+   mode the checkpoint's architecture takes in the engine, or nothing runs.
+2. **A context of only those files, and the engine's copy of the encoder.** A build context is staged with exactly the
+   files the manifest lists, in the cache's layout with the commit's file list and the cache's marks for files the
+   repository does not have, the corpus of the one kind recorded, and the group's fixtures. For a checkpoint of an
+   architecture the engine renders with a prompt encoder (``inputs.encoder_mode``), a module of its own shipped or
+   not, the engine's copy of that encoder (``record/engine_encoders.toml``) is fetched from the engine's repository
+   at the pinned commit, checked against its sha256 (``importers.github.fetch``) and staged under ``/engine``: it is
+   what the oracle renders with (``record.vendor.prompt_encoder``), the checkpoint's module never.
 3. **Two images.** The base image (``docker/vendor/Dockerfile``) is a pinned Python image with the packages
    ``uv.lock`` pins for bellwether and its ``vendor`` extra, installed by hash, and bellwether itself. A run image
    adds the context; it is removed after the run.
@@ -33,7 +38,8 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from bellwether.inputs import checkpoint_dir, oracle_inputs
+from bellwether.importers.github import fetch as fetch_pinned
+from bellwether.inputs import checkpoint_dir, encoder_mode, oracle_inputs, vendor_encoder
 from bellwether.manifest import Manifest, find_manifest
 from bellwether.record import sets as set_tables
 from bellwether.record import vendor
@@ -43,6 +49,7 @@ ROOT = Path(__file__).resolve().parents[2]  # the bellwether checkout: pyproject
 DOCKERFILE = ROOT / "docker" / "vendor" / "Dockerfile"
 BASE_TAG = "bellwether-vendor-base"
 USER = "10001:10001"
+ENGINE_DIR = "/engine"  # where the run image holds the engine's copy of a prompt encoder (``vendor.ENGINE_DIR_ENV``)
 LIMITS = ("--cpus", "2", "--pids-limit", "512")
 MEMORY = "6g"  # a run's memory limit unless one is given: a benchmark-scale call of tau2's sets holds more
 SECONDS = 4 * 3600  # the longest a group's recording may take
@@ -76,9 +83,45 @@ def checked_snapshot(manifest: Manifest) -> Path:
     return snapshot
 
 
-def stage(manifest: Manifest, snapshot: Path, kind: str, fixtures: Path, corpus: Path, context: Path) -> None:
+def engine_copy(manifest: Manifest, snapshot: Path) -> tuple[str, Path] | None:
+    """The engine's copy of the prompt encoder for a checkpoint the engine's server renders with one: the copy's path
+    at the engine's pinned commit and the cached file, fetched from the engine's repository and checked against the
+    pinned sha256 (``vendor.engine_encoder`` for the tokenizer mode of the checkpoint's architecture,
+    ``inputs.encoder_mode``; ``importers.github.fetch``), a module of the checkpoint's own shipped or not. None for a
+    checkpoint of another architecture that ships no prompt encoder; one that ships a module for such an architecture
+    is refused here, before any image is built, since no tokenizer mode of the engine's tells how it is called. So is
+    a manifest whose ``encoder`` line is not the mode the architecture takes: the recording plan routes by that line
+    (``bellwether manifests`` writes it)."""
+    renderer = encoder_mode(snapshot)
+    if manifest.encoder != renderer:
+        raise Refused(
+            f"{manifest.path} names {manifest.encoder!r} as the engine's encoder mode where the checkpoint's "
+            f"architecture takes {renderer!r}; `bellwether manifests` writes the line"
+        )
+    if renderer is None:
+        if vendor_encoder(snapshot) is None:
+            return None
+        raise Refused(
+            f"{manifest.model} ships a prompt encoder for an architecture the engine's server renders with no "
+            "tokenizer mode of its own; the vendor-code oracle cannot tell how the encoder is called"
+        )
+    pinned = vendor.engine_encoder(renderer)
+    owner, repo = pinned.repo.split("/", 1)
+    return pinned.path, fetch_pinned(owner, repo, pinned.commit, pinned.path, pinned.sha256)
+
+
+def stage(
+    manifest: Manifest,
+    snapshot: Path,
+    kind: str,
+    fixtures: Path,
+    corpus: Path,
+    context: Path,
+    engine: tuple[str, Path] | None = None,
+) -> None:
     """Write the run image's build context: the listed files in the Hugging Face cache's layout, the commit's file
-    list, the corpus of ``kind`` and the group's fixtures."""
+    list, the corpus of ``kind``, the group's fixtures and, when the checkpoint ships a prompt encoder, the engine's
+    copy of it (``engine``: its path at the engine's commit and the checked file), read-only under ``ENGINE_DIR``."""
     repo = context / "hf" / "hub" / ("models--" + manifest.model.replace("/", "--"))
     target = repo / "snapshots" / manifest.revision
     target.mkdir(parents=True)
@@ -95,9 +138,15 @@ def stage(manifest: Manifest, snapshot: Path, kind: str, fixtures: Path, corpus:
         shutil.copytree(absent, repo / ".no_exist" / manifest.revision)
     shutil.copytree(corpus / kind, context / "work" / "corpus" / kind)
     shutil.copytree(fixtures / manifest.slug, context / "work" / "fixtures" / manifest.slug)
-    (context / "Dockerfile").write_text(
+    dockerfile = (
         f"FROM {BASE_TAG}\nCOPY --chown=root:root hf /hf\nCOPY --chown={USER} work /work\nRUN chmod -R a-w /hf\n"
     )
+    if engine is not None:
+        path, checked = engine
+        (context / "engine" / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(checked, context / "engine" / path)
+        dockerfile += f"COPY --chown=root:root engine {ENGINE_DIR}\nRUN chmod -R a-w {ENGINE_DIR}\n"
+    (context / "Dockerfile").write_text(dockerfile)
 
 
 def run_args(
@@ -120,6 +169,7 @@ def run_args(
         "--tmpfs", "/tmp:rw,size=2g,mode=1777", "--mount", f"type=volume,src={volume},dst=/work",
         "--user", USER, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", *LIMITS, "--memory", memory,
         "--env", f"{vendor.SANDBOX_ENV}=1", "--env", f"{vendor.IMAGE_ENV}={base_digest}",
+        "--env", f"{vendor.ENGINE_DIR_ENV}={ENGINE_DIR}",
         "--env", "HF_HOME=/hf", "--env", "HF_HUB_OFFLINE=1", "--env", "HF_MODULES_CACHE=/tmp/hf_modules",
         "--env", "HOME=/tmp", image, "timeout", str(SECONDS), *record,
     ]  # fmt: skip
@@ -188,6 +238,7 @@ def run(args: argparse.Namespace) -> int:
         if manifest.group is not None:
             raise Refused(f"{manifest.model} is a member of checkpoint group {manifest.group}; record its primary")
         snapshot = checked_snapshot(manifest)
+        engine = engine_copy(manifest, snapshot)
     except (OSError, ValueError) as err:
         print(f"bellwether sandbox-record: {err}", file=sys.stderr)
         return 1
@@ -197,7 +248,7 @@ def run(args: argparse.Namespace) -> int:
     name, volume = tag, f"{tag}-work"
     try:
         with tempfile.TemporaryDirectory(prefix="bellwether-run-") as tmp:
-            stage(manifest, snapshot, args.kind, args.fixtures, args.corpus, Path(tmp))
+            stage(manifest, snapshot, args.kind, args.fixtures, args.corpus, Path(tmp), engine)
             docker("build", "--quiet", "--tag", tag, tmp, quiet=True)
         memory = getattr(args, "memory", None) or MEMORY
         status = subprocess.run(run_args(name, volume, tag, base, manifest, args.kind, sets, memory)).returncode

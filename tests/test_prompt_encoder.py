@@ -1,8 +1,10 @@
-"""The vendor-code oracle over a checkpoint that ships a prompt encoder in place of a chat template."""
+"""The vendor-code oracle over a checkpoint that ships a prompt encoder in place of a chat template: the engine's copy
+of the encoder renders, called as the engine's tokenizer mode calls it; the checkpoint's own module is never run."""
 
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 
 import pytest
@@ -52,6 +54,13 @@ def encode_messages(messages, thinking_mode, context=None, drop_thinking=True, r
     return text
 """
 
+# The engine's copy of the toy: the same format, read from the engine's key for an assistant's reasoning (``reasoning``,
+# as vLLM's copies of the DeepSeek encoders read it) and marking its own import apart from the checkpoint's module.
+ENGINE_ENCODER = ENCODER.replace('with_name("imported")', 'with_name("engine-imported")').replace(
+    'message.get("reasoning_content")', 'message.get("reasoning")'
+)
+ENGINE_PATH = "vllm/tokenizers/deepseek_toy_encoding.py"
+
 V32, V4, V41 = "DeepseekV32ForCausalLM", "DeepseekV4ForCausalLM", "DeepseekV41ForCausalLM"
 HI = {"messages": [{"role": "user", "content": "Hi"}]}
 THINKING = "<|im_start|>effort={}\nuser:Hi<|im_end|>\nassistant:<think>"
@@ -63,7 +72,8 @@ TOOL = {"type": "function", "function": {"name": "get_weather", "parameters": {"
 @pytest.fixture
 def encoder_checkpoint(tmp_path, tiny_model, monkeypatch) -> pathlib.Path:
     """A checkpoint that ships no chat template and a prompt encoder under ``encoding/``, of an architecture the
-    engine's server renders with its ``deepseek_v32`` tokenizer mode; the sandbox mark set."""
+    engine's server renders with its ``deepseek_v32`` tokenizer mode; the sandbox mark set, and the engine's copy of
+    the encoder staged as ``bellwether sandbox-record`` stages it, pinned by its sha256 for every mode."""
     directory = tmp_path / "encoder-chat"
     shutil.copytree(tiny_model, directory)
     config = json.loads((directory / "tokenizer_config.json").read_text())
@@ -76,7 +86,19 @@ def encoder_checkpoint(tmp_path, tiny_model, monkeypatch) -> pathlib.Path:
     (directory / "encoding" / "test_encoding_toy.py").write_text("raise SystemExit('never run')\n")
     (directory / "encoding" / "README.md").write_text("How to call the encoder.\n")
     monkeypatch.setenv(vendor.SANDBOX_ENV, "1")
+    engine = tmp_path / "engine" / ENGINE_PATH
+    engine.parent.mkdir(parents=True)
+    engine.write_text(ENGINE_ENCODER)
+    monkeypatch.setenv(vendor.ENGINE_DIR_ENV, str(tmp_path / "engine"))
+    pin = vendor.EngineEncoder(
+        "vllm-project/vllm", "v0.31.0", "a" * 40, ENGINE_PATH, hashlib.sha256(engine.read_bytes()).hexdigest()
+    )
+    monkeypatch.setattr(vendor, "engine_encoder", lambda renderer, pins=None: pin)
     return directory
+
+
+def engine_copy_of(checkpoint: pathlib.Path) -> pathlib.Path:
+    return checkpoint.parent / "engine" / ENGINE_PATH
 
 
 def with_architecture(checkpoint: pathlib.Path, architecture: str) -> None:
@@ -133,10 +155,73 @@ def test_in_the_sandbox_the_encoder_renders_as_the_engines_deepseek_v32_mode_cal
     assert rendered.content_format == "string" and rendered.developer_role == "as-written"
     provenance = oracle.provenance()
     assert provenance["oracle"] == vendor.SOURCE and provenance["engine_renderer"] == "deepseek_v32"
-    assert provenance["encoder_module"] == "encoding/encoding_toy.py"
-    module = encoder_checkpoint / "encoding" / "encoding_toy.py"
-    assert provenance["encoder_sha256"] == hashlib.sha256(module.read_bytes()).hexdigest()
+    # The engine's copy rendered, and the provenance names it; the checkpoint's own module was never run.
+    assert provenance["encoder_module"] == ENGINE_PATH
+    assert provenance["encoder_sha256"] == hashlib.sha256(engine_copy_of(encoder_checkpoint).read_bytes()).hexdigest()
+    assert provenance["encoder_source"] == "vllm-project/vllm@v0.31.0"
     assert "chat_template_sha256" not in provenance
+    assert engine_copy_of(encoder_checkpoint).with_name("engine-imported").exists()
+    assert not (encoder_checkpoint / "encoding" / "imported").exists(), "the checkpoint's own module was run"
+
+
+def test_in_the_sandbox_the_encoder_renders_a_checkpoint_of_the_architecture_that_ships_a_template_and_no_module(
+    encoder_checkpoint, tiny_model
+):
+    """DeepSeek-V3.2-Exp ships a chat template and no ``encoding/`` module; the engine picks its tokenizer mode by the
+    architecture alone and renders it with its copy of the V3.2 encoder, so the oracle does too."""
+    shutil.copyfile(tiny_model / "tokenizer_config.json", encoder_checkpoint / "tokenizer_config.json")
+    shutil.rmtree(encoder_checkpoint / "encoding")
+    assert ships_a_template(encoder_checkpoint) and vendor_encoder(encoder_checkpoint) is None
+    assert not any(name.endswith(".py") for name in oracle_inputs(str(encoder_checkpoint), "local"))
+    oracle = HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    rendered = oracle.render(REQUEST)
+    assert rendered.text == "<|im_start|>user:What is the capital of France?<|im_end|>\nassistant:"
+    assert rendered.input_ids == oracle.tokenizer.encode(rendered.text, add_special_tokens=False)
+    assert rendered.template_source == "encoder"
+    provenance = oracle.provenance()
+    assert provenance["engine_renderer"] == "deepseek_v32" and provenance["encoder_module"] == ENGINE_PATH
+    assert "chat_template_sha256" not in provenance
+    assert engine_copy_of(encoder_checkpoint).with_name("engine-imported").exists()
+    with pytest.raises(ValueError, match="renders through its copy of a prompt encoder"):
+        HfTemplateOracle(str(encoder_checkpoint), "local")  # outside the sandbox the template is not the reference
+
+
+def test_the_pin_file_names_the_engines_copy_for_every_mode_the_oracle_has_a_rule_for():
+    for renderer in vendor.ENCODER_RULES:
+        pin = vendor.engine_encoder(renderer)
+        assert pin.repo == "vllm-project/vllm" and re.fullmatch(r"[0-9a-f]{40}", pin.commit)
+        assert pin.path.startswith("vllm/tokenizers/") and pin.path.endswith("_encoding.py")
+        assert re.fullmatch(r"[0-9a-f]{64}", pin.sha256) and pin.source == f"vllm-project/vllm@{pin.ref}"
+    with pytest.raises(ValueError, match="pins no copy of the engine's encoder for the 'kimi_k3' tokenizer mode"):
+        vendor.engine_encoder("kimi_k3")
+
+
+def test_an_engine_copy_whose_bytes_differ_from_the_pin_is_refused_before_it_is_imported(encoder_checkpoint):
+    engine = engine_copy_of(encoder_checkpoint)
+    engine.write_text(ENGINE_ENCODER + "\nimport os; os.system('curl attacker')\n")
+    with pytest.raises(ValueError, match="is not the pinned"):
+        HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    assert not engine.with_name("engine-imported").exists()
+    assert not (encoder_checkpoint / "encoding" / "imported").exists()
+
+
+def test_without_the_engines_copy_the_encoder_is_refused_and_sandbox_record_is_named(encoder_checkpoint, monkeypatch):
+    monkeypatch.delenv(vendor.ENGINE_DIR_ENV)
+    with pytest.raises(ValueError, match="the sandbox holds no copy of it: `bellwether sandbox-record` stages it"):
+        HfTemplateOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    assert not (encoder_checkpoint / "encoding" / "imported").exists()
+
+
+def test_the_modes_get_an_assistants_reasoning_as_the_engines_parse_hands_it():
+    """vLLM's parse reads an assistant's ``reasoning`` and writes it under both keys; a request's ``reasoning_content``
+    is not read (``chat_utils.py:2016-2045``); the engine's copies of the encoders read ``reasoning``."""
+    sent = {"role": "assistant", "content": "No.", "reasoning": "7 times 13."}
+    assert vendor.as_the_renderer_hands_them([sent], "string") == [
+        {"role": "assistant", "content": "No.", "reasoning": "7 times 13.", "reasoning_content": "7 times 13."}
+    ]
+    deprecated = {"role": "assistant", "content": "No.", "reasoning_content": "7 times 13."}
+    assert vendor.as_the_renderer_hands_them([deprecated], "openai") == [{"role": "assistant", "content": "No."}]
+    assert deprecated == {"role": "assistant", "content": "No.", "reasoning_content": "7 times 13."}, "written to"
 
 
 @pytest.mark.parametrize(
@@ -270,10 +355,10 @@ def test_outside_the_sandbox_the_encoder_is_refused_before_its_module_is_read(en
 
 
 def test_without_the_vendor_flag_a_checkpoint_with_an_encoder_is_refused(encoder_checkpoint, tiny_model):
-    with pytest.raises(ValueError, match="ships a prompt encoder the engine's server renders with"):
+    with pytest.raises(ValueError, match="renders through its copy of a prompt encoder"):
         HfTemplateOracle(str(encoder_checkpoint), "local")
     shutil.copyfile(tiny_model / "tokenizer_config.json", encoder_checkpoint / "tokenizer_config.json")
-    with pytest.raises(ValueError, match="ships a prompt encoder the engine's server renders with"):
+    with pytest.raises(ValueError, match="renders through its copy of a prompt encoder"):
         HfTemplateOracle(str(encoder_checkpoint), "local")  # a template it ships too is not the reference
     assert not (encoder_checkpoint / "encoding" / "imported").exists()
 
@@ -340,6 +425,29 @@ def test_the_round_trip_keeps_the_requests_last_role_for_the_appended_turn(encod
     request = {"messages": history, "chat_template_kwargs": {"thinking": True}}
     output = oracle.render_output(request, {"role": "assistant", "reasoning_content": "Prime.", "content": "Yes."})
     assert output.text == "Prime.</think>Yes." and output.end_of_turn["stop_id"] == 2
+
+
+def test_the_round_trip_hands_the_turns_reasoning_under_the_engines_key(encoder_checkpoint):
+    """The corpus states a message's reasoning as ``reasoning_content``; the engine's copy of the encoder reads
+    ``reasoning``, so the appended turn carries both (``as_the_encoder_takes_it``) and the output keeps its thought.
+    A history message's ``reasoning_content`` after the last user turn is not read, as the engine's parse does not
+    read it; one sent as ``reasoning`` is."""
+    with_architecture(encoder_checkpoint, V4)
+    oracle = RoundtripOracle(str(encoder_checkpoint), "local", vendor_code=True)
+    message = {"role": "assistant", "reasoning_content": "No divisor up to 9.", "content": "Yes."}
+    assert oracle.render_output(REQUEST, message).text == "No divisor up to 9.</think>Yes."
+    assert message == {"role": "assistant", "reasoning_content": "No divisor up to 9.", "content": "Yes."}
+    call = {"id": "c1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Rome"}'}}
+    history = [
+        {"role": "user", "content": "Weather in Paris and Rome?"},
+        {"role": "assistant", "reasoning_content": "Paris first.", "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": "c1", "content": "18"},
+    ]
+    kwargs = {"tools": [TOOL]}
+    not_read = oracle.chat(history, kwargs, generation_prompt=True)
+    assert "Paris first." not in not_read and "<think></think><call" in not_read
+    history[1] = {**history[1], "reasoning": "Paris first."}
+    assert "<think>Paris first.</think><call" in oracle.chat(history, kwargs, generation_prompt=True)
 
 
 def test_a_reasoning_carrying_case_under_a_chat_mode_request_is_refused_through_the_encoder(encoder_checkpoint):

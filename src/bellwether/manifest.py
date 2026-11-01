@@ -11,6 +11,13 @@ to the checkpoint, not the group, since a group's members can sit in different t
 all three. A manifest from before groups has none of them and still loads, so that the command can add them;
 ``record`` refuses it until it lists its inputs.
 
+``encoder`` names the engine's tokenizer mode for a checkpoint of an architecture the engine's server renders with its
+own copy of a prompt encoder (``bellwether.inputs.ENCODER_MODES``: DeepSeek V3.2's ``deepseek_v32``, V4's, V4.1's),
+whether or not the checkpoint ships a module of its own: such a group is recorded in the sandbox, where the engine's
+copy renders (``bellwether sandbox-record``), and the recording plan sends it there by this line. ``bellwether
+manifests`` writes it from ``config.json``; ``sandbox-record`` refuses a manifest whose line disagrees with the
+checkpoint's architecture.
+
 ``[smg]`` and ``[engines]`` name the parsers a group's fixtures exercise, which ``gaps`` reads. They are optional: a
 new group's parsers are not known until someone maps them, and a group's other members name none, since their fixtures
 are the primary's.
@@ -29,6 +36,7 @@ LOCAL_REVISION = "local"
 _COMMIT = re.compile(r"[0-9a-f]{40}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _SLUG = re.compile(r"[a-z0-9.-]+")
+_MODE = re.compile(r"[a-z0-9_]+")
 
 
 @dataclass
@@ -43,6 +51,7 @@ class Manifest:
     inputs: dict[str, str] = field(default_factory=dict)
     group: str | None = None  # the primary's slug; None for the primary itself
     tier: int | None = None
+    encoder: str | None = None  # the engine's tokenizer mode, for an architecture it renders with its encoder copy
 
     @property
     def group_slug(self) -> str:
@@ -106,6 +115,7 @@ def parse_manifest(path: Path, text: str) -> Manifest:
         inputs=_inputs(path, data.get("inputs", {})),
         group=_group(path, data.get("group")),
         tier=_tier(path, data.get("tier")),
+        encoder=_encoder(path, data.get("encoder")),
     )
 
 
@@ -132,6 +142,14 @@ def _tier(path: Path, tier: object) -> int | None:
     if tier is not None and (type(tier) is not int or tier not in TIERS):
         raise ValueError(f"{path}: `tier` must be 1, 2 or 3")
     return tier
+
+
+def _encoder(path: Path, encoder: object) -> str | None:
+    if encoder is None:
+        return None
+    if not isinstance(encoder, str) or not _MODE.fullmatch(encoder):
+        raise ValueError(f"{path}: `encoder` must name the engine's tokenizer mode, got {encoder!r}")
+    return encoder
 
 
 def load_manifests(fixtures_dir: Path, *, check_groups: bool = True) -> list[Manifest]:
