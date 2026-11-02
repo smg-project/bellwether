@@ -3325,16 +3325,18 @@ def test_unpack_plain_writes_the_hand_written_sets_alone_and_trims_sets_toml(tmp
     assert ("render", "bench-x") in recorded
 
 
-def test_unpack_sample_sets_adds_every_nth_compressed_set_whole(tmp_path, tiny_model, monkeypatch):
+def test_unpack_sample_sets_adds_one_compressed_set_in_n_whole_by_its_id(tmp_path, tiny_model, monkeypatch):
+    names = ["bench-a", "bench-b", "bench-c", "bench-d", "bench-e", "bench-f", "bench-g"]
     record(
         tmp_path,
         tiny_model,
         ("common", [{"name": "a", "request": {"messages": [user("A")]}}]),
-        ("bench-a", [imported("bench-a-0", "A")]),
-        ("bench-b", [imported("bench-b-0", "B")]),
-        ("bench-c", [imported("bench-c-0", "C")]),
+        *((name, [imported(f"{name}-0", name[-1].upper())]) for name in names),
     )
     fixtures = tmp_path / "fixtures"
+    # The verdict is the set's own: the sets whose id's SHA-256 falls in the lowest half, whatever else the tree holds.
+    in_half = [name for name in names if unpack_module.sampled(f"tiny-chat/render/{name}", 2)]
+    assert in_half == ["bench-a", "bench-e", "bench-f", "bench-g"]
     # An unsampled compressed set may stay a pointer: it is never fetched.
     pointer = fixtures / "tiny-chat" / "render" / "bench-b.jsonl.zst"
     pointer.write_text(LFS_POINTER)
@@ -3346,22 +3348,92 @@ def test_unpack_sample_sets_adds_every_nth_compressed_set_whole(tmp_path, tiny_m
     assert asked == []
     assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == [
         "bench-a.jsonl",
-        "bench-c.jsonl",
+        "bench-e.jsonl",
+        "bench-f.jsonl",
+        "bench-g.jsonl",
         "common.jsonl",
     ]
-    for name in ("bench-a", "bench-c"):
+    for name in in_half:
         source = fixtures / "tiny-chat" / "render" / f"{name}.jsonl.zst"
         assert (out / "tiny-chat" / "render" / f"{name}.jsonl").read_text() == plain_text(source)
     assert sorted(set_tables.read(out / "tiny-chat" / "sets.toml")) == [
         ("render", "bench-a"),
-        ("render", "bench-c"),
+        ("render", "bench-e"),
+        ("render", "bench-f"),
+        ("render", "bench-g"),
         ("render", "common"),
+    ]
+    # A sparser sample is a part of the denser one: a consumer that raises N keeps a part of what it read.
+    assert main(argv[:-1] + ["4"]) == 0
+    assert sorted(p.name for p in (out / "tiny-chat" / "render").iterdir()) == [
+        "bench-a.jsonl",
+        "bench-e.jsonl",
+        "common.jsonl",
     ]
     # The same tree samples the same sets on the next run, and a sampled pointer is asked for.
     pointer_a = fixtures / "tiny-chat" / "render" / "bench-a.jsonl.zst"
     pointer_a.write_text(LFS_POINTER)
     assert main(argv) == 1
     assert asked == [[pointer_a]]
+
+
+def test_unpack_sample_sets_of_a_group_hold_still_when_other_groups_change(tmp_path):
+    """A set joins or leaves the sample on its own id, so a group that gains sets, before or after another in the
+    tree's order, moves nothing in the other's sample; every Nth set of the whole tree would have moved every group
+    after it. The sets here are compressed in name alone: the choice reads no content."""
+    fixtures = tmp_path / "fixtures"
+
+    def group(slug: str, *sets: str) -> None:
+        if not (fixtures / slug).exists():
+            write_manifest(fixtures, slug, f"org/{slug}")
+            (fixtures / slug / "render").mkdir()
+            (fixtures / slug / "render" / "common.jsonl").write_text("")
+        for name in sets:
+            (fixtures / slug / "render" / f"{name}.jsonl.zst").write_bytes(b"")
+
+    def sample(one_in: int) -> dict[str, set[str]]:
+        picked = unpack_module.chosen(load_manifests(fixtures), True, one_in)
+        return {manifest.slug: {f"{kind}/{name}" for kind, name, _ in sets} for manifest, sets in picked}
+
+    names = [f"bench-{n:02d}" for n in range(40)]
+    group("mid-chat", *names)
+    group("tail-chat", *names)
+    before = sample(4)
+    for slug in ("mid-chat", "tail-chat"):
+        own = {f"render/{name}" for name in names if unpack_module.sampled(f"{slug}/render/{name}", 4)}
+        assert before[slug] == {"render/common", *own}  # the hand-written set always, the compressed ones by id
+        assert 4 <= len(own) <= 16  # one in four of forty, give or take the hash's spread
+    assert before["mid-chat"] != before["tail-chat"]  # the slug is part of the id
+    # A new first group, and sets added to the middle one before and after its others in the order.
+    group("aaa-chat", *names[:7])
+    group("mid-chat", "aaa-set", "bench-40", "bench-41", "zzz-set")
+    after = sample(4)
+    assert after["tail-chat"] == before["tail-chat"]
+    assert before["mid-chat"] <= after["mid-chat"]
+    assert after["mid-chat"] - before["mid-chat"] <= {
+        "render/aaa-set",
+        "render/bench-40",
+        "render/bench-41",
+        "render/zzz-set",
+    }
+    assert after["aaa-chat"] == {
+        "render/common",
+        *(f"render/{name}" for name in names[:7] if unpack_module.sampled(f"aaa-chat/render/{name}", 4)),
+    }
+
+
+def test_sampled_is_the_ids_own_verdict_at_the_asked_density():
+    ids = [f"group-{g}/render/set-{s}" for g in range(50) for s in range(40)]
+    assert all(unpack_module.sampled(set_id, 1) for set_id in ids)  # one in one is every set
+    tenth = [set_id for set_id in ids if unpack_module.sampled(set_id, 10)]
+    assert 150 <= len(tenth) <= 250  # one in ten of 2,000, give or take the hash's spread
+    assert [set_id for set_id in ids if unpack_module.sampled(set_id, 20)] == [
+        set_id for set_id in tenth if unpack_module.sampled(set_id, 20)
+    ]  # the sparser sample is a part of the denser one
+    # The convention, pinned: the first eight bytes of the SHA-256 of the id, big-endian, below 2**64 / N.
+    assert unpack_module.sampled("nanollama/render/swehero-0", 5000)
+    assert not unpack_module.sampled("nft-7b/render/swehero-5", 5000)
+    assert not unpack_module.sampled("nanollama/render/swehero-1", 5000)
 
 
 def test_unpack_sample_sets_needs_plain(tmp_path, tiny_model, capsys):
