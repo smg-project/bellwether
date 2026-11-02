@@ -407,6 +407,12 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [kanana-safeguard-siren-8b](fixtures/kanana-safeguard-siren-8b/sets.toml) | kakaocorp/kanana-safeguard-siren-8b @ dc65aab3 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [kernelllm](fixtures/kernelllm/sets.toml) | facebook/KernelLLM @ 26d1191a | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [kimi-dev-72b](fixtures/kimi-dev-72b/sets.toml) | moonshotai/Kimi-Dev-72B @ 8791d798 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [kimi-k2-instruct](fixtures/kimi-k2-instruct/sets.toml) | moonshotai/Kimi-K2-Instruct @ fd1984e2 | 1 | 3 | 24 | 5 | 23 | hand-written |
+| [kimi-k2-instruct-0905](fixtures/kimi-k2-instruct-0905/sets.toml) | moonshotai/Kimi-K2-Instruct-0905 @ ac6c49f0 | 1 | 3 | 24 | 5 | 23 | hand-written |
+| [kimi-k2-thinking](fixtures/kimi-k2-thinking/sets.toml) | moonshotai/Kimi-K2-Thinking @ a51ccc05 | 1 | 2 | 24 | 5 | 23 | hand-written |
+| [kimi-k2.5](fixtures/kimi-k2.5/sets.toml) | moonshotai/Kimi-K2.5 @ 4d01dfe0 | 1 | 2 | 24 | 5 | 23 | hand-written |
+| [kimi-k2.6](fixtures/kimi-k2.6/sets.toml) | moonshotai/Kimi-K2.6 @ 7eb5002f | 1 | 2 | 24 | 6 | 22 | hand-written |
+| [kimi-k2.7-code](fixtures/kimi-k2.7-code/sets.toml) | moonshotai/Kimi-K2.7-Code @ 74797c9c | 1 | 2 | 24 | 10 | 18 | hand-written |
 | [kimi-k3](fixtures/kimi-k3/sets.toml) | moonshotai/Kimi-K3 @ f831ab66 | 1 | 1 | 38439 | 54430 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
 | [laguna-m.1](fixtures/laguna-m.1/sets.toml) | poolside/Laguna-M.1 @ 2bf8a4ab | 1 | 2 | 238494 | 490452 | 364799 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [laguna-s-2.1](fixtures/laguna-s-2.1/sets.toml) | poolside/Laguna-S-2.1 @ 0f573140 | 1 | 2 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -925,9 +931,9 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1283 | | 361288449 | 266945401 | 108981874 | |
+| all | | 1289 | | 361288593 | 266945437 | 108982006 | |
 
-122 more groups (189 checkpoints) have a manifest and nothing recorded yet.
+116 more groups (183 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
