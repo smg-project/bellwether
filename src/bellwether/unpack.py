@@ -11,6 +11,7 @@ tree, so that a consumer reads one root.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -84,9 +85,9 @@ def unpack(
     else stops the run before anything is deleted, and any other directory is left as it is.
 
     With ``plain``, the sets stored plain alone (the hand-written ones) go into the tree, and with ``sample_sets``
-    every Nth compressed set of the selection besides them (``chosen``); each model's ``sets.toml`` then holds the
-    tables of the sets written, so a consumer that checks a set against its table reads a tree that agrees with
-    itself, and a set the tree does not hold is not listed as if it did."""
+    one compressed set in N of the selection besides them, each taken by its own id (``chosen``); each model's
+    ``sets.toml`` then holds the tables of the sets written, so a consumer that checks a set against its table reads
+    a tree that agrees with itself, and a set the tree does not hold is not listed as if it did."""
     manifests = selected(fixtures, model)
     refuse_out_over_fixtures(out, manifests)
     refuse_what_unpack_did_not_write(out, manifests)
@@ -122,27 +123,36 @@ def chosen(
     manifests: list[Manifest], plain: bool, sample_sets: int | None
 ) -> list[tuple[Manifest, list[tuple[str, str, Path]]]]:
     """Each model with the sets the run writes for it: every set, or with ``plain`` the sets stored plain (the
-    hand-written ones, which Git holds as they are) and, with ``sample_sets`` N, every Nth compressed set of the
-    whole selection counted in the order of the models and their sets, so the sample is the same on every run of the
-    same tree and spreads over the models rather than falling on the first ones. A compressed set is one whole file in
+    hand-written ones, which Git holds as they are) and, with ``sample_sets`` N, one compressed set in N besides,
+    each taken or left by its own id (``sampled``), so the sample is the same on every run of the same tree, spreads
+    over the models rather than falling on the first ones, and holds still under the tree's other changes: a set one
+    group gains or loses moves no other set in or out of the sample. Counting every Nth set of the whole selection
+    would move the sample of every group after a group whose count changed. A compressed set is one whole file in
     Git LFS: a sample of its cases would still fetch the file, so the unit of the sample is the set, written whole."""
     if not plain:
         return [(manifest, set_files(manifest)) for manifest in manifests]
     if sample_sets is not None and sample_sets < 1:
         raise ValueError(f"--sample-sets takes a positive count, not {sample_sets}")
     picked: list[tuple[Manifest, list[tuple[str, str, Path]]]] = []
-    compressed_seen = 0
     for manifest in manifests:
         sets = []
         for kind, name, path in set_files(manifest):
             if not is_compressed(path):
                 sets.append((kind, name, path))
-            elif sample_sets is not None:
-                if compressed_seen % sample_sets == 0:
-                    sets.append((kind, name, path))
-                compressed_seen += 1
+            elif sample_sets is not None and sampled(f"{manifest.slug}/{kind}/{name}", sample_sets):
+                sets.append((kind, name, path))
         picked.append((manifest, sets))
     return picked
+
+
+def sampled(set_id: str, one_in: int) -> bool:
+    """Whether ``--sample-sets one_in`` takes the compressed set whose id is ``<slug>/<kind>/<set>``: the first eight
+    bytes of the SHA-256 of the id, read as a number, fall in the lowest 1/N of their range. The verdict rests on the
+    id alone, so it is the same on every run and on every machine, a set's standing never moves because another set
+    was added, re-recorded or removed anywhere in the tree, and the sample at a larger N is a part of the sample at
+    a smaller one."""
+    digest = hashlib.sha256(set_id.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") * one_in < 1 << 64
 
 
 def copy_patterns(fixtures: Path, out: Path) -> list[Path]:

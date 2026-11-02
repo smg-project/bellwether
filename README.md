@@ -1092,8 +1092,9 @@ variations; where `search` closes a region before a marker; and the module's `\w
 tables with a set of probe characters. The recordings are plain files under `patterns/`, and
 `unpack` copies them into the tree consumers read, so Symphony's tests find them beside the models'
 sets. `unpack --plain` writes the hand-written sets alone, each `sets.toml` trimmed to them, with nothing
-fetched; `--sample-sets N` adds every Nth compressed set of the tree, whole, so a consumer with a time or a
-disk budget reads every model's hand-written suite and a rotating sample of the benchmark sets. The reference here is the module itself, pinned; a bump of the pin re-records, and the diff is
+fetched; `--sample-sets N` adds one compressed set in N, whole, each taken by its own id, so a consumer with a
+time or a disk budget reads every model's hand-written suite and a steady sample of the benchmark sets: the
+same sets on every run of the same tree, and a set one group gains or loses moves no other group's sample. The reference here is the module itself, pinned; a bump of the pin re-records, and the diff is
 the review.
 
 ## The list of models

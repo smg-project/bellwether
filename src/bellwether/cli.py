@@ -187,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-sets",
         type=int,
         metavar="N",
-        help="with --plain: every Nth compressed set of the tree besides, fetched and written whole",
+        help="with --plain: one compressed set in N besides, fetched and written whole; a set's own id decides, so "
+        "the same sets on every run, and a set one group gains or loses moves no other group's sample",
     )
     unpack.set_defaults(func=unpack_run)
 
