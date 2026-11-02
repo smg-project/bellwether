@@ -276,6 +276,28 @@ def test_reference_ids_follow_the_checkpoints_tokenizer_json_not_the_class(tiny_
     assert oracle.render(request).input_ids == before.input_ids
 
 
+def test_reference_ids_leave_out_the_files_truncation_and_padding_blocks(tiny_model, tmp_path):
+    """A checkpoint may ship its ``tokenizer.json`` with the truncation and padding it was trained with; the engine's
+    encode applies neither, so neither does the reference: a prompt past the block's length encodes whole and a short
+    one is not padded to it, while the file read as shipped still cuts and pads."""
+    from tokenizers import Tokenizer
+
+    directory = tmp_path / "with-blocks"
+    shutil.copytree(tiny_model, directory)
+    shipped = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    shipped.enable_truncation(max_length=4)
+    shipped.enable_padding(length=64, pad_id=0, pad_token="<unk>")
+    shipped.save(str(directory / "tokenizer.json"))
+    oracle = HfTemplateOracle(str(directory), "local")
+    rendered = oracle.render({"messages": [user("What is the capital of France?")]})
+    as_shipped = Tokenizer.from_file(str(directory / "tokenizer.json")).encode(rendered.text, add_special_tokens=False)
+    assert as_shipped.ids[4:] == [0] * 60
+    assert len(rendered.input_ids) > 4
+    assert rendered.input_ids[:4] == as_shipped.ids[:4]
+    assert rendered.input_ids == oracle.tokenizer.encode(rendered.text, add_special_tokens=False)
+    assert oracle.provenance()["encoder"] == "tokenizers:tokenizer.json"
+
+
 def test_reference_oracle_passes_template_kwargs_tools_and_continuation_through(tiny_model):
     oracle = HfTemplateOracle(str(tiny_model), "local")
     off = oracle.render({"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}})

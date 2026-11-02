@@ -86,6 +86,11 @@ normalizer, a ``Metaspace`` pre-tokenizer) over a ``tokenizer.json`` that keeps 
 the ids transformers, and the engine with it, produce for such a checkpoint differ from the file's after every
 special token (``<|im_start|>user`` reads ``user``, not ``\u2581user``): the reference encodes through the class
 there (``class_rebuilds_the_pipeline``). The provenance names the encoder (``encoder``).
+
+The file's ``truncation`` and ``padding`` blocks are not applied. A checkpoint ships them as the call defaults it was
+trained with, and the engine's encode applies neither: transformers' fast tokenizer clears both from the backend on
+every call that asks for neither (``set_truncation_and_padding`` in ``tokenization_utils_tokenizers.py`` at 5.17.0).
+So the reference encodes a prompt past the block's ``max_length`` whole, and pads none to its length.
 """
 
 from __future__ import annotations
@@ -520,13 +525,23 @@ def class_rebuilds_the_pipeline(tokenizer, model: str, revision: str) -> bool:
 def checkpoint_encoder(model: str, revision: str):
     """The checkpoint's ``tokenizer.json`` as a ``tokenizers.Tokenizer``, the vendor's shipped encoder, or None when
     the checkpoint ships none (a tiktoken or SentencePiece vocabulary). Read from the checkpoint's directory, which
-    holds every oracle input the checkpoint ships, so a checkpoint without the file needs no absence marker."""
+    holds every oracle input the checkpoint ships, so a checkpoint without the file needs no absence marker.
+
+    Read without the file's ``truncation`` and ``padding`` blocks, the call defaults the checkpoint was trained with:
+    the engine's encode applies neither (transformers' fast tokenizer clears both on every call that asks for neither,
+    ``set_truncation_and_padding``), so a prompt past the block's ``max_length`` encodes whole and no prompt is padded
+    to its length."""
     from tokenizers import Tokenizer
 
     from ..inputs import checkpoint_dir
 
     path = checkpoint_dir(model, revision) / "tokenizer.json"
-    return Tokenizer.from_file(str(path)) if path.is_file() else None
+    if not path.is_file():
+        return None
+    tokenizer = Tokenizer.from_file(str(path))
+    tokenizer.no_truncation()
+    tokenizer.no_padding()
+    return tokenizer
 
 
 def vendor_config(model: str, revision: str) -> bool:
