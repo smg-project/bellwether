@@ -12,9 +12,11 @@ codec's sample entry) and a WebM or Matroska file's EBML elements (``DocType``, 
 scale, each ``TrackEntry``'s type, codec and video size). What the engine's decoder makes of the clip, the frames it
 samples among it, is the reference's to say.
 
-``check`` is what every pull request runs: every line of every set names a file whose pointer or content has the
-line's sha256 and size, no file under a videos directory is unnamed, names and paths are unique, each set's licence
-copy is there, and a fetched file's catalogue is its line's.
+``check`` is what every pull request runs: every line of every set carries the fields above with their types and
+names a file directly under its dataset's directory whose pointer or content has the line's sha256 and size, no file
+under a videos directory is unnamed (nested ones included), names and paths are unique, each set's licence copy is
+there, and a fetched file's catalogue is its line's. A container the catalogue does not read, or headers that are not
+whole (a box or an element that runs past its parent, a DocType other than ``webm`` or ``matroska``), is refused.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import argparse
 import struct
 import sys
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from bellwether.importers import image_sets
 
@@ -45,6 +47,22 @@ FIELDS = (
     "notes",
     "origin",
 )
+# What each field holds; None where the headers do not say (an EBML file without a Video element, say).
+_TYPES = {
+    "name": str,
+    "path": str,
+    "bytes": int,
+    "sha256": str,
+    "container": str,
+    "duration_s": (int, float, type(None)),
+    "w": (int, type(None)),
+    "h": (int, type(None)),
+    "video_codec": (str, type(None)),
+    "audio": bool,
+    "notes": str,
+    "origin": dict,
+}
+_DOCTYPES = ("webm", "matroska")
 
 
 class NotAVideo(ValueError):
@@ -95,6 +113,8 @@ def _boxes(data: bytes, start: int, end: int):
             size = end - at
         if size < head:
             raise ValueError(f"box {kind!r} of size {size}")
+        if at + size > end:
+            raise ValueError(f"box {kind!r} of size {size} runs past its parent")
         yield kind, at + head, at + size
         at += size
 
@@ -192,7 +212,9 @@ def _elements(data: bytes, start: int, end: int):
     while at < end:
         element_id, at = _vint(data, at, keep_marker=True)
         length, at = _vint(data, at, keep_marker=False)
-        body_end = end if length < 0 else min(at + length, end)
+        if length >= 0 and at + length > end:
+            raise ValueError(f"element {element_id:#x} of size {length} runs past its parent")
+        body_end = end if length < 0 else at + length
         yield element_id, at, body_end
         at = body_end
 
@@ -246,11 +268,18 @@ def _ebml(data: bytes) -> Catalogue:
     walk(0, len(data))
     if doctype is None:
         raise ValueError("no EBML DocType")
+    if doctype not in _DOCTYPES:
+        raise ValueError(f"EBML DocType {doctype!r} is not webm or matroska")
     seconds = duration * scale / 1_000_000_000 if duration is not None else None
     return Catalogue(doctype, seconds, size[0] if size else None, size[1] if size else None, codec, audio)
 
 
 # --- the check ---
+
+
+def _type_name(kind) -> str:
+    kinds = kind if isinstance(kind, tuple) else (kind,)
+    return " or ".join("None" if k is type(None) else k.__name__ for k in kinds)
 
 
 def problems(corpus: Path) -> list[str]:
@@ -271,6 +300,12 @@ def problems(corpus: Path) -> list[str]:
         expected: set[Path] = set()
         for number, line in enumerate(lines, 1):
             where = f"{set_file}:{number}"
+            if list(line) != list(FIELDS):
+                found.append(f"{where}: the fields are {list(line)}, a line carries {list(FIELDS)}")
+            for field, kind in _TYPES.items():
+                value = line.get(field)
+                if field in line and (not isinstance(value, kind) or (kind is int and isinstance(value, bool))):
+                    found.append(f"{where}: {field} is {value!r}, not {_type_name(kind)}")
             if line["name"] in names:
                 found.append(f"{where}: name {line['name']} is already used in {names[line['name']]}")
             names.setdefault(line["name"], set_file)
@@ -278,8 +313,9 @@ def problems(corpus: Path) -> list[str]:
                 found.append(f"{where}: path {line['path']} is already used in {paths[line['path']]}")
                 continue
             paths[line["path"]] = set_file
-            if not line["path"].startswith(f"{VIDEOS}/{dataset}/"):
-                found.append(f"{where}: path {line['path']} is not under {VIDEOS}/{dataset}/")
+            parts = PurePosixPath(line["path"]).parts
+            if len(parts) != 3 or parts[:2] != (VIDEOS, dataset) or parts[2] in ("", ".", ".."):
+                found.append(f"{where}: path {line['path']} is not a file directly under {VIDEOS}/{dataset}/")
                 continue
             path = corpus / line["path"]
             expected.add(path)
@@ -306,7 +342,7 @@ def problems(corpus: Path) -> list[str]:
                     found.append(f"{where}: the headers say {what}, the line says {stated}")
         directory = corpus / VIDEOS / dataset
         if directory.is_dir():
-            for path in sorted(p for p in directory.iterdir() if p.is_file() and p not in expected):
+            for path in sorted(p for p in directory.rglob("*") if p.is_file() and p not in expected):
                 found.append(f"{path.relative_to(corpus)}: no line of {set_file.name} names it")
         if not (corpus / LICENSES / f"{dataset}-LICENSE").is_file():
             found.append(f"{LICENSES}/{dataset}-LICENSE: the licence copy of {set_file.name} is missing")
