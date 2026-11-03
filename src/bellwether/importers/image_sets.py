@@ -83,11 +83,16 @@ class Catalogue:
 
 @dataclass(frozen=True)
 class Found:
-    """One image as a dataset reader gives it: its bytes, where they came from, and the note its line carries."""
+    """One image as a dataset reader gives it: its bytes, where they came from, and the note its line carries.
+
+    ``name`` is the line's name when the reader names its images itself (the derived set names a file by its variant
+    and the image it was made from); None gives the importers' name, ``<dataset>-<nnnnn>-<sha8>``.
+    """
 
     data: bytes
     origin: dict
     notes: str
+    name: str | None = None
 
 
 def format_of(data: bytes) -> str | None:
@@ -364,8 +369,9 @@ def _gif(data: bytes) -> Catalogue:
 def parquet_images(path: Path, columns: Iterable[str]) -> Iterator[tuple[int, str, bytes]]:
     """``(row, column, bytes)`` for each image cell of a parquet file, in row order and then in the order of
     ``columns``; ``row`` counts from 0 over the whole file. A cell is the struct the datasets library stores an image
-    as, ``{"bytes", "path"}``; a null cell, or one with no bytes, gives nothing. The file is read in batches, so no
-    more than a batch of images is held at once; nothing in it runs."""
+    as, ``{"bytes", "path"}``, or a list of them where a column holds several images a row (a document's pages), whose
+    items are named ``column[k]`` in order; a null cell, or one with no bytes, gives nothing. The file is read in
+    batches, so no more than a batch of images is held at once; nothing in it runs."""
     import pyarrow.parquet as pq
 
     file = pq.ParquetFile(path)
@@ -377,7 +383,11 @@ def parquet_images(path: Path, columns: Iterable[str]) -> Iterator[tuple[int, st
         for index in range(batch.num_rows):
             for column in wanted:
                 value = cells[column][index]
-                if isinstance(value, dict) and value.get("bytes"):
+                if isinstance(value, list):
+                    for k, item in enumerate(value):
+                        if isinstance(item, dict) and item.get("bytes"):
+                            yield row + index, f"{column}[{k}]", item["bytes"]
+                elif isinstance(value, dict) and value.get("bytes"):
                     yield row + index, column, value["bytes"]
         row += batch.num_rows
 
@@ -406,7 +416,9 @@ def _line(dataset: str, index: int, found: Found) -> tuple[dict, str] | None:
     except NotAnImage as err:
         return None, str(err)
     digest = hashlib.sha256(found.data).hexdigest()
-    name = f"{dataset}-{index:05d}-{digest[:8]}"
+    name = found.name or f"{dataset}-{index:05d}-{digest[:8]}"
+    if not _NAME.match(name):
+        return None, f"the name {name!r} is not a lowercase slug"
     line = {
         "name": name,
         "path": f"{IMAGES}/{dataset}/{name}.{FORMATS[what.format]}",

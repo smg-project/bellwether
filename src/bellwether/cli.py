@@ -1,5 +1,5 @@
-"""Command line entry point: ``bellwether gaps | models | manifests | record | import | count | unpack | patterns |
-verify | images | videos | report``.
+"""Command line entry point: ``bellwether gaps | models | manifests | record | import | derive | count | unpack |
+patterns | verify | images | videos | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -16,6 +16,7 @@ from pathlib import Path
 
 from bellwether import __version__
 from bellwether.count import run as count_run
+from bellwether.derive import run as derive_run
 from bellwether.gaps import run as gaps_run
 from bellwether.groups import run as manifests_run
 from bellwether.images import run as images_check_run
@@ -164,6 +165,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="compare a fresh import with the corpus instead of writing it; exit 1 on a difference",
     )
     importer.set_defaults(func=import_run)
+
+    derive = sub.add_parser(
+        "derive",
+        help="the derived image classes made from the COCO set: check the committed set against the plan and the "
+        "files (no encoder), or --write them in the pinned container (docker/derive)",
+    )
+    derive.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: image/<dataset>.jsonl")
+    derive.add_argument(
+        "--write",
+        action="store_true",
+        help="encode every variant and write the set and files; without it, compare and exit 1 on a difference",
+    )
+    derive.set_defaults(func=derive_run)
 
     count = sub.add_parser("count", help="cases per checkpoint, kind and source, with each checkpoint's group and tier")
     count.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
