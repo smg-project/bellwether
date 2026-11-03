@@ -1,0 +1,100 @@
+"""CORD's receipts as an image set, one shard at a time: photographs of printed receipts.
+
+The data is the CORD-v2 release on the Hugging Face Hub at a pinned commit: the parquet file of its ``test``
+split, 100 photographs in the ``image`` column, stored as the datasets library stores images (the bytes and a
+path), beside the parsed receipt in ``ground_truth``.
+Every row gives a line in file and row order; a receipt whose bytes repeat an earlier image's is left out and named, as
+the text imports name their repeats. The files are read as data (``image_sets.parquet_images``); nothing in them runs.
+The set grows a shard at a time: ``FILES`` lists the files imported so far, in order, and a file added later appends its
+receipts after the earlier ones, so the names already written do not move. The dataset card is its front matter alone
+and states ``cc-by-4.0``, which the import checks on every run. The dataset ships no licence file, so the import copies
+the CC BY 4.0 text as the SPDX license list publishes it, from that list's repository at a pinned commit."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+
+from . import github, hf, image_sets
+
+DATASET = "cord"
+REPO = "naver-clova-ix/cord-v2"
+REVISION = "7f0115a4b758a71d6473b8d085751692da2fef98"
+SOURCE = hf.source(REPO, REVISION)
+# The dataset card (README.md) at the revision, by its sha256, whose front matter states the licence.
+CARD_SHA256 = "835f3f7d88a86e05a882c6a6b6333da6ab874776385f85473798769d767c2fca"
+LICENSE = "CC-BY-4.0"
+CARD_LICENSE = "cc-by-4.0"  # the license key of the reviewed card's YAML front matter; LICENSE is its SPDX name
+# The licence text as the SPDX license list publishes it, from the list's repository at one commit.
+LICENSE_OWNER, LICENSE_REPO = "spdx", "license-list-data"
+LICENSE_COMMIT = "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+LICENSE_PATH = "text/CC-BY-4.0.txt"
+LICENSE_SHA256 = "d557539df68e771cc1eedcc91d13f70fca930e508d11eedcafa4b15db49e3744"
+LICENSE_COPY = "licenses/cord-LICENSE"
+SPLIT = "test"
+COLUMNS = ("image",)
+# The shards imported so far, by the sha256 of their bytes, in the order the lines are built; a new shard goes last.
+FILES = {
+    "data/test-00000-of-00001-9c204eb3f4e11791.parquet": (
+        "51c65f1788faff392abe2a0b55b023eb23e9be551c509138eaa3a832514224e7"
+    ),
+}
+
+
+def check_license(text: bytes) -> None:
+    """Refuse a licence copy that is not the CC BY 4.0 licence text.
+
+    ``fetch`` has already held the file to ``LICENSE_SHA256``, the reviewed text. Its first line is checked as well,
+    so that moving the pin to a commit whose file is another text cannot pass on an updated hash alone.
+    """
+    lines = [line.strip() for line in text.decode("utf-8").splitlines() if line.strip()]
+    if lines[:1] != ["Creative Commons Attribution 4.0 International"]:
+        raise ValueError(f"{LICENSE_PATH} at {LICENSE_COMMIT}: not the CC BY 4.0 licence text; review it")
+
+
+def origin(file: str, row: int, column: str) -> dict:
+    """Where a line came from, in the order the text imports write their origins: the dataset, its source, the file
+    the bytes were read from with its sha256, the row and the column, and the licence."""
+    return {
+        "dataset": DATASET,
+        "source": SOURCE,
+        "sha256": FILES[file],
+        "file": file,
+        "row": row,
+        "column": column,
+        "license": LICENSE,
+    }
+
+
+def read(files: dict[str, Path]) -> Iterator[image_sets.Found]:
+    """Every row of the shards, in the order of ``FILES`` and the rows."""
+    for file in FILES:
+        for row, column, data in image_sets.parquet_images(files[file], COLUMNS):
+            yield image_sets.Found(data, origin(file, row, column), f"CORD {SPLIT} row {row}, {column}")
+
+
+def fetch(filename: str, sha256: str, cache: Path) -> Path:
+    """The path of a dataset file at the pinned commit, checked against ``sha256``."""
+    return hf.fetch(REPO, REVISION, filename, sha256, cache)
+
+
+def run(args: argparse.Namespace) -> int:
+    hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, args.cache)
+    license_text = github.fetch(
+        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache
+    ).read_bytes()
+    check_license(license_text)
+    files = {name: fetch(name, sha256, args.cache) for name, sha256 in FILES.items()}
+    copies = {LICENSE_COPY: license_text}
+    if args.check:
+        problems, _ = image_sets.check(DATASET, read(files), args.corpus, copies)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        if not problems:
+            print(f"{args.corpus}: the CORD set equals a fresh import of {SOURCE}")
+        return 1 if problems else 0
+    _, summary = image_sets.write(DATASET, read(files), args.corpus, copies)
+    image_sets.report(DATASET, summary, args.corpus)
+    return 0
