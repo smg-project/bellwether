@@ -135,6 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
         "dataset",
         choices=[
             "bfcl",
+            "coco",
             "docvqa",
             "glaive-v2",
             "gsm8k",
@@ -148,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
             "textvqa",
         ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
-        "mmmu, docvqa and textvqa are image sets (corpus/README.md)",
+        "mmmu, docvqa, textvqa and coco are image sets (corpus/README.md)",
     )
     importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     importer.add_argument(

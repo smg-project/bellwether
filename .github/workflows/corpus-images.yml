@@ -14,6 +14,7 @@ on:
       - src/bellwether/importers/mmmu.py
       - src/bellwether/importers/docvqa.py
       - src/bellwether/importers/textvqa.py
+      - src/bellwether/importers/coco.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -31,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa]
+        dataset: [mmmu, docvqa, textvqa, coco]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
