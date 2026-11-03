@@ -31,6 +31,7 @@ on:
       - src/bellwether/importers/infovqa.py
       - src/bellwether/importers/pets.py
       - src/bellwether/importers/realworldqa.py
+      - src/bellwether/importers/vqarad.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -48,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz, infovqa, pets, realworldqa]
+        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz, infovqa, pets, realworldqa, vqarad]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

@@ -978,9 +978,10 @@ The images the references of every processor family are recorded over, by the da
 | scienceqa | hf:datasets/derek-thomas/ScienceQA@f18b0a70 | CC-BY-NC-SA-4.0 | 1799 | 108.5 MB |
 | textvqa | hf:datasets/lmms-lab-encoder/textvqa@9c0699cd | CC-BY-4.0 | 3166 | 916.4 MB |
 | vizwiz | hf:datasets/lmms-lab-encoder/VizWiz-VQA@d428a2da | CC-BY-4.0 | 849 | 405.8 MB |
+| vqarad | hf:datasets/flaviagiammarino/vqa-rad@bcf91e76 | CC0-1.0 | 314 | 16.5 MB |
 | websight | hf:datasets/HuggingFaceM4/WebSight@b11f8172 | CC-BY-4.0 | 2603 | 520.3 MB |
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 2000 | 59.5 MB |
-| all | | | 37983 | 8.85 GB |
+| all | | | 38297 | 8.86 GB |
 
 <!-- end of what bellwether count --readme writes -->
 

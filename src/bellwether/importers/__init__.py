@@ -142,4 +142,8 @@ def run(args: argparse.Namespace) -> int:
         from .realworldqa import run as run_realworldqa
 
         return run_realworldqa(args)
+    if args.dataset == "vqarad":
+        from .vqarad import run as run_vqarad
+
+        return run_vqarad(args)
     raise ValueError(f"no importer for {args.dataset!r}")
