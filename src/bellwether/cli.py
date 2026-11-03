@@ -1,5 +1,5 @@
-"""Command line entry point:
-``bellwether gaps | models | manifests | record | import | count | unpack | patterns | verify | images | report``.
+"""Command line entry point: ``bellwether gaps | models | manifests | record | import | count | unpack | patterns |
+verify | images | videos | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -28,6 +28,7 @@ from bellwether.record import run as record_run
 from bellwether.sandbox import run as sandbox_run
 from bellwether.unpack import run as unpack_run
 from bellwether.verify import run as verify_run
+from bellwether.videos import run as videos_check_run
 
 NOT_IMPLEMENTED = 2
 
@@ -272,6 +273,16 @@ def build_parser() -> argparse.ArgumentParser:
     images_check.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: image/<dataset>.jsonl")
     images_check.set_defaults(func=images_check_run)
     images.set_defaults(func=_help(images))
+
+    video = sub.add_parser("videos", help="the video corpus: its sets and the files that go with them")
+    videos_sub = video.add_subparsers(dest="videos_command", metavar="command")
+    videos_check = videos_sub.add_parser(
+        "check",
+        help="every line of every video set names a file whose pointer or content matches, and nothing is unnamed",
+    )
+    videos_check.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: video/<dataset>.jsonl")
+    videos_check.set_defaults(func=videos_check_run)
+    video.set_defaults(func=_help(video))
 
     report = sub.add_parser("report", help="summarize verify reports as markdown for the artifacts repo")
     report.add_argument("reports", nargs="+")
