@@ -10,13 +10,15 @@ catalogue read from the file's own headers, under ``corpus/images/derived/`` in 
 
 The encoders' bytes depend on their versions, so the images are made by hand, in the container, once; ``--check``
 needs no encoder: it builds the plan again from the committed COCO set and compares it with the committed derived set
-(every line's name, variant, parameters and source in order, the source's sha256 the COCO line's), and compares each
-committed file, pointer or content, with its line. ``--write`` (in the container) encodes every variant and writes
-the set; a file that already holds the same bytes, as content or as the pointer Git LFS leaves, is left alone.
+(every line's name, variant, parameters and photograph in order, the photograph's sha256 the COCO line's), and
+compares each committed file, pointer or content, with its line. ``--write`` (in the container) encodes every variant
+and writes the set; a file that already holds the same bytes, as content or as the pointer Git LFS leaves, is left
+alone.
 
-A derived line's ``origin`` names the COCO image it was made from (``source``, its path from the corpus root, and
-``sha256``, its digest), the ``variant`` and the encoder ``params`` as the recipe states them, the ``tool`` (this
-module, the Pillow, numpy and libjpeg-turbo versions), and COCO's ``license``.
+A derived line's ``origin`` has an import's shape: ``source`` is the ``coco`` set, the set's provenance (an import
+names its dataset's pinned source there); ``sha256`` and ``file`` are the digest and the path from the corpus root
+of the photograph the bytes were made from; then come the ``variant`` and the encoder ``params`` as the recipe
+states them, the ``tool`` (this module, the Pillow, numpy and libjpeg-turbo versions), and COCO's ``license``.
 """
 
 from __future__ import annotations
@@ -109,9 +111,10 @@ def plan(sources: list[dict]) -> list[Step]:
         put("png-interlaced", s, "png", "PNG RGB8 Adam7 interlaced")
     for s in _slice(photos, 1910, 200):
         put("cmyk-pillow", s, "jpg", f"Pillow CMYK JPEG q{Q}")
-        # The first derivation stripped the marker from every second file it had written so far, counted after the
-        # CMYK file itself: the files before this slice number 2,360 (even), so the stripped ones are every other
-        # source of the slice, starting with the first.
+        # The first derivation stripped the marker whenever the files written so far, counted after the CMYK file
+        # itself, numbered even. 1,910 files come before this slice, so the first source's CMYK file is the 1,911th
+        # and keeps its marker; every later source's CMYK file lands on an even count, the source before it having
+        # left an odd one, and loses it: every source of the slice but the first, 199 of 200.
         if len(steps) % 2 == 0:
             put("cmyk-noapp14", s, "jpg", "Pillow CMYK JPEG, Adobe APP14 removed")
     for s in _slice(photos, 2110, 100):
@@ -149,11 +152,14 @@ def plan(sources: list[dict]) -> list[Step]:
 
 
 def origin(step: Step) -> dict:
-    """Where a derived line came from: the COCO image, the variant and its parameters, the tool, COCO's licence."""
+    """Where a derived line came from, in the order the image imports write their origins: the dataset, its source
+    (the ``coco`` set), the sha256 and path of the photograph the bytes were made from, the variant and its
+    parameters, the tool, and COCO's licence."""
     return {
         "dataset": DATASET,
-        "source": step.source["path"],
+        "source": coco.DATASET,
         "sha256": step.source["sha256"],
+        "file": step.source["path"],
         "variant": step.variant,
         "params": step.params,
         "tool": f"bellwether derive, Pillow {PILLOW}, numpy {NUMPY}, {TURBOJPEG}",
@@ -409,8 +415,8 @@ def read_sources(corpus: Path) -> list[dict]:
 
 def check(corpus: Path) -> list[str]:
     """One line per difference between the plan over the committed COCO set and the committed derived set and files;
-    empty when there is none. No encoder runs: the plan names every file, its variant, parameters and source, and the
-    files are compared through their pointers or content with the lines' sha256 and size."""
+    empty when there is none. No encoder runs: the plan names every file, its variant, parameters and photograph, and
+    the files are compared through their pointers or content with the lines' sha256 and size."""
     problems: list[str] = []
     steps = plan(read_sources(corpus))
     target = image_sets.set_path(corpus, DATASET)

@@ -56,17 +56,12 @@ def test_the_plan_reads_the_sources_in_name_order_whatever_order_they_come_in():
     ]
 
 
-def test_the_stripped_cmyk_files_are_every_other_source_of_the_slice_starting_with_the_first():
+def test_the_stripped_cmyk_files_are_every_source_of_the_slice_but_the_first():
     steps = [s for s in derive.plan(sources(5000)) if s.variant in ("cmyk-pillow", "cmyk-noapp14")]
     pillow = [s.source["name"] for s in steps if s.variant == "cmyk-pillow"]
     stripped = [s.source["name"] for s in steps if s.variant == "cmyk-noapp14"]
-    assert (
-        stripped == pillow[0::2]
-        and len(stripped) == 100
-        or stripped == pillow[1::2]
-        and len(stripped) == 100
-        or len(stripped) == 199
-    )
+    assert len(pillow) == 200 and stripped == pillow[1:]
+    assert [s.variant for s in steps[:4]] == ["cmyk-pillow", "cmyk-pillow", "cmyk-noapp14", "cmyk-pillow"]
 
 
 def test_the_tiny_and_huge_sides_cycle_as_the_recipe_cycles_them():
@@ -78,18 +73,21 @@ def test_the_tiny_and_huge_sides_cycle_as_the_recipe_cycles_them():
     assert [s.params.rsplit(" ", 1)[1] for s in huge[:5]] == ["4096", "4400", "4800", "5200", "4096"]
 
 
-def test_an_origin_names_the_coco_image_the_variant_the_parameters_the_tool_and_cocos_licence():
+def test_an_origin_names_the_coco_set_the_photograph_the_variant_the_parameters_the_tool_and_cocos_licence():
     step = derive.plan(sources(5000))[0]
-    assert derive.origin(step) == {
+    origin = derive.origin(step)
+    assert origin == {
         "dataset": "derived",
-        "source": step.source["path"],
+        "source": "coco",
         "sha256": step.source["sha256"],
+        "file": step.source["path"],
         "variant": "webp-q85",
         "params": "WEBP quality=85",
-        "tool": derive.origin(step)["tool"],
+        "tool": origin["tool"],
         "license": coco.LICENSE,
     }
-    assert derive.origin(step)["tool"].startswith("bellwether derive, Pillow 12.3.0")
+    assert list(origin) == ["dataset", "source", "sha256", "file", "variant", "params", "tool", "license"]
+    assert origin["tool"].startswith("bellwether derive, Pillow 12.3.0")
 
 
 VARIANT_INDEX = {variant: index for index, variant in enumerate(TABLE)}

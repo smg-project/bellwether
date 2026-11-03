@@ -247,6 +247,23 @@ def test_write_writes_the_set_the_files_and_the_licence_copy_and_names_repeats(t
     ]
 
 
+def test_a_reader_that_names_its_images_gives_the_lines_those_names_and_a_name_that_is_not_a_slug_gives_no_line(
+    tmp_path,
+):
+    corpus = tmp_path / "corpus"
+    first, second, third = png(3, 2), jpeg(5, 4), gif(2, 2)
+    given = [
+        images.Found(first, {"dataset": "ds"}, "the first", name="first-of-ds"),
+        images.Found(second, {"dataset": "ds"}, "the second", name="Second of ds"),
+        found(third, 2),
+    ]
+    _, summary = images.write("ds", given, corpus)
+    lines = images.read_set(corpus / "image" / "ds.jsonl")
+    assert [line["name"] for line in lines] == ["first-of-ds", f"ds-00002-{sha(third)[:8]}"]
+    assert lines[0]["path"] == "images/ds/first-of-ds.png" and (corpus / lines[0]["path"]).read_bytes() == first
+    assert summary.lines == 2 and summary.skipped == [("the second", "the name 'Second of ds' is not a lowercase slug")]
+
+
 def pointer(data: bytes) -> bytes:
     return f"version https://git-lfs.github.com/spec/v1\noid sha256:{sha(data)}\nsize {len(data)}\n".encode()
 
