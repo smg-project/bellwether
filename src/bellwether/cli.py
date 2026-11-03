@@ -156,6 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
             "mmmu",
             "ocrbench",
             "peoplesspeech",
+            "pets",
             "pixmocap",
             "pixmodocs",
             "scienceqa",
