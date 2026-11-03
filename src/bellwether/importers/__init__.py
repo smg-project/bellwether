@@ -130,4 +130,8 @@ def run(args: argparse.Namespace) -> int:
         from .vizwiz import run as run_vizwiz
 
         return run_vizwiz(args)
+    if args.dataset == "infovqa":
+        from .infovqa import run as run_infovqa
+
+        return run_infovqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")

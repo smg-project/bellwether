@@ -28,6 +28,7 @@ on:
       - src/bellwether/importers/cord.py
       - src/bellwether/importers/pixmocap.py
       - src/bellwether/importers/vizwiz.py
+      - src/bellwether/importers/infovqa.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -45,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz]
+        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz, infovqa]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

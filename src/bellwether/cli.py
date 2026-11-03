@@ -148,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
             "gqa",
             "gsm8k",
             "hermes",
+            "infovqa",
             "librispeech",
             "mathvista",
             "mgsm",
