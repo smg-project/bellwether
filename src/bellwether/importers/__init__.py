@@ -138,4 +138,8 @@ def run(args: argparse.Namespace) -> int:
         from .pets import run as run_pets
 
         return run_pets(args)
+    if args.dataset == "realworldqa":
+        from .realworldqa import run as run_realworldqa
+
+        return run_realworldqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")
