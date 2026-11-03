@@ -82,6 +82,8 @@ def test_bytes_that_are_not_a_video_or_headers_cut_short_are_refused():
         videos.catalogue(b"RIFF\x00\x00\x00\x00AVI ")
     with pytest.raises(videos.NotAVideo, match="not whole"):
         videos.catalogue(mp4()[:40])
+    with pytest.raises(videos.NotAVideo, match="5 byte\\(s\\) after the last box, too few for a box header"):
+        videos.catalogue(mp4()[:-4])  # five bytes of the mdat box are left, fewer than its eight-byte header
     with pytest.raises(videos.NotAVideo, match="not whole"):
         videos.catalogue(b"\x1a\x45\xdf\xa3" + b"\x85" + b"\x42")
 
@@ -171,6 +173,7 @@ def test_a_lines_fields_a_nested_file_and_a_path_outside_the_dataset_are_named_o
     del first["audio"]  # a field missing from a line, which the pointer check cannot read from the file
     second = json.loads(text[1])
     second["w"] = "320"  # a field of another type
+    second["duration_s"] = True  # a bool, which Python counts as an int and the check does not
     third = json.loads(text[2])
     third["path"] = "videos/clips/../clips/c.mp4"  # not a file directly under the dataset directory
     text[:3] = [json.dumps(first), json.dumps(second), json.dumps(third)]
@@ -181,10 +184,11 @@ def test_a_lines_fields_a_nested_file_and_a_path_outside_the_dataset_are_named_o
     err = capsys.readouterr().err
     assert "clips.jsonl:1: the fields are [" in err and "a line carries [" in err
     assert "clips.jsonl:2: w is '320', not int or None" in err
+    assert "clips.jsonl:2: duration_s is True, not int or float or None" in err
     assert "clips.jsonl:3: path videos/clips/../clips/c.mp4 is not a file directly under videos/clips/" in err
     assert "videos/clips/nested/extra.mp4: no line of clips.jsonl names it" in err
     assert "videos/clips/c.mp4: no line of clips.jsonl names it" in err  # its line's path was not it
-    assert err.rstrip().endswith("bellwether videos check: 5 problem(s)")
+    assert err.rstrip().endswith("bellwether videos check: 6 problem(s)")
 
 
 def test_an_empty_corpus_passes_and_videos_without_a_subcommand_prints_help_and_does_nothing(tmp_path, capsys):

@@ -117,6 +117,8 @@ def _boxes(data: bytes, start: int, end: int):
             raise ValueError(f"box {kind!r} of size {size} runs past its parent")
         yield kind, at + head, at + size
         at += size
+    if at != end:
+        raise ValueError(f"{end - at} byte(s) after the last box, too few for a box header")
 
 
 def _isobmff(data: bytes) -> Catalogue:
@@ -304,7 +306,7 @@ def problems(corpus: Path) -> list[str]:
                 found.append(f"{where}: the fields are {list(line)}, a line carries {list(FIELDS)}")
             for field, kind in _TYPES.items():
                 value = line.get(field)
-                if field in line and (not isinstance(value, kind) or (kind is int and isinstance(value, bool))):
+                if field in line and (not isinstance(value, kind) or (isinstance(value, bool) and kind is not bool)):
                     found.append(f"{where}: {field} is {value!r}, not {_type_name(kind)}")
             if line["name"] in names:
                 found.append(f"{where}: name {line['name']} is already used in {names[line['name']]}")
