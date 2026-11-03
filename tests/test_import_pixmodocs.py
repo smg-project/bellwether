@@ -12,6 +12,7 @@ from bellwether.importers import github, hf, image_sets, pixmodocs
 
 LICENSE_TEXT = b"# ODC Attribution License (ODC-By)\n\n(the body of the text)\n"
 CARD = b"---\nlicense: odc-by\n---\n# PixMo-Docs\n"
+FILE2 = "diagrams/train-00000-of-00006.parquet"
 FILE = "charts/train-00000-of-00050.parquet"
 
 
@@ -32,7 +33,8 @@ def pinned(tmp_path, monkeypatch):
     and ``github.fetch`` signatures with no network."""
     first, second, third = jpeg(8, 6), jpeg(10, 4), png(3, 3)
     pq.write_table(table([first, first, second, b"not an image", None, third, second]), tmp_path / "shard.parquet")
-    files = {FILE: tmp_path / "shard.parquet"}
+    pq.write_table(table([]), tmp_path / "empty.parquet")
+    files = {FILE: tmp_path / "shard.parquet", FILE2: tmp_path / "empty.parquet"}
     served = {}
 
     def fetch_hf(repo, revision, filename, sha256, cache):
@@ -62,7 +64,8 @@ def pinned(tmp_path, monkeypatch):
 
 def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert re.fullmatch(r"[0-9a-f]{40}", pixmodocs.REVISION)
-    assert list(pixmodocs.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", pixmodocs.FILES[FILE])
+    assert list(pixmodocs.FILES) == [FILE, FILE2]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", pixmodocs.FILES[f]) for f in (FILE, FILE2))
     assert pixmodocs.SOURCE == f"hf:datasets/allenai/pixmo-docs@{pixmodocs.REVISION}"
     assert pixmodocs.CARD_LICENSE == "odc-by" and pixmodocs.LICENSE == "ODC-By-1.0"
 
@@ -113,6 +116,7 @@ def test_import_writes_the_set_the_charts_and_the_licence_copy_and_check_passes_
     assert (corpus / lines[0]["path"]).read_bytes() == first
     assert (corpus / "licenses" / "pixmodocs-LICENSE").read_bytes() == LICENSE_TEXT
     assert pinned["served"][hf.CARD] == pixmodocs.CARD_SHA256 and pinned["served"][FILE] == pixmodocs.FILES[FILE]
+    assert pinned["served"][FILE2] == pixmodocs.FILES[FILE2]
     assert out == [
         f"no line for PixMo-Docs train row 1, image: it repeats pixmodocs-00001-{sha(first)[:8]}",
         f"no line for PixMo-Docs train row 6, image: it repeats pixmodocs-00002-{sha(second)[:8]}",

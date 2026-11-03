@@ -977,7 +977,7 @@ The images the references of every processor family are recorded over, by the da
 | pathvqa | hf:datasets/flaviagiammarino/path-vqa@16858328 | MIT | 253 | 40.8 MB |
 | pets | hf:datasets/timm/oxford-iiit-pet@089695c8 | CC-BY-SA-4.0 | 3669 | 412.9 MB |
 | pixmocap | hf:datasets/allenai/pixmo-cap@edce6390 | ODC-By-1.0 | 1801 | 984.7 MB |
-| pixmodocs | hf:datasets/allenai/pixmo-docs@d887597b | ODC-By-1.0 | 2337 | 500.5 MB |
+| pixmodocs | hf:datasets/allenai/pixmo-docs@d887597b | ODC-By-1.0 | 5090 | 995.2 MB |
 | pubtabnet | hf:datasets/apoidea/pubtabnet-html@0d583246 | CDLA-Permissive-1.0 | 2000 | 44.1 MB |
 | realworldqa | hf:datasets/lmms-lab-encoder/RealWorldQA@907c4e52 | CC-BY-4.0 | 382 | 346.6 MB |
 | scienceqa | hf:datasets/derek-thomas/ScienceQA@f18b0a70 | CC-BY-NC-SA-4.0 | 1799 | 108.5 MB |
@@ -987,7 +987,7 @@ The images the references of every processor family are recorded over, by the da
 | vqarad | hf:datasets/flaviagiammarino/vqa-rad@bcf91e76 | CC0-1.0 | 314 | 16.5 MB |
 | websight | hf:datasets/HuggingFaceM4/WebSight@b11f8172 | CC-BY-4.0 | 5204 | 1.04 GB |
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 6000 | 184.7 MB |
-| all | | | 57701 | 11.86 GB |
+| all | | | 60454 | 12.35 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
