@@ -66,4 +66,8 @@ def run(args: argparse.Namespace) -> int:
         from .scienceqa import run as run_scienceqa
 
         return run_scienceqa(args)
+    if args.dataset == "ocrbench":
+        from .ocrbench import run as run_ocrbench
+
+        return run_ocrbench(args)
     raise ValueError(f"no importer for {args.dataset!r}")

@@ -145,6 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
             "mgsm",
             "mmmu",
             "scienceqa",
+            "ocrbench",
             "shapes",
             "swebench",
             "swehero",
@@ -152,7 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
             "textvqa",
         ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
-        "mmmu, docvqa, textvqa, coco, chartqa and scienceqa are image sets (corpus/README.md)",
+        "mmmu, docvqa, textvqa, coco, chartqa, scienceqa and ocrbench are image sets (corpus/README.md)",
     )
     importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     importer.add_argument(
