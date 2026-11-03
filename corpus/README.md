@@ -470,7 +470,7 @@ was sent, so the import rebuilds every request from tau2's own code and data.
 ## Image sets
 
 An image set is the image side's corpus: one JSON Lines file per dataset under `corpus/image/`, one line per image,
-written by `bellwether import <dataset>` and never edited by hand, with the image's bytes beside it under
+written by `bellwether import <dataset>`, or by `bellwether derive --write` for the derived set, and never edited by hand, with the image's bytes beside it under
 `corpus/images/<dataset>/`, exactly as the dataset ships them, in Git LFS (`docs/image-sets.md`). A line is written in
 the order its fields are built: `name`, a slug that becomes the last part of a fixture id (`<dataset>-<nnnnn>-<sha8>`:
 the image's position among the dataset's kept images and the first eight hex digits of its sha256); `path` from the
