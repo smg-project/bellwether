@@ -83,7 +83,7 @@ from tokenizers import Tokenizer, normalizers
 from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
-from . import vendor
+from . import clock, vendor
 from .content_format import ContentFormat
 from .reference import HfTemplateOracle, as_vllm_gives_it, checkpoint_file
 
@@ -191,6 +191,8 @@ class RoundtripOracle:
         template = self.renderer.template_text(tools)
         if template is not None:
             kwargs = {**kwargs, "chat_template": template}
+        # At the render oracle's own instant, as its renders are.
+        clock.pin_template_clock(self.renderer.rendered_at)
         return self.tokenizer.apply_chat_template(
             self.renderer.for_template(messages, tools),
             tokenize=False,

@@ -7,6 +7,7 @@ from transformers.utils import chat_template_utils
 
 from bellwether.record import clock
 from bellwether.record.reference import HfTemplateOracle
+from bellwether.record.roundtrip import RoundtripOracle
 
 EPOCH = "1791374400"  # 2026-10-07 12:00:00 UTC: an instant SOURCE_DATE_EPOCH names in these tests
 DAY = "2026-10-07"
@@ -67,3 +68,25 @@ def test_the_reference_renders_at_the_epoch_and_its_provenance_names_it(monkeypa
     assert unset.provenance()["source_date_epoch"] == clock.RECORDING_DAY
     rendered = unset.render({"messages": [{"role": "user", "content": "Hello"}]})
     assert rendered.text.startswith(f"Today: {RECORDING_DAY}\n")
+    # The first oracle keeps rendering at the instant its provenance names after the second one pinned the clock at
+    # another: each render re-points the clock at the oracle's own instant.
+    rendered = oracle.render({"messages": [{"role": "user", "content": "Hello"}]})
+    assert rendered.text.startswith(f"Today: {DAY}\n")
+    assert oracle.provenance()["source_date_epoch"] == EPOCH
+
+
+def test_the_round_trip_renders_at_its_own_oracles_instant(monkeypatch, unpinned, tiny_model, tmp_path):
+    checkpoint = tmp_path / "checkpoint"
+    shutil.copytree(tiny_model, checkpoint)
+    config = json.loads((checkpoint / "tokenizer_config.json").read_text())
+    config["chat_template"] = (
+        "Today: {{ strftime_now('%Y-%m-%d') }}\n{% for m in messages %}{{ m['content'] }}{% endfor %}"
+    )
+    (checkpoint / "tokenizer_config.json").write_text(json.dumps(config))
+    monkeypatch.setenv(clock.ENV, EPOCH)
+    roundtrip = RoundtripOracle(str(checkpoint), "local")
+    monkeypatch.delenv(clock.ENV)
+    HfTemplateOracle(str(checkpoint), "local")  # built later, at the recording day: it pins the clock there
+    rendered = roundtrip.chat([{"role": "user", "content": "Hello"}], {}, generation_prompt=True)
+    assert rendered.startswith(f"Today: {DAY}\n")
+    assert roundtrip.renderer.provenance()["source_date_epoch"] == EPOCH
