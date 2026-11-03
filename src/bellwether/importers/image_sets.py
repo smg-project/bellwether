@@ -83,11 +83,16 @@ class Catalogue:
 
 @dataclass(frozen=True)
 class Found:
-    """One image as a dataset reader gives it: its bytes, where they came from, and the note its line carries."""
+    """One image as a dataset reader gives it: its bytes, where they came from, and the note its line carries.
+
+    ``name`` is the line's name when the reader names its images itself (the derived set names a file by its variant
+    and the image it was made from); None gives the importers' name, ``<dataset>-<nnnnn>-<sha8>``.
+    """
 
     data: bytes
     origin: dict
     notes: str
+    name: str | None = None
 
 
 def format_of(data: bytes) -> str | None:
@@ -406,7 +411,9 @@ def _line(dataset: str, index: int, found: Found) -> tuple[dict, str] | None:
     except NotAnImage as err:
         return None, str(err)
     digest = hashlib.sha256(found.data).hexdigest()
-    name = f"{dataset}-{index:05d}-{digest[:8]}"
+    name = found.name or f"{dataset}-{index:05d}-{digest[:8]}"
+    if not _NAME.match(name):
+        return None, f"the name {name!r} is not a lowercase slug"
     line = {
         "name": name,
         "path": f"{IMAGES}/{dataset}/{name}.{FORMATS[what.format]}",
