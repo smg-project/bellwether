@@ -140,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
             "chartqa",
             "coco",
             "doclaynet",
+            "docmatix",
             "docvqa",
             "fleurs",
             "glaive-v2",

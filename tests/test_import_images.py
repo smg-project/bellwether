@@ -340,3 +340,22 @@ def test_a_line_keeps_non_ascii_notes_raw_as_every_corpus_line_does(tmp_path):
     text = (corpus / "image" / "ds.jsonl").read_text(encoding="utf-8")
     assert '"notes": "Übung, row 0"' in text
     assert io.StringIO(text).readline().endswith("\n")
+
+
+def test_parquet_images_reads_a_list_of_images_a_row_and_names_each_item_by_its_place(tmp_path):
+    page = pa.struct([("bytes", pa.binary()), ("path", pa.string())])
+    first, second = png(4, 4), jpeg(6, 6)
+    cells = [
+        [{"bytes": first, "path": None}, {"bytes": second, "path": None}],
+        [],
+        None,
+        [None, {"bytes": first, "path": "p"}],
+    ]
+    pq.write_table(pa.table({"images": pa.array(cells, type=pa.list_(page))}), tmp_path / "pages.parquet")
+    assert [
+        (row, column, len(data)) for row, column, data in images.parquet_images(tmp_path / "pages.parquet", ["images"])
+    ] == [
+        (0, "images[0]", len(first)),
+        (0, "images[1]", len(second)),
+        (3, "images[1]", len(first)),
+    ]
