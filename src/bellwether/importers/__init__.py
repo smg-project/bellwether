@@ -146,4 +146,8 @@ def run(args: argparse.Namespace) -> int:
         from .vqarad import run as run_vqarad
 
         return run_vqarad(args)
+    if args.dataset == "pathvqa":
+        from .pathvqa import run as run_pathvqa
+
+        return run_pathvqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")
