@@ -166,4 +166,8 @@ def run(args: argparse.Namespace) -> int:
         from .pubtabnet import run as run_pubtabnet
 
         return run_pubtabnet(args)
+    if args.dataset == "screenspot":
+        from .screenspot import run as run_screenspot
+
+        return run_screenspot(args)
     raise ValueError(f"no importer for {args.dataset!r}")

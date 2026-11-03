@@ -392,8 +392,9 @@ def parquet_images(path: Path, columns: Iterable[str]) -> Iterator[tuple[int, st
         row += batch.num_rows
 
 
-def zip_images(path: Path, suffix: str = ".jpg") -> Iterator[tuple[str, bytes]]:
-    """``(member, bytes)`` for each file of a zip archive whose name ends in ``suffix``, in name order, read as data."""
+def zip_images(path: Path, suffix: str | tuple[str, ...] = ".jpg") -> Iterator[tuple[str, bytes]]:
+    """``(member, bytes)`` for each file of a zip archive whose name ends in ``suffix`` (one, or any of a tuple), in
+    name order, read as data."""
     with zipfile.ZipFile(path) as archive:
         members = sorted(m.filename for m in archive.infolist() if not m.is_dir() and m.filename.endswith(suffix))
         for member in members:

@@ -166,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
             "pubtabnet",
             "realworldqa",
             "scienceqa",
+            "screenspot",
             "shapes",
             "swebench",
             "swehero",

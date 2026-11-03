@@ -359,3 +359,15 @@ def test_parquet_images_reads_a_list_of_images_a_row_and_names_each_item_by_its_
         (0, "images[1]", len(second)),
         (3, "images[1]", len(first)),
     ]
+
+
+def test_zip_images_takes_a_tuple_of_suffixes_and_keeps_name_order_across_them(tmp_path):
+    with zipfile.ZipFile(tmp_path / "a.zip", "w") as archive:
+        archive.writestr("shots/c.png", png(w=3, h=3))
+        archive.writestr("shots/a.jpg", jpeg(w=1, h=1))
+        archive.writestr("shots/b.tar", b"not an image")
+    assert [member for member, _ in images.zip_images(tmp_path / "a.zip", (".png", ".jpg"))] == [
+        "shots/a.jpg",
+        "shots/c.png",
+    ]
+    assert [member for member, _ in images.zip_images(tmp_path / "a.zip", ".png")] == ["shots/c.png"]
