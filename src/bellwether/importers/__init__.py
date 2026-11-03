@@ -50,4 +50,8 @@ def run(args: argparse.Namespace) -> int:
         from .docvqa import run as run_docvqa
 
         return run_docvqa(args)
+    if args.dataset == "textvqa":
+        from .textvqa import run as run_textvqa
+
+        return run_textvqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")
