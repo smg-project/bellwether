@@ -506,7 +506,7 @@ line: the 5,349 rows give 1,285 images. The six files are read in name order and
 stable from one import to the next. `bellwether import docvqa` writes `corpus/image/docvqa.jsonl` and the files under
 `corpus/images/docvqa/`, and removes a file there it did not write.
 
-A TextVQA line is the photograph of one question: `notes` names the row (`TextVQA validation row 12, image`) and `origin.file` the parquet file. Questions share photographs, so a row whose bytes repeat an earlier image's gives no line: the 5,000 rows give 3,166 images. The three files are read in name order and each row in order, so the names are stable from one import to the next. `bellwether import textvqa` writes `corpus/image/textvqa.jsonl` and the files under `corpus/images/textvqa/`, and removes a file there it did not write.
+A TextVQA line is the photograph of one question: `notes` names the row (`TextVQA validation row 12, image`) and `origin.file` the parquet file. Questions share photographs, so a row that repeats an earlier photograph's bytes gives no line: the 5,000 rows give 3,166 images. The three files are read in name order and each row in order, so the names are stable from one import to the next. `bellwether import textvqa` writes `corpus/image/textvqa.jsonl` and the files under `corpus/images/textvqa/`, and removes a file there it did not write.
 
 Set names starting with `bfcl-`, `glaive-v2-`, `gsm8k-`, `hermes-`, `mgsm-`, `shapes-`, `swebench-`, `swehero-` or
 `tau2-` belong to that importer: `bellwether import bfcl` deletes any `bfcl-*` set file, `.jsonl` or `.jsonl.zst`, it
