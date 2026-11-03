@@ -12,6 +12,7 @@ from bellwether.importers import docmatix, github, hf, image_sets
 
 MIT_TEXT = b"MIT License\n\nCopyright (c) <year> <copyright holders>\n\nPermission is hereby granted\n"
 CARD = b"---\nlicense: mit\n---\n# Docmatix\n"
+FILE2 = "data/train-00001-of-01106-97f9db5e7314e467.parquet"
 FILE = "data/train-00000-of-01106-8ce5201aa40b0141.parquet"
 
 
@@ -38,7 +39,8 @@ def pinned(tmp_path, monkeypatch):
     first, second, third = png(8, 6), jpeg(10, 4), png(3, 3)
     documents = [[first, second], [first], [], [None], [b"not an image"], None, [third]]
     pq.write_table(table(documents), tmp_path / "shard.parquet")
-    files = {FILE: tmp_path / "shard.parquet"}
+    pq.write_table(table([]), tmp_path / "empty.parquet")
+    files = {FILE: tmp_path / "shard.parquet", FILE2: tmp_path / "empty.parquet"}
     served = {}
 
     def fetch_hf(repo, revision, filename, sha256, cache):
@@ -68,7 +70,8 @@ def pinned(tmp_path, monkeypatch):
 
 def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert re.fullmatch(r"[0-9a-f]{40}", docmatix.REVISION)
-    assert list(docmatix.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", docmatix.FILES[FILE])
+    assert list(docmatix.FILES) == [FILE, FILE2]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", docmatix.FILES[f]) for f in (FILE, FILE2))
     assert docmatix.SOURCE == f"hf:datasets/HuggingFaceM4/Docmatix@{docmatix.REVISION}"
     assert docmatix.CARD_LICENSE == "mit" and docmatix.LICENSE == "MIT"
 
@@ -117,6 +120,7 @@ def test_import_writes_the_set_the_pages_and_the_licence_copy_and_check_passes_t
     assert (corpus / lines[0]["path"]).read_bytes() == first
     assert (corpus / "licenses" / "docmatix-LICENSE").read_bytes() == MIT_TEXT
     assert pinned["served"][hf.CARD] == docmatix.CARD_SHA256 and pinned["served"][FILE] == docmatix.FILES[FILE]
+    assert pinned["served"][FILE2] == docmatix.FILES[FILE2]
     assert out == [
         f"no line for Docmatix train row 1, images[0]: it repeats docmatix-00001-{sha(first)[:8]}",
         "no line for Docmatix train row 4, images[0]: not a JPEG, PNG, WebP or GIF file",
