@@ -137,8 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
         "dataset",
         choices=[
             "bfcl",
-            "coco",
             "chartqa",
+            "coco",
             "docvqa",
             "fleurs",
             "glaive-v2",
@@ -149,15 +149,16 @@ def build_parser() -> argparse.ArgumentParser:
             "mgsm",
             "mls",
             "mmmu",
-            "scienceqa",
             "ocrbench",
             "peoplesspeech",
+            "scienceqa",
             "shapes",
             "swebench",
             "swehero",
             "tau2",
             "textvqa",
             "voxpopuli",
+            "wit",
         ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
         "mmmu, docvqa, textvqa, coco, chartqa, scienceqa and ocrbench are image sets; "
