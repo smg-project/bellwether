@@ -538,6 +538,21 @@ files.
 `bellwether record` writes a fixture set recorded from an imported set as zstd-compressed JSON Lines in Git LFS
 (`fixtures/README.md`); `bellwether unpack` gives consumers the plain files.
 
+## Video sets
+
+A video set is the video side's corpus: one JSON Lines file per dataset under `corpus/video/`, one line per clip, with
+the clip's bytes beside it under `corpus/videos/<dataset>/`, exactly as made or shipped, in Git LFS. A line is written
+in the order its fields are built: `name` (a slug), `path` from the corpus root, `bytes` and `sha256`, what the
+container's own headers say it holds, read with no decoder (`container`, `duration_s`, `w` and `h`, `video_codec`,
+`audio`), `notes`, and `origin` (the dataset, its source, and the licence). `.lfsconfig` keeps a clone from fetching
+the clips; a pointer names its content's sha256 and size, so `bellwether videos check` compares every line with the
+checkout without a download, and CI runs it on every pull request; for a fetched clip it also compares the headers
+with the line. Fetch a set's clips with `git lfs pull --include 'corpus/videos/<dataset>/**' --exclude ''`.
+
+| Dataset | Set | Source | License |
+|---|---|---|---|
+| clips | `clips`: seven short clips for the video path, H.264 in MP4 at 1 s, 30 s and 600 s at 320x240, at 720p for 10 s, and with an audio track for 5 s; H.264 in QuickTime for 5 s; VP9 in WebM for 5 s (10.8 MB) | made for this repository's parity suite in October 2026 (the branch `feat/multimodal-parity-suite`, `multimodal/clips/`); each line's `origin.source` names its file there | Apache-2.0, this repository's own licence, copied to `corpus/licenses/clips-LICENSE` |
+
 ## Agentic session corpus
 
 `corpus/agentic/` holds the multi-turn, tool-calling sessions a traffic driver replays against a gateway to measure it: a
