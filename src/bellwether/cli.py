@@ -160,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
             "tau2",
             "textvqa",
             "voxpopuli",
+            "websight",
             "wit",
         ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
