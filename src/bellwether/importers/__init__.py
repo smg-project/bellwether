@@ -90,4 +90,8 @@ def run(args: argparse.Namespace) -> int:
         from .peoplesspeech import run as run_peoplesspeech
 
         return run_peoplesspeech(args)
+    if args.dataset == "gqa":
+        from .gqa import run as run_gqa
+
+        return run_gqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")

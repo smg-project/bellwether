@@ -18,6 +18,7 @@ on:
       - src/bellwether/importers/chartqa.py
       - src/bellwether/importers/scienceqa.py
       - src/bellwether/importers/ocrbench.py
+      - src/bellwether/importers/gqa.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -35,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench]
+        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

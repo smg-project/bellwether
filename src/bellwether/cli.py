@@ -142,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
             "docvqa",
             "fleurs",
             "glaive-v2",
+            "gqa",
             "gsm8k",
             "hermes",
             "librispeech",
