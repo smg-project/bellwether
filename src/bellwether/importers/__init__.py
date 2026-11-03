@@ -102,4 +102,8 @@ def run(args: argparse.Namespace) -> int:
         from .doclaynet import run as run_doclaynet
 
         return run_doclaynet(args)
+    if args.dataset == "pixmodocs":
+        from .pixmodocs import run as run_pixmodocs
+
+        return run_pixmodocs(args)
     raise ValueError(f"no importer for {args.dataset!r}")
