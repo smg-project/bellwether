@@ -69,7 +69,7 @@ def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert list(doclaynet.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", doclaynet.FILES[FILE])
     assert doclaynet.SOURCE == f"hf:datasets/ds4sd/DocLayNet-v1.1@{doclaynet.REVISION}"
     assert doclaynet.CARD_LICENSE == "other" and doclaynet.LICENSE == "CDLA-Permissive-1.0"
-    assert doclaynet.SHARDS == ((FILE, 0, 1000),)
+    assert doclaynet.SHARDS == ((FILE, 0, 1000), (FILE, 1000, 1500))
 
 
 def test_read_gives_every_page_in_row_order_with_its_origin(pinned):
