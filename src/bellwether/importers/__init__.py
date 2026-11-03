@@ -62,4 +62,8 @@ def run(args: argparse.Namespace) -> int:
         from .chartqa import run as run_chartqa
 
         return run_chartqa(args)
+    if args.dataset == "scienceqa":
+        from .scienceqa import run as run_scienceqa
+
+        return run_scienceqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")
