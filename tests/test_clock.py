@@ -1,6 +1,6 @@
 import json
 import shutil
-from datetime import date
+from datetime import UTC, datetime
 
 import pytest
 from transformers.utils import chat_template_utils
@@ -8,8 +8,9 @@ from transformers.utils import chat_template_utils
 from bellwether.record import clock
 from bellwether.record.reference import HfTemplateOracle
 
-EPOCH = "1791979200"  # 2026-10-14 12:00:00 UTC
-DAY = "2026-10-14"
+EPOCH = "1791374400"  # 2026-10-07 12:00:00 UTC: an instant SOURCE_DATE_EPOCH names in these tests
+DAY = "2026-10-07"
+RECORDING_DAY = "2026-10-14"  # the day clock.RECORDING_DAY names
 
 
 @pytest.fixture
@@ -20,16 +21,27 @@ def unpinned(monkeypatch):
 
 def test_strftime_now_renders_the_pinned_day_once_the_clock_is_pinned(monkeypatch, unpinned):
     monkeypatch.setenv(clock.ENV, EPOCH)
-    assert clock.pin_template_clock() is not None
+    assert clock.pin_template_clock() == datetime(2026, 10, 7, 12, 0)
     rendered = chat_template_utils._compile_jinja_template("{{ strftime_now('%Y-%m-%d') }}").render()
     assert rendered == DAY
 
 
-def test_without_the_variable_the_clock_stays_the_real_one(monkeypatch, unpinned):
+def test_without_the_variable_the_clock_is_the_recording_day(monkeypatch, unpinned):
     monkeypatch.delenv(clock.ENV, raising=False)
-    assert clock.pin_template_clock() is None
+    assert clock.pinned_value() == clock.RECORDING_DAY
+    assert clock.pin_template_clock() == datetime(2026, 10, 14, 12, 0)
     rendered = chat_template_utils._compile_jinja_template("{{ strftime_now('%Y-%m-%d') }}").render()
-    assert rendered == date.today().isoformat()
+    assert rendered == RECORDING_DAY
+
+
+def test_a_blank_variable_reads_as_unset(monkeypatch):
+    monkeypatch.setenv(clock.ENV, "  ")
+    assert clock.pinned_value() == clock.RECORDING_DAY
+
+
+def test_the_recording_day_is_noon_utc_so_every_zone_formats_the_same_day():
+    instant = datetime.fromtimestamp(int(clock.RECORDING_DAY), tz=UTC)
+    assert instant.strftime("%Y-%m-%d %H:%M") == f"{RECORDING_DAY} 12:00"
 
 
 def test_the_reference_renders_at_the_epoch_and_its_provenance_names_it(monkeypatch, unpinned, tiny_model, tmp_path):
@@ -46,8 +58,12 @@ def test_the_reference_renders_at_the_epoch_and_its_provenance_names_it(monkeypa
     assert rendered.text.startswith(f"Today: {DAY}\n")
     assert oracle.provenance()["source_date_epoch"] == EPOCH
     # The provenance names the epoch the oracle was built with, whatever the variable says later.
-    monkeypatch.setenv(clock.ENV, "1791374400")
+    monkeypatch.setenv(clock.ENV, "1791979200")
     assert oracle.provenance()["source_date_epoch"] == EPOCH
     monkeypatch.delenv(clock.ENV)
     assert oracle.provenance()["source_date_epoch"] == EPOCH
-    assert "source_date_epoch" not in HfTemplateOracle(str(checkpoint), "local").provenance()
+    # Built without the variable, an oracle renders at the recording day and its provenance names that day.
+    unset = HfTemplateOracle(str(checkpoint), "local")
+    assert unset.provenance()["source_date_epoch"] == clock.RECORDING_DAY
+    rendered = unset.render({"messages": [{"role": "user", "content": "Hello"}]})
+    assert rendered.text.startswith(f"Today: {RECORDING_DAY}\n")

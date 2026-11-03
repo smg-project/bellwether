@@ -270,7 +270,7 @@ class HfTemplateOracle:
                 if self.processor_template_sha256
                 else {}
             ),
-            **({"source_date_epoch": self.source_date_epoch} if self.source_date_epoch else {}),
+            "source_date_epoch": self.source_date_epoch,
         }
         if self.vendor_code:
             found |= vendor.packages()
