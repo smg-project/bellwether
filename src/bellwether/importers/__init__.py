@@ -162,4 +162,8 @@ def run(args: argparse.Namespace) -> int:
         from .latexocr import run as run_latexocr
 
         return run_latexocr(args)
+    if args.dataset == "pubtabnet":
+        from .pubtabnet import run as run_pubtabnet
+
+        return run_pubtabnet(args)
     raise ValueError(f"no importer for {args.dataset!r}")

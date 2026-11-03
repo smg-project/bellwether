@@ -163,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
             "pets",
             "pixmocap",
             "pixmodocs",
+            "pubtabnet",
             "realworldqa",
             "scienceqa",
             "shapes",
