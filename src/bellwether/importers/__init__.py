@@ -98,4 +98,8 @@ def run(args: argparse.Namespace) -> int:
         from .wit import run as run_wit
 
         return run_wit(args)
+    if args.dataset == "doclaynet":
+        from .doclaynet import run as run_doclaynet
+
+        return run_doclaynet(args)
     raise ValueError(f"no importer for {args.dataset!r}")

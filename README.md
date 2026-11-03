@@ -962,6 +962,7 @@ The images the references of every processor family are recorded over, by the da
 | chartqa | hf:datasets/HuggingFaceM4/ChartQA@b605b6e0 | GPL-3.0 | 1509 | 64.8 MB |
 | coco | http://images.cocodataset.org/zips/val2017.zip | images: Flickr Terms of Use; annotations: CC-BY-4.0 | 5000 | 814.7 MB |
 | derived | coco | images: Flickr Terms of Use; annotations: CC-BY-4.0 | 4833 | 1.07 GB |
+| doclaynet | hf:datasets/ds4sd/DocLayNet-v1.1@5e893923 | CDLA-Permissive-1.0 | 1000 | 461.5 MB |
 | docvqa | hf:datasets/lmms-lab-encoder/DocVQA@539088ef | Apache-2.0 | 1285 | 832.7 MB |
 | gqa | hf:datasets/lmms-lab-encoder/GQA@a6e72d6e | MIT | 398 | 65.8 MB |
 | mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
@@ -969,7 +970,7 @@ The images the references of every processor family are recorded over, by the da
 | scienceqa | hf:datasets/derek-thomas/ScienceQA@f18b0a70 | CC-BY-NC-SA-4.0 | 1799 | 108.5 MB |
 | textvqa | hf:datasets/lmms-lab-encoder/textvqa@9c0699cd | CC-BY-4.0 | 3166 | 916.4 MB |
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 2000 | 59.5 MB |
-| all | | | 21879 | 4.35 GB |
+| all | | | 22879 | 4.81 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
