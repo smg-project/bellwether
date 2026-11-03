@@ -122,4 +122,8 @@ def run(args: argparse.Namespace) -> int:
         from .cord import run as run_cord
 
         return run_cord(args)
+    if args.dataset == "pixmocap":
+        from .pixmocap import run as run_pixmocap
+
+        return run_pixmocap(args)
     raise ValueError(f"no importer for {args.dataset!r}")
