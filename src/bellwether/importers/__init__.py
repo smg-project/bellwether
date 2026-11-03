@@ -158,4 +158,8 @@ def run(args: argparse.Namespace) -> int:
         from .invoices import run as run_invoices
 
         return run_invoices(args)
+    if args.dataset == "latexocr":
+        from .latexocr import run as run_latexocr
+
+        return run_latexocr(args)
     raise ValueError(f"no importer for {args.dataset!r}")
