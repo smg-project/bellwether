@@ -56,6 +56,23 @@ def engine_renderer(architectures: list[str]) -> str | None:
     return "kimi_k3" if KIMI_K3_ARCHITECTURE in architectures else None
 
 
+# The Kimi line's tokenizer module among a checkpoint's files (its ``auto_map`` names the class): the id form's key.
+KIMI_TOKENIZER_MODULE = "tokenization_kimi"
+# How a served Kimi model writes a tool call's id: the tool's name and the call's place in the turn, which the engine's
+# reader for the family takes the name back from (``vllm/tool_parsers/kimi_k2_tool_parser.py`` at v0.31.0).
+KIMI_CALL_ID = "functions.{name}:{index}"
+
+
+def call_id_form(tokenizer: object) -> str | None:
+    """The form a served model of the checkpoint's vendor writes a tool call's id in, for a vendor whose chat templates
+    may render a call by its id and never by its name: the Kimi line's ``functions.<name>:<index>`` for a checkpoint
+    whose tokenizer is the Kimi class (``tokenization_kimi.py``); None for every other checkpoint. The round trip
+    gives a hand-written case's calls ids of this form when the template writes the id and not the name
+    (``roundtrip.RoundtripOracle.with_vendor_call_ids``), so the reference carries what the model writes."""
+    module = getattr(type(tokenizer), "__module__", None) or ""
+    return KIMI_CALL_ID if module.rsplit(".", 1)[-1] == KIMI_TOKENIZER_MODULE else None
+
+
 def kimi_k3_kwargs(kwargs: dict, reasoning_effort: object = None) -> dict:
     """``kwargs`` as the engine's Kimi K3 renderer hands them to the class for a request whose top-level
     ``reasoning_effort`` is ``reasoning_effort``.

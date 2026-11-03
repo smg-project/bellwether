@@ -22,14 +22,22 @@ from bellwether import unpack as unpack_module
 from bellwether.cli import main
 from bellwether.inputs import oracle_inputs
 from bellwether.manifest import find_manifest, load_manifest, load_manifests, slug_for
-from bellwether.record import reference
+from bellwether.record import reference, vendor
 from bellwether.record import sets as set_tables
 from bellwether.record.chunks import chunk_plans
 from bellwether.record.content_format import detect_content_format, in_content_format
 from bellwether.record.corpus import load_corpus, read_cases
 from bellwether.record.fixtures import canonical_line, read_fixture_file, schema_path, validator, write_fixture_file
 from bellwether.record.reference import HfTemplateOracle, developer_as_system, load_tokenizer
-from bellwether.record.roundtrip import RoundtripOracle, as_vllm_gives_it, generation_eos_ids, next_messages
+from bellwether.record.roundtrip import (
+    RoundtripOracle,
+    as_vllm_gives_it,
+    calls_with_ids,
+    generation_eos_ids,
+    next_messages,
+    renamed,
+    with_arguments_as_parsers_return_them,
+)
 from bellwether.storage import is_lfs_pointer, lfs_pull_command, plain_text
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -3659,3 +3667,99 @@ def test_unpack_refuses_to_replace_a_directory_whose_manifest_toml_is_not_a_bell
     assert "did not write" in capsys.readouterr().err
     assert (out / "tiny-chat" / "manifest.toml").read_text() == NOT_BELLWETHER
     assert not (out / "tiny-chat" / "render").exists()
+
+
+# Kimi K2's shape: the template writes a call's id and its arguments and never its name; the served model puts the
+# name inside the id (`functions.<name>:<index>`), and the family's readers take it back from there.
+ID_ONLY_CALL = (
+    "{{ '<tool_call>' + (c['id'] if c['id'] is defined else '') + '<args>' + c['function']['arguments'] | tojson"
+    " + '</tool_call>' }}"
+)
+
+
+def test_call_id_form_is_the_kimi_lines_for_its_tokenizer_class_and_none_for_any_other():
+    kimi = type("TikTokenTokenizer", (), {})
+    kimi.__module__ = "transformers_modules.moonshotai.Kimi-K2-Instruct.0123abcd.tokenization_kimi"
+    assert vendor.call_id_form(kimi()) == "functions.{name}:{index}"
+    other = type("TikTokenTokenizer", (), {})
+    other.__module__ = "transformers_modules.vendor.Model.0123abcd.tokenization_other"
+    assert vendor.call_id_form(other()) is None
+    assert vendor.call_id_form(object()) is None
+
+
+def test_a_template_that_renders_a_call_by_its_id_alone_records_the_case_with_the_ids_the_model_writes(
+    tiny_model, tmp_path_factory
+):
+    """Without the vendor's id form the case is refused (renaming the call leaves the turn as it was); with it the
+    round trip gives the calls the ids the model writes, the renaming probe follows the id, and the output and the
+    reference carry them."""
+    model = tiny_variant(tiny_model, tmp_path_factory, "id-only-chat", assistant_template(ID_ONLY_CALL))
+    oracle = RoundtripOracle(str(model), "local")
+    request = {"messages": [user("Weather?")]}
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
+        oracle.render_output(request, {"content": "", "tool_calls": [weather_call()]})
+    oracle.call_id_form = vendor.KIMI_CALL_ID
+    message = {"content": "", "tool_calls": [weather_call(), weather_call_with('{"city": "Rome"}')]}
+    out = oracle.render_output(request, message)
+    assert out.tool_call_ids == ["functions.get_weather:0", "functions.get_weather:1"]
+    assert out.text == (
+        '<tool_call>functions.get_weather:0<args>{"city": "Paris"}</tool_call>'
+        '<tool_call>functions.get_weather:1<args>{"city": "Rome"}</tool_call>'
+    )
+    assert out.finish_reason == "tool_calls"
+    assert "id" not in message["tool_calls"][0], "the case's own message is left as it was"
+    reference = calls_with_ids(with_arguments_as_parsers_return_them(message), out.tool_call_ids)
+    assert [call["id"] for call in reference["tool_calls"]] == out.tool_call_ids
+    assert calls_with_ids(message, None) is message
+
+
+def test_a_template_that_renders_the_call_name_gives_the_calls_no_id_under_the_vendors_form(
+    tiny_model, tmp_path_factory
+):
+    """Kimi K3's shape: the template writes the name, so the reference keeps the calls as the case gives them."""
+    call = "{{ '<tool_call>' + c['function']['name'] + ' ' + c['function']['arguments'] | tojson + '</tool_call>' }}"
+    model = tiny_variant(tiny_model, tmp_path_factory, "named-call-chat", assistant_template(call))
+    oracle = RoundtripOracle(str(model), "local")
+    oracle.call_id_form = vendor.KIMI_CALL_ID
+    out = oracle.render_output({"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]})
+    assert out.tool_call_ids is None
+    assert out.text == '<tool_call>get_weather {"city": "Paris"}</tool_call>'
+
+
+def test_a_call_that_carries_an_id_keeps_it_and_an_id_only_template_still_fails_the_case(tiny_model, tmp_path_factory):
+    """The corpus's own ids are not rewritten: a call with an id renders as given, and a template that writes neither
+    the name nor an id of the vendor's form is refused as before."""
+    model = tiny_variant(tiny_model, tmp_path_factory, "id-only-chat-given-id", assistant_template(ID_ONLY_CALL))
+    oracle = RoundtripOracle(str(model), "local")
+    oracle.call_id_form = vendor.KIMI_CALL_ID
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
+        oracle.render_output(
+            {"messages": [user("Weather?")]}, {"content": "", "tool_calls": [{**weather_call(), "id": "call_7"}]}
+        )
+
+
+def test_a_template_that_drops_every_call_is_refused_even_with_the_vendors_form(tiny_model, tmp_path_factory):
+    """The ids help only a template that renders them: one that writes no call at all stays refused."""
+    model = tiny_variant(tiny_model, tmp_path_factory, "no-calls-chat-vendor-form", assistant_template(""))
+    oracle = RoundtripOracle(str(model), "local")
+    oracle.call_id_form = vendor.KIMI_CALL_ID
+    with pytest.raises(
+        ValueError,
+        match=re.escape("does not render every tool call: renaming call 0 (get_weather) leaves"),
+    ):
+        oracle.render_output({"messages": [user("Weather?")]}, {"content": "", "tool_calls": [weather_call()]})
+
+
+def test_renamed_renames_the_id_with_the_call_only_when_the_id_is_the_forms():
+    message = {"tool_calls": [{**weather_call(), "id": "functions.get_weather:0"}, {**weather_call(), "id": "call_7"}]}
+    first = next_messages(message)  # the tool messages name the calls by their ids
+    assert [tool["tool_call_id"] for tool in first] == ["functions.get_weather:0", "call_7"]
+    assert renamed(message, 0, vendor.KIMI_CALL_ID)["tool_calls"][0]["id"] == "functions.bellwether_marker:0"
+    assert renamed(message, 1, vendor.KIMI_CALL_ID)["tool_calls"][1]["id"] == "call_7"
+    assert renamed(message, 0)["tool_calls"][0]["id"] == "functions.get_weather:0"
