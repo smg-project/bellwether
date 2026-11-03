@@ -54,4 +54,8 @@ def run(args: argparse.Namespace) -> int:
         from .textvqa import run as run_textvqa
 
         return run_textvqa(args)
+    if args.dataset == "coco":
+        from .coco import run as run_coco
+
+        return run_coco(args)
     raise ValueError(f"no importer for {args.dataset!r}")
