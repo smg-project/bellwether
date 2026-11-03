@@ -154,4 +154,8 @@ def run(args: argparse.Namespace) -> int:
         from .mnist import run as run_mnist
 
         return run_mnist(args)
+    if args.dataset == "invoices":
+        from .invoices import run as run_invoices
+
+        return run_invoices(args)
     raise ValueError(f"no importer for {args.dataset!r}")
