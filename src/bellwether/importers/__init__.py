@@ -94,4 +94,8 @@ def run(args: argparse.Namespace) -> int:
         from .gqa import run as run_gqa
 
         return run_gqa(args)
+    if args.dataset == "wit":
+        from .wit import run as run_wit
+
+        return run_wit(args)
     raise ValueError(f"no importer for {args.dataset!r}")
