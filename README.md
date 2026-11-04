@@ -963,11 +963,12 @@ The images the references of every processor family are recorded over, by the da
 | coco | http://images.cocodataset.org/zips/val2017.zip | images: Flickr Terms of Use; annotations: CC-BY-4.0 | 5000 | 814.7 MB |
 | derived | coco | images: Flickr Terms of Use; annotations: CC-BY-4.0 | 4833 | 1.07 GB |
 | docvqa | hf:datasets/lmms-lab-encoder/DocVQA@539088ef | Apache-2.0 | 1285 | 832.7 MB |
+| gqa | hf:datasets/lmms-lab-encoder/GQA@a6e72d6e | MIT | 398 | 65.8 MB |
 | mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
 | ocrbench | hf:datasets/echo840/OCRBench@92a54bd1 | MIT | 930 | 75.2 MB |
 | scienceqa | hf:datasets/derek-thomas/ScienceQA@f18b0a70 | CC-BY-NC-SA-4.0 | 1799 | 108.5 MB |
 | textvqa | hf:datasets/lmms-lab-encoder/textvqa@9c0699cd | CC-BY-4.0 | 3166 | 916.4 MB |
-| all | | | 19481 | 4.22 GB |
+| all | | | 19879 | 4.29 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
