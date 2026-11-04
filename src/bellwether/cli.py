@@ -139,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
             "bfcl",
             "chartqa",
             "coco",
+            "cord",
             "doclaynet",
             "docmatix",
             "docvqa",

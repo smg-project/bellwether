@@ -118,4 +118,8 @@ def run(args: argparse.Namespace) -> int:
         from .mathvista import run as run_mathvista
 
         return run_mathvista(args)
+    if args.dataset == "cord":
+        from .cord import run as run_cord
+
+        return run_cord(args)
     raise ValueError(f"no importer for {args.dataset!r}")
