@@ -14,9 +14,10 @@ checked, and what the import keeps and leaves out is printed, by the set writer 
 
 The dataset cards state no license. A row's code, its gold patch, is under its repository's license at the row's base
 commit, read from the repository's license file there (``license_of``). ``swebench_licenses.json`` pins that file and
-any NOTICE file at every base commit, by repository, commit and sha256; the import fetches them (``github.fetch``),
-copies them next to the sets, and names on each parse line the license, its holder and the copies that go with it. A
-row whose code is copyleft goes to its family's ``-copyleft`` sets.
+any NOTICE file at every base commit, by repository, commit and sha256; the import reads each from its copy next to
+the sets when the copy's sha256 is the pinned one and fetches it otherwise (``github.fetch``), writes the copies next
+to the sets, and names on each parse line the license, its holder and the copies that go with it. A row whose code is
+copyleft goes to its family's ``-copyleft`` sets.
 """
 
 from __future__ import annotations
@@ -503,13 +504,15 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, files:
     return corpus_sets.check(sets, corpus_dir, "swebench-", "SWE-bench set", files)
 
 
-def license_texts(table: dict, cache: Path) -> dict[str, bytes]:
-    """The bytes of every file the license table pins, fetched by repository, commit and sha256."""
+def license_texts(table: dict, cache: Path, corpus_dir: Path) -> dict[str, bytes]:
+    """The bytes of every file the license table pins: the copy already next to the sets when its sha256 is the pinned
+    one, else fetched by repository, commit and sha256."""
     texts = {}
     for name, pin in table["files"].items():
         owner, repository = pin["repository"].split("/")
+        copy = corpus_dir / LICENSE_DIR / name
         texts[name] = github.fetch(
-            owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache
+            owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache, copy=copy
         ).read_bytes()
     return texts
 
@@ -522,7 +525,7 @@ def run(args: argparse.Namespace) -> int:
         path = hf.fetch(source.dataset_id, source.revision, source.file, source.sha256, cache=args.cache)
         sources.append((source, read_rows(path)))
     table = load_license_table()
-    texts = license_texts(table, args.cache)
+    texts = license_texts(table, args.cache, args.corpus)
     files = {f"{LICENSE_DIR}/{name}": text for name, text in texts.items()}
     skipped: list[tuple[str, str]] = []
     repeated: list[tuple[str, str, str]] = []
