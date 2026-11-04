@@ -209,8 +209,8 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [deepseek-v3.1](fixtures/deepseek-v3.1/sets.toml) | deepseek-ai/DeepSeek-V3.1 @ c0781d03 | 3 | 3 | 531731 | 19300 | 328709 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [deepseek-v3.2](fixtures/deepseek-v3.2/sets.toml) | deepseek-ai/DeepSeek-V3.2 @ a7e62ac0 | 2 | 2 | 24 | 19 | 9 | hand-written |
 | [deepseek-v3.2-exp](fixtures/deepseek-v3.2-exp/sets.toml) | deepseek-ai/DeepSeek-V3.2-Exp @ 194c67e1 | 2 | 3 | 531736 | 184988 | 254527 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [deepseek-v4-flash](fixtures/deepseek-v4-flash/sets.toml) | deepseek-ai/DeepSeek-V4-Flash @ 60d8d707 | 2 | 2 | 24 | 28 | 0 | hand-written |
-| [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 531736 | 589671 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [deepseek-v4-flash](fixtures/deepseek-v4-flash/sets.toml) | deepseek-ai/DeepSeek-V4-Flash @ 60d8d707 | 2 | 2 | 26 | 28 | 0 | hand-written |
+| [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 531738 | 589671 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [devstral-2-123b-instruct-2512](fixtures/devstral-2-123b-instruct-2512/sets.toml) | mistralai/Devstral-2-123B-Instruct-2512 @ 1613bf01 | 1 | 2 | 531731 | 570202 | 6594 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [dler-llama-nemotron-8b-merge-research](fixtures/dler-llama-nemotron-8b-merge-research/sets.toml) | nvidia/DLER-Llama-Nemotron-8B-Merge-Research @ 029e0043 | 1 | 3 | 471554 | 416856 | 176464 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [dler-r1-1.5b-research](fixtures/dler-r1-1.5b-research/sets.toml) | nvidia/DLER-R1-1.5B-Research @ d0523143 | 2 | 3 | 531736 | 94830 | 329706 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -936,7 +936,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1293 | | 361288646 | 266945612 | 108981906 | |
+| all | | 1293 | | 361288650 | 266945612 | 108981906 | |
 
 116 more groups (183 checkpoints) have a manifest and nothing recorded yet.
 
@@ -949,14 +949,14 @@ The cases every group is recorded over, by the source they were imported from.
 | bfcl | pypi:bfcl-eval==2026.3.23 | Apache-2.0 | 17 | 4119 | 14 | 2809 | 37.1 MB | 37.1 MB, plain |
 | glaive-v2 | hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645 | Apache-2.0 | 71 | 289494 | 71 | 306240 | 1.24 GB | 81.4 MB, zstd in Git LFS |
 | gsm8k | github:openai/grade-school-math@3101c7d5 | MIT | 2 | 8792 | 4 | 17584 | 22.6 MB | 22.6 MB, plain |
-| hand-written | written in this repository | | 1 | 24 | 2 | 28 | 0.0 MB | 0.0 MB, plain |
+| hand-written | written in this repository | | 3 | 28 | 2 | 28 | 0.0 MB | 0.0 MB, plain |
 | hermes | hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d2 | Apache-2.0 | 3 | 20769 | 3 | 20773 | 99.6 MB | 5.8 MB, zstd in Git LFS |
 | mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
 | shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
 | swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
 | swehero | hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119 | CC-BY-4.0 | 14 | 79627 | 14 | 101568 | 14.84 GB | 882.8 MB, zstd in Git LFS |
 | tau2 | github:sierra-research/tau2-bench@4ce7c039 | MIT | 22 | 124175 | 22 | 127433 | 9.77 GB | 30.8 MB, zstd in Git LFS |
-| all | | | 144 | 531736 | 156 | 589745 | 26.08 GB | 1.13 GB |
+| all | | | 146 | 531740 | 156 | 589745 | 26.08 GB | 1.13 GB |
 
 ### Images
 
