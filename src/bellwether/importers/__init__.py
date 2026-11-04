@@ -106,4 +106,8 @@ def run(args: argparse.Namespace) -> int:
         from .pixmodocs import run as run_pixmodocs
 
         return run_pixmodocs(args)
+    if args.dataset == "websight":
+        from .websight import run as run_websight
+
+        return run_websight(args)
     raise ValueError(f"no importer for {args.dataset!r}")
