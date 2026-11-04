@@ -298,6 +298,50 @@ def test_reference_ids_leave_out_the_files_truncation_and_padding_blocks(tiny_mo
     assert oracle.provenance()["encoder"] == "tokenizers:tokenizer.json"
 
 
+def test_reference_ids_settle_two_added_tokens_with_one_normalized_spelling(tiny_model, tmp_path):
+    """A checkpoint may ship two added tokens matched after normalization with one normalized spelling (a letter and
+    its compatibility form under NFKC); its own tokenizer gives the letter one of the two ids per process. The
+    reference gives the letter the lowest id and the compatibility form, spelled as such, its own, in every process."""
+    from tokenizers import AddedToken, Tokenizer, normalizers
+
+    directory = tmp_path / "with-a-tie"
+    shutil.copytree(tiny_model, directory)
+    shipped = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    shipped.normalizer = normalizers.NFKC()
+    shipped.add_tokens([AddedToken("\u05d0", normalized=True), AddedToken("\ufb21", normalized=True)])
+    shipped.save(str(directory / "tokenizer.json"))
+    letter, compatibility = shipped.token_to_id("\u05d0"), shipped.token_to_id("\ufb21")
+    assert letter < compatibility
+    oracle = HfTemplateOracle(str(directory), "local")
+    rendered = oracle.render({"messages": [user("\u05d0 \ufb21")]})
+    assert [id_ for id_ in rendered.input_ids if id_ in (letter, compatibility)] == [letter, compatibility]
+    # Decoding is untouched: either id still reads as the letter, as the checkpoint's own tokenizer reads it.
+    assert oracle.encoder.decode([letter]) == oracle.encoder.decode([compatibility]) == "\u05d0"
+    assert oracle.provenance()["encoder"] == "tokenizers:tokenizer.json"
+
+
+def test_the_letter_keeps_the_normalized_match_whichever_id_the_pair_gave_it(tiny_model, tmp_path):
+    """The compatibility form may carry the lower id; the letter still keeps the normalized match, so plain text reads
+    as before, a longer normalized token that holds the letter included, and the compatibility form is matched by its
+    own spelling before normalization, where no longer normalized token spans it any more."""
+    from tokenizers import AddedToken, Tokenizer, normalizers
+
+    directory = tmp_path / "with-a-tie-the-other-way"
+    shutil.copytree(tiny_model, directory)
+    shipped = Tokenizer.from_file(str(directory / "tokenizer.json"))
+    shipped.normalizer = normalizers.NFKC()
+    shipped.add_tokens([AddedToken(text, normalized=True) for text in ("\ufb21", "\u05d0", "\u05d0\u05d1")])
+    shipped.save(str(directory / "tokenizer.json"))
+    compatibility, letter, pair = (shipped.token_to_id(text) for text in ("\ufb21", "\u05d0", "\u05d0\u05d1"))
+    assert compatibility < letter < pair
+    oracle = HfTemplateOracle(str(directory), "local")
+    ids_of = lambda text: oracle.encoder.encode(text, add_special_tokens=False).ids  # noqa: E731
+    assert ids_of("\u05d0") == [letter]
+    assert ids_of("\u05d0\u05d1") == [pair]
+    assert ids_of("\ufb21") == [compatibility]
+    assert ids_of("\ufb21\u05d1")[0] == compatibility and pair not in ids_of("\ufb21\u05d1")
+
+
 def test_reference_oracle_passes_template_kwargs_tools_and_continuation_through(tiny_model):
     oracle = HfTemplateOracle(str(tiny_model), "local")
     off = oracle.render({"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}})

@@ -530,7 +530,12 @@ def checkpoint_encoder(model: str, revision: str):
     Read without the file's ``truncation`` and ``padding`` blocks, the call defaults the checkpoint was trained with:
     the engine's encode applies neither (transformers' fast tokenizer clears both on every call that asks for neither,
     ``set_truncation_and_padding``), so a prompt past the block's ``max_length`` encodes whole and no prompt is padded
-    to its length."""
+    to its length.
+
+    Read with the added tokens matched after normalization that share one normalized spelling settled
+    (``settle_normalized_added_token_ties``): the checkpoint's own tokenizer gives a text that holds such a spelling one
+    id of the group per process, so a reference recorded as the file reads would carry the recording process's pick and
+    a re-record would move it at random."""
     from tokenizers import Tokenizer
 
     from ..inputs import checkpoint_dir
@@ -541,7 +546,53 @@ def checkpoint_encoder(model: str, revision: str):
     tokenizer = Tokenizer.from_file(str(path))
     tokenizer.no_truncation()
     tokenizer.no_padding()
+    settle_normalized_added_token_ties(tokenizer)
     return tokenizer
+
+
+def settle_normalized_added_token_ties(tokenizer) -> int:
+    """Among the added tokens matched after normalization whose normalized spellings are equal (a letter and its
+    compatibility form under NFKC), the member spelled as the normalized form itself (the letter) keeps the normalized
+    match, which every text whose normalized form holds the spelling then encodes to (the lowest id keeps it when no
+    member spells the form), and each other member (a compatibility form) is re-added matched on the raw text
+    (``normalized=False``), where its own spelling alone reaches it; returns how many were re-added. ``tokenizers``
+    matches those tokens with an automaton of their normalized spellings built from a hash map it iterates in a
+    per-process order, and between equal spellings the first wins, so without this the id such a text encodes to
+    changes from one process to the next. The raw match comes before normalization, so a demoted spelling in a text is
+    cut ahead of any longer normalized token that would have spanned it: the one reading that changes beyond the choice
+    of id, confined to the compatibility forms, never to the letter plain text holds. Decoding is untouched: every id
+    keeps its token. A file without a normalizer, or without such a group, is left as it is."""
+    from tokenizers import AddedToken
+
+    normalizer = tokenizer.normalizer
+    if normalizer is None:
+        return 0
+    ids_of_spelling: dict[str, list[int]] = {}
+    added = tokenizer.get_added_tokens_decoder()
+    for id_, token in added.items():
+        if token.normalized:
+            ids_of_spelling.setdefault(normalizer.normalize_str(token.content), []).append(id_)
+    demoted = []
+    for spelling, ids in ids_of_spelling.items():
+        if len(ids) < 2:
+            continue
+        ids = sorted(ids)
+        kept = next((id_ for id_ in ids if added[id_].content == spelling), ids[0])
+        demoted.extend(
+            AddedToken(
+                added[id_].content,
+                single_word=added[id_].single_word,
+                lstrip=added[id_].lstrip,
+                rstrip=added[id_].rstrip,
+                normalized=False,
+                special=added[id_].special,
+            )
+            for id_ in ids
+            if id_ != kept
+        )
+    if demoted:
+        tokenizer.add_tokens(demoted)
+    return len(demoted)
 
 
 def vendor_config(model: str, revision: str) -> bool:
