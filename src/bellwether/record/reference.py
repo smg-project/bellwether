@@ -165,6 +165,8 @@ class HfTemplateOracle:
         )
 
     def render(self, request: dict) -> Rendered:
+        # At this oracle's own instant, whatever another oracle pinned the clock at since it was built.
+        clock.pin_template_clock(self.rendered_at)
         continue_final = bool(request.get("continue_final_message", False))
         tools = request.get("tools")
         kwargs = {

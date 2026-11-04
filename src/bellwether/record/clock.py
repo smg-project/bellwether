@@ -2,7 +2,8 @@
 writes the day into the prompt (Apertus, the Granite line, a Llama 3.2 variant, among others) would give a reference
 that changes with the day the recorder ran. The clock those templates read is one fixed instant, in UTC, and the
 provenance names it: ``SOURCE_DATE_EPOCH`` when it is set (the reproducible-builds convention), else the corpus's
-recording day, ``RECORDING_DAY``. No reference carries the day the recorder ran."""
+recording day, ``RECORDING_DAY``. No reference carries the day the recorder ran, and an oracle renders at the instant
+its provenance names, whatever another oracle pinned the clock at since."""
 
 from __future__ import annotations
 
@@ -26,14 +27,22 @@ def pinned() -> datetime:
     return datetime.fromtimestamp(int(pinned_value()), tz=UTC).replace(tzinfo=None)
 
 
-def pin_template_clock() -> datetime:
-    """Point the clock transformers' ``strftime_now`` reads at the pinned instant, and return it.
-    ``chat_template_utils`` looks ``datetime`` up in its own module at each call, so templates compiled before the pin
-    render the pinned day too."""
-    instant = pinned()
+def pin_template_clock(instant: datetime | None = None) -> datetime:
+    """Point the clock transformers' ``strftime_now`` reads at ``instant`` (the pinned instant when none is given) and
+    return it. ``chat_template_utils`` looks ``datetime`` up in its own module at each call, so templates compiled
+    before the pin render the pinned day too. An oracle calls this with its own instant before every render: two
+    oracles built at different instants in one process each render at the one their provenance names. A clock
+    already at ``instant`` is left as it is."""
+    if instant is None:
+        instant = pinned()
     from transformers.utils import chat_template_utils
 
+    if getattr(chat_template_utils.datetime, "pinned_at", None) == instant:
+        return instant
+
     class Pinned(datetime):
+        pinned_at = instant
+
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return instant if tz is None else instant.replace(tzinfo=UTC).astimezone(tz)
