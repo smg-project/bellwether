@@ -36,6 +36,7 @@ on:
       - src/bellwether/importers/mnist.py
       - src/bellwether/importers/invoices.py
       - src/bellwether/importers/latexocr.py
+      - src/bellwether/importers/pubtabnet.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -53,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz, infovqa, pets, realworldqa, vqarad, pathvqa, mnist, invoices, latexocr]
+        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista, cord, pixmocap, vizwiz, infovqa, pets, realworldqa, vqarad, pathvqa, mnist, invoices, latexocr, pubtabnet]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
