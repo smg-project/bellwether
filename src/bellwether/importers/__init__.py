@@ -126,4 +126,8 @@ def run(args: argparse.Namespace) -> int:
         from .pixmocap import run as run_pixmocap
 
         return run_pixmocap(args)
+    if args.dataset == "vizwiz":
+        from .vizwiz import run as run_vizwiz
+
+        return run_vizwiz(args)
     raise ValueError(f"no importer for {args.dataset!r}")

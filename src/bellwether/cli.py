@@ -163,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
             "swehero",
             "tau2",
             "textvqa",
+            "vizwiz",
             "voxpopuli",
             "websight",
             "wit",
