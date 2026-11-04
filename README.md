@@ -968,6 +968,7 @@ The images the references of every processor family are recorded over, by the da
 | docvqa | hf:datasets/lmms-lab-encoder/DocVQA@539088ef | Apache-2.0 | 1285 | 832.7 MB |
 | gqa | hf:datasets/lmms-lab-encoder/GQA@a6e72d6e | MIT | 398 | 65.8 MB |
 | infovqa | hf:datasets/lmms-lab-encoder/DocVQA@539088ef | Apache-2.0 | 252 | 106.0 MB |
+| invoices | hf:datasets/katanaml-org/invoices-donut-data-v1@d2cde298 | MIT | 425 | 233.5 MB |
 | mathvista | hf:datasets/AI4Math/MathVista@2b6ad694 | CC-BY-SA-4.0 | 972 | 134.9 MB |
 | mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
 | mnist | hf:datasets/ylecun/mnist@77f32790 | MIT | 2000 | 0.5 MB |
@@ -983,7 +984,7 @@ The images the references of every processor family are recorded over, by the da
 | vqarad | hf:datasets/flaviagiammarino/vqa-rad@bcf91e76 | CC0-1.0 | 314 | 16.5 MB |
 | websight | hf:datasets/HuggingFaceM4/WebSight@b11f8172 | CC-BY-4.0 | 2603 | 520.3 MB |
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 2000 | 59.5 MB |
-| all | | | 40550 | 8.91 GB |
+| all | | | 40975 | 9.14 GB |
 
 <!-- end of what bellwether count --readme writes -->
 

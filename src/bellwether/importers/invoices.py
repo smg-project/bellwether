@@ -1,0 +1,101 @@
+"""Sparrow's invoices as an image set, one shard at a time: synthetic invoices rendered as pages.
+
+The data is the Invoices (Sparrow) dataset as Katana ML publishes it on the Hugging Face Hub at a pinned commit: one
+parquet file per split, each row an invoice page in the ``image`` column, stored as the datasets library stores images
+(the bytes and a path), with its ground truth as JSON text. Every row gives a line in file and row order; a invoice
+whose bytes repeat an earlier image's is left out and named, as the text imports name their repeats. The files are read
+as data (``image_sets.parquet_images``); nothing in them runs. The set grows a shard at a time: ``FILES`` lists the
+files imported so far, in order, and a file added later appends its invoices after the earlier ones, so the names
+already written do not move. The dataset card states ``mit``, which the import checks on every run. The dataset ships no
+licence file, so the import copies the MIT License text as the SPDX license list publishes it, from that list's
+repository at a pinned commit.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+
+from . import github, hf, image_sets
+
+DATASET = "invoices"
+REPO = "katanaml-org/invoices-donut-data-v1"
+REVISION = "d2cde298e79c94fb05bc320999deb4b7889b0464"
+SOURCE = hf.source(REPO, REVISION)
+# The dataset card (README.md) at the revision, by its sha256, whose front matter states the licence.
+CARD_SHA256 = "bbba3c0a439a1bc0b745b24d7e2f9d3f72300676aed570511dd97913b65e7531"
+LICENSE = "MIT"
+CARD_LICENSE = "mit"  # the license key of the reviewed card's YAML front matter; LICENSE is its SPDX name
+# The licence text as the SPDX license list publishes it, from the list's repository at one commit.
+LICENSE_OWNER, LICENSE_REPO = "spdx", "license-list-data"
+LICENSE_COMMIT = "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+LICENSE_PATH = "text/MIT.txt"
+LICENSE_SHA256 = "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+LICENSE_COPY = "licenses/invoices-LICENSE"
+SPLIT = "train"
+COLUMNS = ("image",)
+# The shards imported so far, by the sha256 of their bytes, in the order the lines are built; a new shard goes last.
+FILES = {
+    "data/train-00000-of-00001-a5c51039eab2980a.parquet": (
+        "2c2bf65b7fcb9c21edce09c56fac7d247ea453cf86c29d59c45bd95a043b2985"
+    ),
+}
+
+
+def check_license(text: bytes) -> None:
+    """Refuse a licence copy that is not the MIT License.
+
+    ``fetch`` has already held the file to ``LICENSE_SHA256``, the reviewed text. Its first line is checked as well,
+    so that moving the pin to a commit whose file is another text cannot pass on an updated hash alone.
+    """
+    lines = [line.strip() for line in text.decode("utf-8").splitlines() if line.strip()]
+    if lines[:1] != ["MIT License"]:
+        raise ValueError(f"{LICENSE_PATH} at {LICENSE_COMMIT}: not the MIT License; review it")
+
+
+def origin(file: str, row: int, column: str) -> dict:
+    """Where a line came from, in the order the text imports write their origins: the dataset, its source, the file
+    the bytes were read from with its sha256, the row and the column, and the licence."""
+    return {
+        "dataset": DATASET,
+        "source": SOURCE,
+        "sha256": FILES[file],
+        "file": file,
+        "row": row,
+        "column": column,
+        "license": LICENSE,
+    }
+
+
+def read(files: dict[str, Path]) -> Iterator[image_sets.Found]:
+    """Every row of the shards, in the order of ``FILES`` and the rows."""
+    for file in FILES:
+        for row, column, data in image_sets.parquet_images(files[file], COLUMNS):
+            yield image_sets.Found(data, origin(file, row, column), f"Sparrow {SPLIT} row {row}, {column}")
+
+
+def fetch(filename: str, sha256: str, cache: Path) -> Path:
+    """The path of a dataset file at the pinned commit, checked against ``sha256``."""
+    return hf.fetch(REPO, REVISION, filename, sha256, cache)
+
+
+def run(args: argparse.Namespace) -> int:
+    hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, args.cache)
+    license_text = github.fetch(
+        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache
+    ).read_bytes()
+    check_license(license_text)
+    files = {name: fetch(name, sha256, args.cache) for name, sha256 in FILES.items()}
+    copies = {LICENSE_COPY: license_text}
+    if args.check:
+        problems, _ = image_sets.check(DATASET, read(files), args.corpus, copies)
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        if not problems:
+            print(f"{args.corpus}: the Sparrow set equals a fresh import of {SOURCE}")
+        return 1 if problems else 0
+    _, summary = image_sets.write(DATASET, read(files), args.corpus, copies)
+    image_sets.report(DATASET, summary, args.corpus)
+    return 0
