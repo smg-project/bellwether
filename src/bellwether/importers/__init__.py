@@ -110,4 +110,8 @@ def run(args: argparse.Namespace) -> int:
         from .websight import run as run_websight
 
         return run_websight(args)
+    if args.dataset == "docmatix":
+        from .docmatix import run as run_docmatix
+
+        return run_docmatix(args)
     raise ValueError(f"no importer for {args.dataset!r}")

@@ -369,8 +369,9 @@ def _gif(data: bytes) -> Catalogue:
 def parquet_images(path: Path, columns: Iterable[str]) -> Iterator[tuple[int, str, bytes]]:
     """``(row, column, bytes)`` for each image cell of a parquet file, in row order and then in the order of
     ``columns``; ``row`` counts from 0 over the whole file. A cell is the struct the datasets library stores an image
-    as, ``{"bytes", "path"}``; a null cell, or one with no bytes, gives nothing. The file is read in batches, so no
-    more than a batch of images is held at once; nothing in it runs."""
+    as, ``{"bytes", "path"}``, or a list of them where a column holds several images a row (a document's pages), whose
+    items are named ``column[k]`` in order; a null cell, or one with no bytes, gives nothing. The file is read in
+    batches, so no more than a batch of images is held at once; nothing in it runs."""
     import pyarrow.parquet as pq
 
     file = pq.ParquetFile(path)
@@ -382,7 +383,11 @@ def parquet_images(path: Path, columns: Iterable[str]) -> Iterator[tuple[int, st
         for index in range(batch.num_rows):
             for column in wanted:
                 value = cells[column][index]
-                if isinstance(value, dict) and value.get("bytes"):
+                if isinstance(value, list):
+                    for k, item in enumerate(value):
+                        if isinstance(item, dict) and item.get("bytes"):
+                            yield row + index, f"{column}[{k}]", item["bytes"]
+                elif isinstance(value, dict) and value.get("bytes"):
                     yield row + index, column, value["bytes"]
         row += batch.num_rows
 
