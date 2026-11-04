@@ -1,8 +1,8 @@
 """The day a template renders: transformers' ``strftime_now`` reads the clock at each render, so a template that
-writes the day into the prompt (Apertus, the Granite line, a Llama 3.2 variant, among others) gives a reference that
-changes with the day the recorder ran. With ``SOURCE_DATE_EPOCH`` set, the reproducible-builds convention, the clock
-those templates read is that instant, in UTC, and the provenance names it; without it the real day renders, as
-before."""
+writes the day into the prompt (Apertus, the Granite line, a Llama 3.2 variant, among others) would give a reference
+that changes with the day the recorder ran. The clock those templates read is one fixed instant, in UTC, and the
+provenance names it: ``SOURCE_DATE_EPOCH`` when it is set (the reproducible-builds convention), else the corpus's
+recording day, ``RECORDING_DAY``. No reference carries the day the recorder ran."""
 
 from __future__ import annotations
 
@@ -10,29 +10,27 @@ import os
 from datetime import UTC, datetime
 
 ENV = "SOURCE_DATE_EPOCH"
+# Noon UTC of 2026-10-14, the day the dated groups' references are recorded at; noon, so the day is the same in
+# whichever zone a reader formats it. The smg fixture job renders the gateway's side at the same value, so a move of
+# this day re-records every dated set and moves the job's value with it.
+RECORDING_DAY = "1791979200"
 
 
-def pinned_value() -> str | None:
-    """``SOURCE_DATE_EPOCH`` as set, stripped; none when the variable is unset or empty."""
-    return os.environ.get(ENV, "").strip() or None
+def pinned_value() -> str:
+    """``SOURCE_DATE_EPOCH`` as set, stripped; ``RECORDING_DAY`` when the variable is unset or blank."""
+    return os.environ.get(ENV, "").strip() or RECORDING_DAY
 
 
-def pinned() -> datetime | None:
-    """The instant ``SOURCE_DATE_EPOCH`` names, as a naive UTC datetime (the shape ``datetime.now()`` returns), or
-    none when the variable is unset or empty."""
-    value = pinned_value()
-    if value is None:
-        return None
-    return datetime.fromtimestamp(int(value), tz=UTC).replace(tzinfo=None)
+def pinned() -> datetime:
+    """The instant ``pinned_value`` names, as a naive UTC datetime (the shape ``datetime.now()`` returns)."""
+    return datetime.fromtimestamp(int(pinned_value()), tz=UTC).replace(tzinfo=None)
 
 
-def pin_template_clock() -> datetime | None:
-    """Point the clock transformers' ``strftime_now`` reads at the pinned instant, and return it; none, and nothing
-    changed, when ``SOURCE_DATE_EPOCH`` is unset. ``chat_template_utils`` looks ``datetime`` up in its own module at
-    each call, so templates compiled before the pin render the pinned day too."""
+def pin_template_clock() -> datetime:
+    """Point the clock transformers' ``strftime_now`` reads at the pinned instant, and return it.
+    ``chat_template_utils`` looks ``datetime`` up in its own module at each call, so templates compiled before the pin
+    render the pinned day too."""
     instant = pinned()
-    if instant is None:
-        return None
     from transformers.utils import chat_template_utils
 
     class Pinned(datetime):

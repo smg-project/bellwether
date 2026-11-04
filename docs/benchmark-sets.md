@@ -389,8 +389,10 @@ reference stays the checkpoint's own files.
     message. A prompt that changes with the day can be neither a fixture nor compared across two
     runs, so the recorder renders every reference at one fixed date, written in provenance, and
     vLLM's side gets the same date: the recorder's clock is `SOURCE_DATE_EPOCH` (the reproducible-builds
-    convention); with it set, `strftime_now` renders that instant in UTC for every reference and the
-    provenance's `source_date_epoch` names it; unset, the real day renders. How vLLM's side is given
+    convention) when it is set, else the corpus's recording day (noon UTC of 2026-10-14,
+    `bellwether.record.clock.RECORDING_DAY`, the value the smg fixture job renders the gateway's side at);
+    `strftime_now` renders that instant in UTC for every reference and the provenance's `source_date_epoch`
+    names it, so no reference carries the day the recorder ran. How vLLM's side is given
     it is settled with step 5's recording.
 - **Where it lives.** In the case's own line, beside `reference`, as `second_references`, keyed by
   the template's file name, so one line holds every result for its case and the two references are
