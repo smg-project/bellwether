@@ -6,6 +6,13 @@ the other way round. The corpus states the message; the template renders it as t
 turn after the generation prompt; the turn up to where generation stops is the output the parsers
 must turn back into that message, and its token ids are the engine chunks a replay feeds.
 
+The round trip proves a call reached the turn by renaming it (``check_every_call_is_rendered``). A vendor whose
+templates write a call by its id and never by its name (the Kimi K2 line: ``<|tool_call_begin|>{{ id }}``, the name
+inside the id a served model writes, ``functions.<name>:<index>``) would have every hand-written call case refused,
+since those cases carry no id. For such a checkpoint the round trip first gives the case's calls the ids the model
+writes (``vendor.call_id_form``, ``RoundtripOracle.with_vendor_call_ids``), the renaming probe renames the id with the
+call, and the recorded reference keeps the ids; a template that writes the name gets none.
+
 Generation stops on vLLM's stop set: the ``eos_token_id`` of the checkpoint's generation config
 (``generation_config.json``, else ``config.json`` as ``GenerationConfig.from_model_config`` reads it)
 and the tokenizer's eos, when it has one (``SamplingParams.update_from_generation_config``). That is
@@ -102,6 +109,9 @@ class OutputText:
     content_format: ContentFormat
     developer_role: str
     template_source: str
+    # The ids the round trip gave the message's calls, in order, when the template renders a call by its id and not
+    # its name (``RoundtripOracle.with_vendor_call_ids``); None when the calls were rendered as the case gives them.
+    tool_call_ids: list[str] | None = None
 
 
 class RoundtripOracle:
@@ -109,6 +119,9 @@ class RoundtripOracle:
         self.renderer = HfTemplateOracle(model, revision, vendor_code)
         self.tokenizer = self.renderer.tokenizer
         self.generate_eos_ids, self.generation_config_source = generation_eos_ids(model, revision)
+        # The form a served model of the checkpoint's vendor writes a call's id in, for a vendor whose templates may
+        # render the id and not the name (the Kimi line); None for every other checkpoint (``with_vendor_call_ids``).
+        self.call_id_form = vendor.call_id_form(self.tokenizer) if vendor_code else None
         # vLLM's stop set: the generation config's eos_token_id and the tokenizer's eos, when it has one.
         eos = self.tokenizer.eos_token_id
         self.stop_ids = set(self.generate_eos_ids) | ({eos} if eos is not None else set())
@@ -131,6 +144,7 @@ class RoundtripOracle:
         kwargs = self.renderer.engine_kwargs(request, kwargs)
         prompt = self.chat(messages, kwargs, generation_prompt=True)
         check_parse_call_arguments(message)
+        message, call_ids = self.with_vendor_call_ids(messages, kwargs, message)
         assistant = {"role": "assistant", **as_vllm_gives_it(message)}
         self.check_no_stop_id_in_the_message(assistant)
         rendered = self.chat([*messages, assistant], kwargs, generation_prompt=False)
@@ -177,6 +191,7 @@ class RoundtripOracle:
             self.renderer.content_format(kwargs.get("tools")),
             self.renderer.developer_role(kwargs.get("tools")),
             self.renderer.template_source(kwargs.get("tools")),
+            call_ids,
         )
 
     def chat(self, messages: list, kwargs: dict, *, generation_prompt: bool) -> str:
@@ -217,6 +232,39 @@ class RoundtripOracle:
                         f"the message's own text holds stop id {token} ({name!r}) in {where}: generation stops there, "
                         "so no output carries the message whole"
                     )
+
+    def with_vendor_call_ids(self, messages: list, kwargs: dict, message: dict) -> tuple[dict, list[str] | None]:
+        """The message with the ids a served model of the checkpoint's vendor writes (``vendor.call_id_form``), when
+        its calls carry none and the template renders a call's id and not its name; otherwise the message as given,
+        and None.
+
+        The Kimi K2 templates write ``<|tool_call_begin|>{{ id }}<|tool_call_argument_begin|>{{ arguments }}`` for a
+        call and never its name: the served model puts the name inside the id (``functions.<name>:<index>``) and the
+        family's readers take it back from there. A hand-written case's calls carry no id, so renaming a call left
+        the rendered turn as it was and ``check_every_call_is_rendered`` refused every call case of the line. With
+        the ids the template renders what the model writes, the renaming probe renames the id with the call
+        (``renamed``), and the recorded reference keeps the ids (``calls_with_ids``), which the gateway returns as
+        the model wrote them. A template that writes the name (Kimi K3's) gets no ids, so its reference stays as it
+        was; a call that carries an id keeps it, whatever the template does with it.
+        """
+        calls = message.get("tool_calls") or []
+        if self.call_id_form is None or not calls or any("id" in call for call in calls):
+            return message, None
+        try:
+            plain = self.chat(
+                [*messages, {"role": "assistant", **as_vllm_gives_it(message)}], kwargs, generation_prompt=False
+            )
+            renamed_plain = self.chat(
+                [*messages, {"role": "assistant", **as_vllm_gives_it(renamed(message, 0))}],
+                kwargs,
+                generation_prompt=False,
+            )
+        except Exception:
+            return message, None  # the template read the name (it failed on the renamed call): no ids
+        if renamed_plain != plain:
+            return message, None  # the template writes the name: the calls stay as the case gives them
+        ids = [self.call_id_form.format(name=call["function"]["name"], index=index) for index, call in enumerate(calls)]
+        return calls_with_ids(message, ids), ids
 
     def render_next_message(self, messages: list, assistant: dict, message: dict, kwargs: dict) -> str:
         """The conversation rendered with the next message after the turn, for a turn that holds no stop id."""
@@ -271,8 +319,9 @@ class RoundtripOracle:
         parser cannot turn back into the message, and the case would be recorded lossy. Two renders per call; a
         template that fails on the change has read the call.
         """
+        renamed_call = functools.partial(renamed, id_form=self.call_id_form)
         for index, call in enumerate(message.get("tool_calls") or []):
-            for change, what in ((renamed, "renaming"), (with_marker_argument, "adding an argument to")):
+            for change, what in ((renamed_call, "renaming"), (with_marker_argument, "adding an argument to")):
                 variant = {"role": "assistant", **as_vllm_gives_it(change(message, index))}
                 try:
                     again = self.chat([*messages, variant], kwargs, generation_prompt=False)
@@ -747,10 +796,25 @@ def without_entry(message: dict, index: int, path: tuple[str | int, ...]) -> dic
     return message
 
 
-def renamed(message: dict, index: int) -> dict:
-    """A copy of the message whose call ``index`` is named ``MARKER``."""
+def renamed(message: dict, index: int, id_form: str | None = None) -> dict:
+    """A copy of the message whose call ``index`` is named ``MARKER``; under ``id_form``, a call whose id is the form
+    over its name gets the form over ``MARKER`` too, as the model would write the renamed call's id."""
     message = copy.deepcopy(message)
-    message["tool_calls"][index]["function"]["name"] = MARKER
+    call = message["tool_calls"][index]
+    if id_form is not None and call.get("id") == id_form.format(name=call["function"]["name"], index=index):
+        call["id"] = id_form.format(name=MARKER, index=index)
+    call["function"]["name"] = MARKER
+    return message
+
+
+def calls_with_ids(message: dict, ids: list[str] | None) -> dict:
+    """A copy of the message whose calls carry ``ids``, in order (the ids the round trip gave them,
+    ``RoundtripOracle.with_vendor_call_ids``); the message as given when there are none."""
+    if not ids:
+        return message
+    message = copy.deepcopy(message)
+    for call, call_id in zip(message["tool_calls"], ids, strict=True):
+        call["id"] = call_id
     return message
 
 

@@ -31,7 +31,7 @@ from .fixtures import read_previous, write_fixture_file
 from .reference import SOURCE as RENDER_SOURCE
 from .reference import HfTemplateOracle
 from .roundtrip import SOURCE as PARSE_SOURCE
-from .roundtrip import RoundtripOracle, with_arguments_as_parsers_return_them
+from .roundtrip import RoundtripOracle, calls_with_ids, with_arguments_as_parsers_return_them
 
 NOT_IMPLEMENTED = 2
 
@@ -231,7 +231,10 @@ def _record(kind: str, oracle: HfTemplateOracle | RoundtripOracle, case: Case, p
         "chunk_plans": chunk_plans(len(output.output_ids)),
         "reference": {
             "source": f"{PARSE_SOURCE}:{vendor.SOURCE}" if oracle.renderer.vendor_code else PARSE_SOURCE,
-            "message": {"role": "assistant", **with_arguments_as_parsers_return_them(case.message)},
+            "message": {
+                "role": "assistant",
+                **calls_with_ids(with_arguments_as_parsers_return_them(case.message), output.tool_call_ids),
+            },
             "finish_reason": output.finish_reason,
             "end_of_turn": output.end_of_turn,
             "text": output.text,
