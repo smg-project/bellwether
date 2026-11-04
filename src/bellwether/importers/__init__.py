@@ -134,4 +134,8 @@ def run(args: argparse.Namespace) -> int:
         from .infovqa import run as run_infovqa
 
         return run_infovqa(args)
+    if args.dataset == "pets":
+        from .pets import run as run_pets
+
+        return run_pets(args)
     raise ValueError(f"no importer for {args.dataset!r}")
