@@ -67,7 +67,7 @@ def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert list(wit.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", wit.FILES[FILE])
     assert wit.SOURCE == f"hf:datasets/wikimedia/wit_base@{wit.REVISION}"
     assert wit.CARD_LICENSE == ["cc-by-sa-4.0"] and wit.LICENSE == "CC-BY-SA-4.0"
-    assert wit.SHARDS == ((FILE, 0, 2000),)
+    assert wit.SHARDS == ((FILE, 0, 2000), (FILE, 2000, 4000))
 
 
 def test_read_gives_every_picture_in_row_order_with_its_origin(pinned):

@@ -42,7 +42,10 @@ FILES = {
 }
 # The windows of rows that are in the set, in the order the lines are built: a file, its first row and the count. A
 # window added later goes last, whether of a new file or of more rows of one already read.
-SHARDS = (("data/train-00000-of-00330.parquet", 0, 2000),)
+SHARDS = (
+    ("data/train-00000-of-00330.parquet", 0, 2000),
+    ("data/train-00000-of-00330.parquet", 2000, 4000),
+)
 
 
 def check_license(text: bytes) -> None:
