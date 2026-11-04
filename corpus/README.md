@@ -646,8 +646,14 @@ a set's clips with `git lfs pull --include 'corpus/audios/<dataset>/**' --exclud
 The importers `librispeech` (openslr/librispeech_asr, test-clean, FLAC), `mls` (facebook/multilingual_librispeech, the
 Polish test split, Opus in Ogg), `voxpopuli` (facebook/voxpopuli, the Croatian test split, 32-bit float WAV), `fleurs`
 (google/fleurs, the US English test split, 32-bit float WAV) and `peoplesspeech` (MLCommons/peoples_speech, the clean
-configuration's test split, FLAC) are in the repository; their sets follow once the home of the bytes is decided, and
-the table of audio sets, in the video table's columns, comes with the first of them.
+configuration's test split, FLAC) are in the repository; this table lists their sets as they land, and a paragraph
+after it says what a line of each is.
+
+| Dataset | Set | Source | License |
+|---|---|---|---|
+| Multilingual LibriSpeech | `mls`: every utterance of the Polish test split's one file (520 rows; 520 clips, 33.5 MB, 7,719 s; Opus in Ogg, mono) | `hf:datasets/facebook/multilingual_librispeech@2e83e61823b4c47dcbcb1980bb88601274127609`: the file `polish/test-00000-of-00001.parquet`, pinned by its sha256 in the importer; the card `README.md`, sha256 `b79c762d17d4f8fd7f4c1a1c59f6154c554e4faebb0a97f1fccf49af94a265be` | CC-BY-4.0, checked in the card's YAML front matter on every import (`cc-by-4.0`, written as a one-item list). The dataset ships no licence file, so the import writes the licence text as the SPDX license list publishes it (`github:spdx/license-list-data@31846481de7ea17d92f2f46fad76abe58b2e9bb0`, `text/CC-BY-4.0.txt`, sha256 `d557539df68e771cc1eedcc91d13f70fca930e508d11eedcafa4b15db49e3744`) to `corpus/licenses/mls-LICENSE`, which `--check` checks |
+
+A Multilingual LibriSpeech line is one utterance: `notes` names the row (`Multilingual LibriSpeech test row 0, audio`) and `origin.file` the parquet file. MLS: A Large-Scale Multilingual Dataset for Speech Research, Pratap, Xu, Sriram, Synnaeve and Collobert 2020: https://www.openslr.org/94, https://huggingface.co/datasets/facebook/multilingual_librispeech. The recordings are LibriVox audiobook readings in Polish, as the dataset stores them. The rows are read in order, so the names are stable from one import to the next. `bellwether import mls` writes `corpus/audio/mls.jsonl` and the files under `corpus/audios/mls/`, and removes a file there it did not write.
 
 ## Agentic session corpus
 
