@@ -39,9 +39,12 @@ result is measured against.
 
 Two sources of truth, equal in authority (the maintainer, 2026-10-06):
 
-- **Hugging Face:** the checkpoint's own material at a pinned revision. That is the vendor's shipped
-  encoder when there is one, else the chat template and tokenizer. For parsing it is the round trip:
-  rendering the parsed message back through the template must reproduce the output.
+- **Hugging Face:** the checkpoint's own material at a pinned revision. That is the vendor's prompt
+  encoder for an architecture the engine renders with one (in the copy the engine renders it with,
+  whatever the checkpoint ships, since the engine never reads the checkpoint's:
+  `src/bellwether/record/engine_encoders.toml`), else the chat template and tokenizer.
+  For parsing it is the round trip: rendering the parsed message back through the template must
+  reproduce the output.
 - **vLLM:** at a pinned release, through its GPU-less render server.
 
 When they agree, the case is settled. When they disagree, the case is `disputed`, the disagreement
@@ -204,9 +207,10 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [deepseek-v3-0324](fixtures/deepseek-v3-0324/sets.toml) | deepseek-ai/DeepSeek-V3-0324 @ e9b33add | 2 | 3 | 531731 | 19299 | 328698 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [deepseek-v3-0324-bf16](fixtures/deepseek-v3-0324-bf16/sets.toml) | arcee-ai/DeepSeek-V3-0324-bf16 @ 0fcb3b10 | 1 | 3 | 531731 | 3110 | 332759 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [deepseek-v3.1](fixtures/deepseek-v3.1/sets.toml) | deepseek-ai/DeepSeek-V3.1 @ c0781d03 | 3 | 3 | 531731 | 19300 | 328709 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [deepseek-v3.2](fixtures/deepseek-v3.2/sets.toml) | deepseek-ai/DeepSeek-V3.2 @ a7e62ac0 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| [deepseek-v3.2-exp](fixtures/deepseek-v3.2-exp/sets.toml) | deepseek-ai/DeepSeek-V3.2-Exp @ 194c67e1 | 2 | 3 | 531731 | 184972 | 254536 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 531736 | 589659 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [deepseek-v3.2](fixtures/deepseek-v3.2/sets.toml) | deepseek-ai/DeepSeek-V3.2 @ a7e62ac0 | 2 | 2 | 24 | 19 | 9 | hand-written |
+| [deepseek-v3.2-exp](fixtures/deepseek-v3.2-exp/sets.toml) | deepseek-ai/DeepSeek-V3.2-Exp @ 194c67e1 | 2 | 3 | 531736 | 184988 | 254527 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [deepseek-v4-flash](fixtures/deepseek-v4-flash/sets.toml) | deepseek-ai/DeepSeek-V4-Flash @ 60d8d707 | 2 | 2 | 24 | 28 | 0 | hand-written |
+| [deepseek-v4.1-flash](fixtures/deepseek-v4.1-flash/sets.toml) | deepseek-ai/DeepSeek-V4.1-Flash @ 2cba9e42 | 1 | 1 | 531736 | 589671 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [devstral-2-123b-instruct-2512](fixtures/devstral-2-123b-instruct-2512/sets.toml) | mistralai/Devstral-2-123B-Instruct-2512 @ 1613bf01 | 1 | 2 | 531731 | 570202 | 6594 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [dler-llama-nemotron-8b-merge-research](fixtures/dler-llama-nemotron-8b-merge-research/sets.toml) | nvidia/DLER-Llama-Nemotron-8B-Merge-Research @ 029e0043 | 1 | 3 | 471554 | 416856 | 176464 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [dler-r1-1.5b-research](fixtures/dler-r1-1.5b-research/sets.toml) | nvidia/DLER-R1-1.5B-Research @ d0523143 | 2 | 3 | 531736 | 94830 | 329706 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -932,7 +936,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1291 | | 361288616 | 266945556 | 108981916 | |
+| all | | 1293 | | 361288646 | 266945612 | 108981906 | |
 
 116 more groups (183 checkpoints) have a manifest and nothing recorded yet.
 
@@ -1024,8 +1028,10 @@ days and the day they were read. It computes each one's oracle inputs (the token
 few fields of `config.json`, `generation_config.json`, `chat_template.json` and `processor_config.json` that the oracles
 read) at the pinned revision from the Hugging Face cache, groups the checkpoints whose inputs are equal, and writes
 every checkpoint's `fixtures/<slug>/manifest.toml`. A group is recorded once, under its primary's slug: the recorded one
-if there is one, else its most-downloaded member's. The others' manifests name the group and hold no fixtures. It
-prints each group with its members and their tiers. Run again over the same list, it writes the same files, so a
+if there is one, else its most-downloaded member's. The others' manifests name the group and hold no fixtures. A
+checkpoint of an architecture the engine's server renders with its copy of a prompt encoder gets
+`encoder = "<the engine's tokenizer mode>"`, which sends its group to the sandbox workflow. It prints each group with its
+members and their tiers. Run again over the same list, it writes the same files, so a
 change to the list is reviewed as a diff of the list and the manifests. `fixtures/README.md` describes both.
 `models.jsonl` (below) is another list: what the engines' registries name, with no revision or downloads until the Hub
 is read.

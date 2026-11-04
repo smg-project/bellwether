@@ -17,12 +17,15 @@ def load(name: str):
     return module
 
 
-def manifest(root: pathlib.Path, slug: str, model: str, inputs: list[str], group: str | None = None) -> None:
+def manifest(
+    root: pathlib.Path, slug: str, model: str, inputs: list[str], group: str | None = None, encoder: str | None = None
+) -> None:
     directory = root / "fixtures" / slug
     directory.mkdir(parents=True)
     rows = "\n".join(f'"{name}" = "{"0" * 64}"' for name in inputs)
     member = f'group = "{group}"\n' if group else ""
-    text = f'model = "{model}"\nrevision = "{REVISION}"\n{member}tier = 1\n\n[inputs]\n{rows}\n'
+    mode = f'encoder = "{encoder}"\n' if encoder else ""
+    text = f'model = "{model}"\nrevision = "{REVISION}"\n{member}{mode}tier = 1\n\n[inputs]\n{rows}\n'
     (directory / "manifest.toml").write_text(text)
 
 
@@ -32,12 +35,17 @@ def test_the_plan_takes_every_group_once_and_leaves_vendor_code_to_the_sandbox(t
     manifest(tmp_path, "a-group", "org/A", ["tokenizer_config.json"])
     manifest(tmp_path, "vendor", "org/V", ["config.json", "tokenization_v.py"])
     manifest(tmp_path, "a-member", "org/A-Small", ["tokenizer_config.json"], group="a-group")
+    # The engine's copy of a prompt encoder renders this one (no module of its own among the inputs): sandbox too.
+    manifest(tmp_path, "encoded", "org/E", ["config.json", "tokenizer.json"], encoder="deepseek_v32")
     found, vendor = plan.groups(tmp_path, [])
     assert found == [
         {"slug": "a-group", "model": "org/A", "revision": REVISION},
         {"slug": "b-group", "model": "org/B", "revision": REVISION},
     ]
-    assert vendor == [{"slug": "vendor", "model": "org/V", "revision": REVISION}]
+    assert vendor == [
+        {"slug": "encoded", "model": "org/E", "revision": REVISION},
+        {"slug": "vendor", "model": "org/V", "revision": REVISION},
+    ]
 
 
 def test_the_plan_takes_the_groups_named_and_refuses_a_name_with_no_manifest(tmp_path):
@@ -313,7 +321,8 @@ def test_the_sandbox_plan_takes_the_vendor_groups_and_refuses_a_runner_group(tmp
     assert out == [f'groups=[{{"slug":"vendor","model":"org/V","revision":"{REVISION}"}}]', "count=1"]
     monkeypatch.setattr(sys, "argv", ["record_plan.py", "--sandbox", "a-group"])
     with pytest.raises(
-        SystemExit, match="a-group: no vendor code among its oracle inputs; record it with the record workflow"
+        SystemExit,
+        match="a-group: no vendor code among its oracle inputs and no encoder; record it with the record workflow",
     ):
         plan.main()
 

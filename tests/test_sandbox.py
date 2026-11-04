@@ -28,10 +28,13 @@ def snapshot(tmp_path) -> pathlib.Path:
     return directory
 
 
-def manifest_for(fixtures: pathlib.Path, model: str, inputs: dict, group: str | None = None):
+def manifest_for(
+    fixtures: pathlib.Path, model: str, inputs: dict, group: str | None = None, encoder: str | None = None
+):
     path = fixtures / model.split("/")[-1].lower() / "manifest.toml"
     path.parent.mkdir(parents=True)
     lines = [f'model = "{model}"', f'revision = "{REVISION}"', *([f'group = "{group}"'] if group else [])]
+    lines += [f'encoder = "{encoder}"'] if encoder else []
     lines += ["", "[authority]", 'render = ["vendor-code"]', "", "[inputs]"]
     lines += [f'"{name}" = "{digest}"' for name, digest in inputs.items()]
     path.write_text("\n".join(lines) + "\n")
@@ -93,6 +96,103 @@ def test_the_context_carries_the_caches_marks_for_files_the_repository_does_not_
     assert [p.name for p in marks.iterdir()] == ["chat_template.jinja"]
 
 
+def test_the_context_carries_the_engines_copy_of_a_prompt_encoder_read_only(listed, snapshot, tmp_path):
+    corpus, context = tmp_path / "corpus", tmp_path / "context"
+    (corpus / "render").mkdir(parents=True)
+    context.mkdir()
+    checked = tmp_path / "cache" / "deepseek_x_encoding.py"
+    checked.parent.mkdir()
+    checked.write_text("def encode_messages(messages, thinking_mode): ...\n")
+    engine = ("vllm/tokenizers/deepseek_x_encoding.py", checked)
+    sandbox.stage(listed, snapshot, "render", tmp_path / "fixtures", corpus, context, engine)
+    staged = context / "engine" / "vllm" / "tokenizers" / "deepseek_x_encoding.py"
+    assert staged.read_bytes() == checked.read_bytes()
+    dockerfile = (context / "Dockerfile").read_text()
+    assert f"COPY --chown=root:root engine {sandbox.ENGINE_DIR}\nRUN chmod -R a-w {sandbox.ENGINE_DIR}\n" in dockerfile
+    assert sandbox.ENGINE_DIR == "/engine"
+
+
+@pytest.fixture
+def encoder_snapshot(tmp_path) -> pathlib.Path:
+    """A checkpoint that ships a prompt encoder and no template, of an architecture the engine renders with a mode."""
+    directory = tmp_path / "encoder-snapshot"
+    (directory / "encoding").mkdir(parents=True)
+    (directory / "tokenizer_config.json").write_text(json.dumps({"eos_token": "<eos>"}))
+    (directory / "config.json").write_text(
+        json.dumps({"model_type": "toy", "architectures": ["DeepseekV4ForCausalLM"]})
+    )
+    (directory / "encoding" / "encoding_toy.py").write_text("def encode_messages(messages, thinking_mode): ...\n")
+    return directory
+
+
+def test_the_engines_copy_is_fetched_at_its_pin_for_a_checkpoint_with_a_prompt_encoder(
+    encoder_snapshot, tmp_path, monkeypatch
+):
+    calls = []
+    fetched = tmp_path / "fetched.py"
+    fetched.write_text("engine copy")
+    monkeypatch.setattr(sandbox, "fetch_pinned", lambda *args: calls.append(args) or fetched)
+    inputs = oracle_inputs(str(encoder_snapshot), "local")
+    manifest = manifest_for(tmp_path / "fixtures", "acme/X-4", inputs, encoder="deepseek_v4")
+    pin = vendor.engine_encoder("deepseek_v4")
+    assert sandbox.engine_copy(manifest, encoder_snapshot) == (pin.path, fetched)
+    assert calls == [("vllm-project", "vllm", pin.commit, pin.path, pin.sha256)]
+
+
+def test_a_manifest_whose_encoder_line_is_not_the_architectures_mode_is_refused_before_any_fetch(
+    encoder_snapshot, tmp_path, monkeypatch
+):
+    # The recording plan routes a group to the sandbox by the manifest's line, so a line that disagrees with the
+    # checkpoint's architecture is a manifest to rewrite, not a recording to make.
+    monkeypatch.setattr(sandbox, "fetch_pinned", lambda *args: pytest.fail("fetched"))
+    inputs = oracle_inputs(str(encoder_snapshot), "local")
+    unnamed = manifest_for(tmp_path / "fixtures", "acme/X-6", inputs)
+    with pytest.raises(sandbox.Refused, match="names None as the engine's encoder mode .*takes 'deepseek_v4'"):
+        sandbox.engine_copy(unnamed, encoder_snapshot)
+    other = manifest_for(tmp_path / "fixtures", "acme/X-7", inputs, encoder="deepseek_v32")
+    with pytest.raises(sandbox.Refused, match="`bellwether manifests` writes the line"):
+        sandbox.engine_copy(other, encoder_snapshot)
+
+
+def test_the_engines_copy_is_fetched_for_an_encoder_architecture_that_ships_no_module(
+    encoder_snapshot, tmp_path, monkeypatch
+):
+    # DeepSeek-V3.2-Exp ships a template and no encoding/ module; the engine renders its architecture with its copy.
+    (encoder_snapshot / "encoding" / "encoding_toy.py").unlink()
+    (encoder_snapshot / "encoding").rmdir()
+    (encoder_snapshot / "tokenizer_config.json").write_text(
+        json.dumps({"eos_token": "<eos>", "chat_template": "{{ messages }}"})
+    )
+    (encoder_snapshot / "config.json").write_text(
+        json.dumps({"model_type": "toy", "architectures": ["DeepseekV32ForCausalLM"]})
+    )
+    calls = []
+    fetched = tmp_path / "fetched.py"
+    fetched.write_text("engine copy")
+    monkeypatch.setattr(sandbox, "fetch_pinned", lambda *args: calls.append(args) or fetched)
+    inputs = oracle_inputs(str(encoder_snapshot), "local")
+    manifest = manifest_for(tmp_path / "fixtures", "acme/X-32", inputs, encoder="deepseek_v32")
+    assert not any(name.endswith(".py") for name in manifest.inputs)
+    pin = vendor.engine_encoder("deepseek_v32")
+    assert sandbox.engine_copy(manifest, encoder_snapshot) == (pin.path, fetched)
+    assert calls == [("vllm-project", "vllm", pin.commit, pin.path, pin.sha256)]
+
+
+def test_a_checkpoint_without_a_prompt_encoder_needs_no_engine_copy(listed, snapshot, monkeypatch):
+    monkeypatch.setattr(sandbox, "fetch_pinned", lambda *args: pytest.fail("fetched"))
+    assert sandbox.engine_copy(listed, snapshot) is None
+
+
+def test_an_encoder_of_an_architecture_without_an_engine_mode_is_refused_before_any_fetch(
+    encoder_snapshot, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(sandbox, "fetch_pinned", lambda *args: pytest.fail("fetched"))
+    (encoder_snapshot / "config.json").write_text(json.dumps({"architectures": ["SomeOtherForCausalLM"]}))
+    manifest = manifest_for(tmp_path / "fixtures", "acme/X-5", oracle_inputs(str(encoder_snapshot), "local"))
+    with pytest.raises(sandbox.Refused, match="no tokenizer mode of its own"):
+        sandbox.engine_copy(manifest, encoder_snapshot)
+
+
 def test_the_group_brought_back_replaces_the_hosts_so_a_set_the_run_removed_is_gone(tmp_path):
     group = tmp_path / "fixtures" / "x-1"
     (group / "render").mkdir(parents=True)
@@ -145,6 +245,7 @@ def test_the_run_has_no_network_a_read_only_root_no_privileges_limits_and_no_cre
         ("--pids-limit", "512"),
         ("--memory", "6g"),
         ("--env", f"{vendor.SANDBOX_ENV}=1"),
+        ("--env", f"{vendor.ENGINE_DIR_ENV}={sandbox.ENGINE_DIR}"),
         ("--env", "HF_HUB_OFFLINE=1"),
     ]:
         assert pair in pairs, pair

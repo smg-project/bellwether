@@ -3,12 +3,17 @@
 A checkpoint may ship a prompt encoder in place of a chat template: a module under ``encoding/`` whose
 ``encode_messages`` renders the chat format (DeepSeek V3.2's ``encoding_dsv32.py``, V4's ``encoding_dsv4.py``). The
 engine's server renders such a checkpoint with its own copy of the module through a tokenizer mode picked by the
-architecture (``ENCODER_RENDERERS``), never with a template. The vendor-code oracle runs the checkpoint's own module
-(``prompt_encoder``), inside the sandbox only, and calls it as the engine's mode does (``ENCODER_RULES``, one rule per
-mode, each the mirror of the engine's wrapper at v0.31.0), on the messages as the engine's renderer hands them to the
-mode (``as_the_renderer_hands_them``: ``parse_chat_messages`` in the mode's content format, then
+architecture (``ENCODER_RENDERERS``), never with a template and never with the checkpoint's module; it picks the mode
+by architecture alone, so a checkpoint of such an architecture renders through the engine's copy whatever it ships, a
+template included (DeepSeek-V3.2-Exp ships a template and no module). The vendor-code oracle runs the engine's copy
+(``prompt_encoder``: pinned by commit and sha256 in ``engine_encoders.toml``, staged into the sandbox by ``bellwether
+sandbox-record`` under ``ENGINE_DIR_ENV`` and checked against the pin before it is imported), inside the sandbox only,
+and calls it as the engine's mode does (``ENCODER_RULES``, one rule per mode, each the mirror of the engine's wrapper at
+v0.31.0), on the messages as the engine's renderer hands them to the mode (``as_the_renderer_hands_them``:
+``parse_chat_messages`` in the mode's content format, an assistant's ``reasoning`` under both of the engine's keys, then
 ``_postprocess_messages``); the text is tokenized with the checkpoint's tokenizer and no special tokens added, as the
-mode tokenizes it.
+mode tokenizes it. A module the checkpoint ships stays an oracle input: a revision that changes it is one to read again
+against the engine's copy.
 
 Some checkpoints render or tokenize through code from their own repository: a tokenizer class that
 ``tokenizer_config.json`` names in ``auto_map``, such as Kimi-K3's tiktoken tokenizer, which renders its chat format
@@ -38,12 +43,16 @@ import hashlib
 import importlib.util
 import json
 import os
+import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 from bellwether.inputs import ENCODER_MODES, checkpoint_dir, vendor_encoder
 
 SANDBOX_ENV = "BELLWETHER_SANDBOX"  # "1" inside the sandbox image only
 IMAGE_ENV = "BELLWETHER_SANDBOX_IMAGE"  # the image the sandbox runs, for the provenance
+ENGINE_DIR_ENV = "BELLWETHER_ENGINE_DIR"  # where the sandbox holds the engine's staged files (its encoder copies)
+ENGINE_ENCODERS = Path(__file__).with_name("engine_encoders.toml")  # the engine's encoder copies, pinned
 SOURCE = "vendor-code"
 
 
@@ -105,12 +114,20 @@ def as_the_renderer_hands_them(messages: list, content_format: str) -> list:
     the mode's ``content_format``, then ``_postprocess_messages``, ``chat_utils.py:2084-2158``): under the ``string``
     format a list content becomes its text parts joined with a newline (a part of another type is refused: the engine
     writes the model's placeholder there, which the oracle does not derive); under ``openai`` the list stays. An
-    assistant's empty ``tool_calls`` is dropped; a call whose arguments are a string gets the JSON text of the object
-    they decode to (anything that does not decode to an object becomes ``{}``, as the engine coerces it), which the
-    vendor's module decodes again; an object-form argument stays as given (the engine takes it as it is, the vendor's
-    modules read a string and refuse it: the refusal is recorded as such)."""
+    assistant's ``reasoning`` reaches the mode under both of the engine's keys, ``reasoning`` and ``reasoning_content``,
+    and a request's ``reasoning_content`` alone reaches it under neither (``_parse_chat_message_content``,
+    ``chat_utils.py:2016-2045``: the engine reads ``reasoning`` and writes both; the engine's copies of the encoders
+    read ``reasoning``). An assistant's empty ``tool_calls`` is dropped; a call whose arguments are a string gets the
+    JSON text of the object they decode to (anything that does not decode to an object becomes ``{}``, as the engine
+    coerces it), which the vendor's module decodes again; an object-form argument stays as given (the engine takes it
+    as it is; a module that reads a string refuses it, and the refusal is recorded as such)."""
     shaped = []
     for message in copy.deepcopy(messages):
+        if message.get("role") == "assistant":
+            reasoning = message.pop("reasoning", None)
+            message.pop("reasoning_content", None)
+            if reasoning is not None:
+                message["reasoning"] = message["reasoning_content"] = reasoning
         content = message.get("content")
         if content_format == "string" and isinstance(content, list):
             texts = []
@@ -250,12 +267,41 @@ def deepseek_v41(module, messages: list, tools: list | None, kwargs: dict, last_
 ENCODER_RULES = {"deepseek_v32": deepseek_v32, "deepseek_v4": deepseek_v4, "deepseek_v41": deepseek_v41}
 
 
-class PromptEncoder:
-    """A checkpoint's prompt encoder, called as the engine's tokenizer mode for the checkpoint's architecture calls
-    it: ``render`` gives the prompt text for a request's messages, tools and template kwargs (``encoder_kwargs``)."""
+@dataclass(frozen=True)
+class EngineEncoder:
+    """The engine's copy of a prompt encoder, as ``engine_encoders.toml`` pins it: ``path`` in ``repo`` at ``commit``
+    (the release ``ref``), its bytes pinned by ``sha256``."""
 
-    def __init__(self, module, renderer: str, name: str, sha256: str) -> None:
-        self.module, self.renderer, self.name, self.sha256 = module, renderer, name, sha256
+    repo: str
+    ref: str
+    commit: str
+    path: str
+    sha256: str
+
+    @property
+    def source(self) -> str:
+        """What a line's provenance names as the copy's source: the repository at the release."""
+        return f"{self.repo}@{self.ref}"
+
+
+def engine_encoder(renderer: str, pins: Path = ENGINE_ENCODERS) -> EngineEncoder:
+    """The engine's copy of the encoder its tokenizer mode ``renderer`` renders with, as ``pins`` pins it; a mode the
+    file does not pin is refused, since the engine's copy for it is unknown."""
+    pinned = tomllib.loads(pins.read_text(encoding="utf-8"))
+    engine, encoders = pinned["vllm"], pinned["encoders"]
+    if renderer not in encoders:
+        raise ValueError(f"{pins.name} pins no copy of the engine's encoder for the {renderer!r} tokenizer mode")
+    copy_ = encoders[renderer]
+    return EngineEncoder(engine["repo"], engine["ref"], engine["commit"], copy_["path"], copy_["sha256"])
+
+
+class PromptEncoder:
+    """The engine's copy of a checkpoint's prompt encoder, called as the engine's tokenizer mode for the checkpoint's
+    architecture calls it: ``render`` gives the prompt text for a request's messages, tools and template kwargs
+    (``encoder_kwargs``). ``name``, ``sha256`` and ``source`` are what the provenance names."""
+
+    def __init__(self, module, renderer: str, name: str, sha256: str, source: str) -> None:
+        self.module, self.renderer, self.name, self.sha256, self.source = module, renderer, name, sha256, source
 
     def render(self, messages: list, tools: list | None, kwargs: dict, last_role: str | None = None) -> str:
         text = ENCODER_RULES[self.renderer](self.module, messages, tools, kwargs, last_role)
@@ -278,12 +324,17 @@ def load_module(path: Path):
 
 
 def prompt_encoder(model: str, revision: str, renderer: str | None) -> PromptEncoder | None:
-    """The checkpoint's prompt encoder for the vendor-code oracle; None for a checkpoint that ships none (one whose
-    class renders the format, Kimi-K3's). Sandbox only, and only for an architecture the engine's server has a
-    tokenizer mode for: without one, how the encoder is called is unknown, and the checkpoint is refused."""
+    """The prompt encoder for the vendor-code oracle of a checkpoint the engine's server renders with one: the ENGINE's
+    copy of the module for the tokenizer mode of the checkpoint's architecture (``renderer``, one of ``ENCODER_RULES``;
+    ``engine_encoder`` pins the copy), which ``bellwether sandbox-record`` stages under ``ENGINE_DIR_ENV`` and which is
+    checked against its pinned sha256 before it is imported. The engine picks the mode by architecture alone, so the
+    copy renders whether the checkpoint ships a module of its own (never run, as the engine's server never reads it),
+    a template beside it, or a template and no module (DeepSeek-V3.2-Exp). None for a checkpoint of another
+    architecture that ships no module (one whose class renders the format, Kimi-K3's); one that ships a module for such
+    an architecture is refused, since how its encoder is called is unknown. Sandbox only."""
     directory = checkpoint_dir(model, revision)
     name = vendor_encoder(directory)
-    if name is None:
+    if name is None and renderer not in ENCODER_RULES:
         return None
     require_sandbox(model)
     if renderer not in ENCODER_RULES:
@@ -291,8 +342,20 @@ def prompt_encoder(model: str, revision: str, renderer: str | None) -> PromptEnc
             f"{model} ships a prompt encoder ({name}) for an architecture the engine's server renders with no "
             "tokenizer mode of its own; the vendor-code oracle cannot tell how the encoder is called"
         )
-    path = directory / name
-    return PromptEncoder(load_module(path), renderer, name, hashlib.sha256(path.read_bytes()).hexdigest())
+    pinned = engine_encoder(renderer)
+    root = os.environ.get(ENGINE_DIR_ENV)
+    path = Path(root) / pinned.path if root else None
+    if path is None or not path.is_file():
+        raise ValueError(
+            f"{model} is rendered by the engine's own copy of the {renderer} prompt encoder ({pinned.source}, "
+            f"{pinned.path}); the sandbox holds no copy of it: `bellwether sandbox-record` stages it"
+        )
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != pinned.sha256:
+        raise ValueError(
+            f"{path}: sha256 {digest} is not the pinned {pinned.sha256} of {pinned.source}; nothing of it is imported"
+        )
+    return PromptEncoder(load_module(path), renderer, pinned.path, pinned.sha256, pinned.source)
 
 
 # The Kimi line's tokenizer module among a checkpoint's files (its ``auto_map`` names the class): the id form's key.

@@ -15,15 +15,17 @@ once, under the slug of its primary:
   first model id, and the group takes its slug.
 
 Each checkpoint's manifest stays where it is, or is written under its own slug. The command sets ``revision``, ``tier``,
-``group`` (on the other members only) and ``[inputs]``, and keeps every other line of an existing manifest: comments,
-``[authority]``, ``[smg]`` and ``[engines]``. A new manifest has none of these tables. The order the manifests written
-before groups share predates the design's two sources of truth (docs/benchmark-sets.md, "Recording"), and a manifest's
-authority order waits for the sponsor's approval (AGENTS.md); parser names stay unknown until someone maps them. A
-recorded manifest's revision does not move here, since its fixtures were recorded at it. The list names every checkpoint
-that has a manifest, as the design's one list of checkpoints does: grouped without it, a listed checkpoint with the same
-inputs would become a second primary. Nothing is written unless every checkpoint was read, every check passed and every
-manifest the run would write reads back as written; a write that fails stops the run, saying how many manifests were
-written before it. A second run over the same list writes the same files.
+``group`` (on the other members only), ``encoder`` (on a checkpoint of an architecture the engine's server renders with
+its copy of a prompt encoder, ``bellwether.inputs.encoder_mode``, whose group the sandbox records) and ``[inputs]``, and
+keeps every other line of an existing manifest: comments, ``[authority]``, ``[smg]`` and ``[engines]``. A new manifest
+has none of these tables. The order the manifests written before groups share predates the design's two sources of
+truth (docs/benchmark-sets.md, "Recording"), and a manifest's authority order waits for the sponsor's approval
+(AGENTS.md); parser names stay unknown until someone maps them. A recorded manifest's revision does not move here, since
+its fixtures were recorded at it. The list names every checkpoint that has a manifest, as the design's one list of
+checkpoints does: grouped without it, a listed checkpoint with the same inputs would become a second primary. Nothing is
+written unless every checkpoint was read, every check passed and every manifest the run would write reads back as
+written; a write that fails stops the run, saying how many manifests were written before it. A second run over the same
+list writes the same files.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from bellwether.inputs import oracle_inputs
+from bellwether.inputs import checkpoint_dir, encoder_mode, oracle_inputs
 from bellwether.manifest import TIERS, Manifest, is_pinned, load_manifests, parse_manifest, slug_for
 from bellwether.record import sets as set_tables
 
@@ -46,7 +48,7 @@ INPUTS_HEADER = (
 LIST = "models.tsv"  # the list of checkpoints, beside the manifests it builds
 NOT_READ = "-"
 _REVISION = re.compile(r"""(revision\s*=\s*)("[^"]*"|'[^']*')""")
-_SET_HERE = re.compile(r"(tier|group)\s*=")
+_SET_HERE = re.compile(r"(tier|group|encoder)\s*=")
 
 
 @dataclass(frozen=True)
@@ -170,6 +172,12 @@ def read_inputs(checkpoints: list[Checkpoint]) -> tuple[dict[str, dict[str, str]
     return found, unread
 
 
+def encoder_modes(checkpoints: list[Checkpoint]) -> dict[str, str | None]:
+    """Each checkpoint's engine tokenizer mode when the engine's server renders its architecture with its copy of a
+    prompt encoder (``encoder_mode``), None otherwise; read from the snapshots ``read_inputs`` left in the cache."""
+    return {c.model: encoder_mode(checkpoint_dir(c.model, c.revision)) for c in checkpoints}
+
+
 def rank(checkpoint: Checkpoint) -> tuple:
     """The order in which a group's members become its primary: most downloads first, a member whose count nobody
     read after every member with one, ties to the first model id."""
@@ -201,7 +209,9 @@ def assign(
     return sorted(groups, key=lambda group: group.slug)
 
 
-def with_fields(text: str, revision: str, tier: int, group: str | None, inputs: dict[str, str]) -> str:
+def with_fields(
+    text: str, revision: str, tier: int, group: str | None, inputs: dict[str, str], encoder: str | None = None
+) -> str:
     """A manifest's text with these fields set and every other line kept. The top-level keys go after ``revision``,
     before the first table, and ``[inputs]`` goes last."""
     lines = text.splitlines()
@@ -211,7 +221,11 @@ def with_fields(text: str, revision: str, tier: int, group: str | None, inputs: 
     if at is None:
         raise ValueError("the manifest has no `revision` line before its first table")
     head[at] = _REVISION.sub(lambda found: found.group(1) + _string(revision), head[at], count=1)
-    head[at + 1 : at + 1] = [f"tier     = {tier}", *([f"group    = {_string(group)}"] if group else [])]
+    head[at + 1 : at + 1] = [
+        f"tier     = {tier}",
+        *([f"group    = {_string(group)}"] if group else []),
+        *([f"encoder  = {_string(encoder)}"] if encoder else []),
+    ]
     body = head + _without_inputs(lines[first_table:])
     while body and not body[-1].strip():
         body.pop()
@@ -237,7 +251,10 @@ def _string(value: str) -> str:
 
 
 def manifest_texts(
-    groups: list[Group], inputs: dict[str, dict[str, str]], directory: dict[str, Path]
+    groups: list[Group],
+    inputs: dict[str, dict[str, str]],
+    directory: dict[str, Path],
+    modes: dict[str, str | None] | None = None,
 ) -> dict[Path, str]:
     """Each checkpoint's manifest as it will be written, in slug order, every one read back and checked before any is
     written: a group whose slug its other members cannot name (a primary in a directory whose name is not a slug)
@@ -251,10 +268,11 @@ def manifest_texts(
             else:
                 text = f"model    = {_string(checkpoint.model)}\nrevision = {_string(checkpoint.revision)}\n"
             named = None if checkpoint is group.primary else group.slug
-            fields = (checkpoint.revision, checkpoint.tier, named, inputs[checkpoint.model])
+            mode = (modes or {}).get(checkpoint.model)
+            fields = (checkpoint.revision, checkpoint.tier, named, inputs[checkpoint.model], mode)
             texts[path] = with_fields(text, *fields)
             written = parse_manifest(path, texts[path])
-            if (written.revision, written.tier, written.group, written.inputs) != fields:
+            if (written.revision, written.tier, written.group, written.inputs, written.encoder) != fields:
                 raise ValueError(f"{path}: the manifest would not read back as written")
     return texts
 
@@ -280,7 +298,7 @@ def run(args: argparse.Namespace) -> int:
         if unread:
             raise ValueError("\n".join(f"cannot read the oracle inputs of {line}" for line in unread))
         groups = assign(checkpoints, inputs, existing, directory)
-        texts = manifest_texts(groups, inputs, directory)
+        texts = manifest_texts(groups, inputs, directory, encoder_modes(checkpoints))
     except (OSError, ValueError) as err:
         for line in str(err).splitlines():
             print(f"bellwether manifests: {line}", file=sys.stderr)

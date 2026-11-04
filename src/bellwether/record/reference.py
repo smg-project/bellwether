@@ -51,11 +51,14 @@ of ``_apply_k3_thinking_kwargs`` in ``vllm/renderers/kimi_k3.py:48-66`` and of `
 ``vllm/entrypoints/openai/chat_completion/protocol.py:568-596`` at v0.31.0); the provenance names the renderer
 (``engine_renderer``). The bare call rendered the engine's spellings as if absent: thinking stayed on under
 ``enable_thinking: false``, and ``reasoning_effort: low`` left the default ``thinking_effort=max`` directive. A
-vendor-code checkpoint that ships a prompt encoder in place of a template (DeepSeek V3.2's
-``encoding/encoding_dsv32.py``, V4's ``encoding_dsv4.py``; ``inputs.vendor_encoder``) is rendered by that module,
-called as the engine's tokenizer mode for the architecture calls it (``vendor.prompt_encoder``,
-``vendor.ENCODER_RULES``), the text encoded with no special tokens added as the mode encodes it; the provenance names
-the module and its hash (``encoder_module``, ``encoder_sha256``) and the line's ``template_source`` is ``encoder``.
+vendor-code checkpoint of an architecture the engine's server renders with a prompt encoder (DeepSeek V3.2's
+``encoding/encoding_dsv32.py``, V4's ``encoding_dsv4.py``; ``inputs.encoder_mode``), whether it ships the module
+(``inputs.vendor_encoder``), a template beside it or a template alone (DeepSeek-V3.2-Exp), is rendered by the engine's
+copy of that module (the engine's server never reads the checkpoint's; ``vendor.prompt_encoder``, pinned in
+``vendor.ENGINE_ENCODERS``), called as the engine's tokenizer mode for the architecture calls it
+(``vendor.ENCODER_RULES``), the text encoded with no special tokens added as the mode encodes it; the provenance names
+the copy, its hash and its source (``encoder_module``, ``encoder_sha256``, ``encoder_source``) and the line's
+``template_source`` is ``encoder``.
 
 The template gets each message's content in the format vLLM selects for the template from its source
 (``content_format``: a template that loops over a message's content takes a list of typed parts, and string content
@@ -107,7 +110,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from bellwether.inputs import checkpoint_dir, vendor_encoder
+from bellwether.inputs import checkpoint_dir, encoder_architecture, vendor_encoder
 
 from . import clock, vendor
 from .content_format import ContentFormat, detect_content_format, in_content_format
@@ -139,14 +142,17 @@ class HfTemplateOracle:
         # The engine's own renderer for the checkpoint, whose kwargs rewrite the oracle applies before the class renders
         # (``engine_kwargs``); None for a template, which the engine's server renders as the request gives the kwargs.
         self.engine_renderer = vendor.engine_renderer(architectures(model, revision)) if vendor_code else None
-        # The checkpoint's prompt encoder when it ships one in place of a template (DeepSeek V3.2's, V4's): loaded in
-        # the sandbox only, called as the engine's tokenizer mode for the architecture calls it; None otherwise.
+        # The engine's copy of the prompt encoder for a checkpoint that ships one in place of a template (DeepSeek
+        # V3.2's, V4's): loaded in the sandbox only, called as the engine's tokenizer mode for the architecture calls
+        # it; None otherwise.
         self.prompt_encoder = vendor.prompt_encoder(model, revision, self.engine_renderer) if vendor_code else None
-        if not vendor_code and vendor_encoder(checkpoint_dir(model, revision)) is not None:
-            raise ValueError(
-                f"{model} at {revision} ships a prompt encoder the engine's server renders with; its reference is the "
-                "vendor-code oracle, recorded with `bellwether sandbox-record`"
-            )
+        if not vendor_code:
+            directory = checkpoint_dir(model, revision)
+            if vendor_encoder(directory) is not None or encoder_architecture(directory):
+                raise ValueError(
+                    f"{model} at {revision} is one the engine's server renders through its copy of a prompt encoder; "
+                    "its reference is the vendor-code oracle, recorded with `bellwether sandbox-record`"
+                )
         self.encoder = (
             None
             if vendor_code or class_rebuilds_the_pipeline(self.tokenizer, model, revision)
@@ -294,7 +300,11 @@ class HfTemplateOracle:
             **({"chat_template_sha256": self.template_sha256} if self.template_sha256 else {}),
             **({"engine_renderer": self.engine_renderer} if self.engine_renderer else {}),
             **(
-                {"encoder_module": self.prompt_encoder.name, "encoder_sha256": self.prompt_encoder.sha256}
+                {
+                    "encoder_module": self.prompt_encoder.name,
+                    "encoder_sha256": self.prompt_encoder.sha256,
+                    "encoder_source": self.prompt_encoder.source,
+                }
                 if self.prompt_encoder is not None
                 else {}
             ),

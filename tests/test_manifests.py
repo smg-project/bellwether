@@ -93,6 +93,26 @@ def test_manifests_groups_checkpoints_by_their_oracle_inputs(tmp_path, hub):
     assert list(tree(fixtures)) == ["alpha/manifest.toml", "beta/manifest.toml", "gamma/manifest.toml"]
 
 
+def test_a_checkpoint_of_an_encoder_architecture_names_the_engines_tokenizer_mode(tmp_path, hub):
+    """DeepSeek-V3.2-Exp ships a template and no module; the engine renders its architecture with its copy of the V3.2
+    encoder, and the recording plan sends such a group to the sandbox by this line."""
+    alpha, delta = hub / "alpha", hub / "delta"
+    shutil.copytree(alpha, delta)
+    (delta / "config.json").write_text(
+        json.dumps({"model_type": "deepseek_v32", "architectures": ["DeepseekV32ForCausalLM"]})
+    )
+    rows = [(str(alpha), "local", 10, DAY, 1), (str(delta), "local", 5, DAY, 3)]
+    assert manifests(tmp_path, *rows) == 0
+    fixtures = tmp_path / "fixtures"
+    written = load_manifest(fixtures / "delta" / "manifest.toml")
+    assert (written.encoder, written.group, written.tier) == ("deepseek_v32", None, 3)
+    assert 'tier     = 3\nencoder  = "deepseek_v32"\n' in (fixtures / "delta" / "manifest.toml").read_text()
+    assert load_manifest(fixtures / "alpha" / "manifest.toml").encoder is None
+    first = tree(fixtures)
+    assert manifests(tmp_path, *rows) == 0
+    assert tree(fixtures) == first
+
+
 def test_manifests_prints_each_group_with_its_members_and_their_tiers(tmp_path, hub, capsys):
     alpha, beta, gamma = (str(hub / name) for name in ("alpha", "beta", "gamma"))
     assert (
