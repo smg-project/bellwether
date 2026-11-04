@@ -571,6 +571,24 @@ with the line. Fetch a set's clips with `git lfs pull --include 'corpus/videos/<
 |---|---|---|---|
 | clips | `clips`: seven short clips for the video path, H.264 in MP4 at 1 s, 30 s and 600 s at 320x240, at 720p for 10 s, and with an audio track for 5 s; H.264 in QuickTime for 5 s; VP9 in WebM for 5 s (10.8 MB) | made for this repository's parity suite in October 2026 (the branch `feat/multimodal-parity-suite`, `multimodal/clips/`); each line's `origin.source` names its file there | Apache-2.0, this repository's own licence, copied to `corpus/licenses/clips-LICENSE` |
 
+## Audio sets
+
+An audio set is the audio side's corpus: one JSON Lines file per dataset under `corpus/audio/`, one line per clip, with
+the clip's bytes beside it under `corpus/audios/<dataset>/`, exactly as shipped by the source, in Git LFS. A line is
+written in the order its fields are built: `name` (`<dataset>-<nnnnn>-<sha8>`), `path` from the corpus root, `bytes`
+and `sha256`, what the container's own headers say it holds, read with no decoder (`container`, `codec`,
+`sample_rate`, `channels`, `bits` for a lossless stream, `duration_s`), `notes`, and `origin` (the dataset, its
+source, the file and row the bytes came from, and the licence). `.lfsconfig` keeps a clone from fetching the clips; a
+pointer names its content's sha256 and size, so `bellwether audio check` compares every line with the checkout without
+a download, and CI runs it on every pull request; for a fetched clip it also compares the headers with the line. Fetch
+a set's clips with `git lfs pull --include 'corpus/audios/<dataset>/**' --exclude ''`.
+
+The importers `librispeech` (openslr/librispeech_asr, test-clean, FLAC), `mls` (facebook/multilingual_librispeech, the
+Polish test split, Opus in Ogg), `voxpopuli` (facebook/voxpopuli, the Croatian test split, 32-bit float WAV), `fleurs`
+(google/fleurs, the US English test split, 32-bit float WAV) and `peoplesspeech` (MLCommons/peoples_speech, the clean
+configuration's test split, FLAC) are in the repository; their sets follow once the home of the bytes is decided, and
+the table of audio sets, in the video table's columns, comes with the first of them.
+
 ## Agentic session corpus
 
 `corpus/agentic/` holds the multi-turn, tool-calling sessions a traffic driver replays against a gateway to measure it: a

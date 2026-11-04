@@ -4,6 +4,7 @@
 	# with the path from the repository root. Without --exclude '', this fetchexclude wins and nothing is fetched.
 	# Compressed corpus sets (corpus/**/*.jsonl.zst, an import past corpus_sets.LIMIT) are fetched: record and
 	# import --check read them whole, and there is one copy per dataset, not one per model. The image corpus
-	# (corpus/images/**, gigabytes) and the clips (corpus/videos/**) are not: bellwether images check and videos check
-	# read the pointers, and a consumer fetches the files it needs by path, as it fetches a fixture set.
-	fetchexclude = fixtures/**/*.jsonl.zst,corpus/images/**,corpus/videos/**
+	# (corpus/images/**, gigabytes), the clips (corpus/videos/**) and the audio (corpus/audios/**) are not: the images,
+	# videos and audio checks read the pointers, and a consumer fetches the files it needs by path, as it fetches a
+	# fixture set.
+	fetchexclude = fixtures/**/*.jsonl.zst,corpus/images/**,corpus/videos/**,corpus/audios/**

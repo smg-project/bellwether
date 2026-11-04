@@ -70,4 +70,24 @@ def run(args: argparse.Namespace) -> int:
         from .ocrbench import run as run_ocrbench
 
         return run_ocrbench(args)
+    if args.dataset == "librispeech":
+        from .librispeech import run as run_librispeech
+
+        return run_librispeech(args)
+    if args.dataset == "mls":
+        from .mls import run as run_mls
+
+        return run_mls(args)
+    if args.dataset == "voxpopuli":
+        from .voxpopuli import run as run_voxpopuli
+
+        return run_voxpopuli(args)
+    if args.dataset == "fleurs":
+        from .fleurs import run as run_fleurs
+
+        return run_fleurs(args)
+    if args.dataset == "peoplesspeech":
+        from .peoplesspeech import run as run_peoplesspeech
+
+        return run_peoplesspeech(args)
     raise ValueError(f"no importer for {args.dataset!r}")

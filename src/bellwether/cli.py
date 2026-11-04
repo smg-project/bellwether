@@ -1,5 +1,5 @@
 """Command line entry point: ``bellwether gaps | models | manifests | record | import | derive | count | unpack |
-patterns | verify | images | videos | report``.
+patterns | verify | images | videos | audio | report``.
 
 ``gaps`` (M1), ``models``, ``record --oracle reference`` for render and parse (M2, M4), ``import``, ``count``,
 ``unpack`` and ``verify --kind render`` against a running SMG (M3) are implemented. The other subcommands and
@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from bellwether import __version__
+from bellwether.audio import run as audio_check_run
 from bellwether.count import run as count_run
 from bellwether.derive import run as derive_run
 from bellwether.gaps import run as gaps_run
@@ -139,21 +140,27 @@ def build_parser() -> argparse.ArgumentParser:
             "coco",
             "chartqa",
             "docvqa",
+            "fleurs",
             "glaive-v2",
             "gsm8k",
             "hermes",
+            "librispeech",
             "mgsm",
+            "mls",
             "mmmu",
             "scienceqa",
             "ocrbench",
+            "peoplesspeech",
             "shapes",
             "swebench",
             "swehero",
             "tau2",
             "textvqa",
+            "voxpopuli",
         ],
         help="the dataset to import; shapes combines GSM8K's text with BFCL's calls in every message shape; "
-        "mmmu, docvqa, textvqa, coco, chartqa, scienceqa and ocrbench are image sets (corpus/README.md)",
+        "mmmu, docvqa, textvqa, coco, chartqa, scienceqa and ocrbench are image sets; "
+        "librispeech, mls, voxpopuli, fleurs and peoplesspeech audio sets (corpus/README.md)",
     )
     importer.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: <kind>/<set>.jsonl")
     importer.add_argument(
@@ -302,6 +309,16 @@ def build_parser() -> argparse.ArgumentParser:
     videos_check.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: video/<dataset>.jsonl")
     videos_check.set_defaults(func=videos_check_run)
     video.set_defaults(func=_help(video))
+
+    sound = sub.add_parser("audio", help="the audio corpus: its sets and the files that go with them")
+    audio_sub = sound.add_subparsers(dest="audio_command", metavar="command")
+    audio_check = audio_sub.add_parser(
+        "check",
+        help="every line of every audio set names a file whose pointer or content matches, and nothing is unnamed",
+    )
+    audio_check.add_argument("--corpus", type=Path, default=Path("corpus"), help="corpus root: audio/<dataset>.jsonl")
+    audio_check.set_defaults(func=audio_check_run)
+    sound.set_defaults(func=_help(sound))
 
     report = sub.add_parser("report", help="summarize verify reports as markdown for the artifacts repo")
     report.add_argument("reports", nargs="+")

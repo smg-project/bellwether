@@ -93,6 +93,8 @@ jobs:
         run: uv run bellwether videos check
       - name: The derived image set is the plan over the COCO set
         run: uv run bellwether derive
+      - name: The audio sets and their files agree
+        run: uv run bellwether audio check
       - name: The README's tables are what fixtures/ and corpus/ hold
         run: uv run bellwether count --readme README.md --check
       - uses: actions/cache@v6
