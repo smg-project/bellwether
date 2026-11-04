@@ -10,9 +10,10 @@ in OpenHands. Each shard gives a render set and a parse set, ``swehero-<shard>``
 The code in a trajectory is under its repository's license, so each kept repository's license file and its NOTICE file,
 if any, are copied next to the sets, one copy per repository: ``swehero_licenses.json`` pins them by repository, commit,
 path and sha256 at the commit the repository's first kept row names (scripts/swehero_licenses.py builds it), the import
-fetches them (``github.fetch``), and each case names its copies in ``origin.notices``. A repository the table leaves
-out (no readable commit or license file, or a license file that is not one of the card's four) has its rows named and
-left out.
+takes each from the copy already next to the sets when its sha256 is the pinned one and fetches it otherwise
+(``github.fetch``), and each case names its copies in ``origin.notices``. A repository the table leaves out (no
+readable commit or license file, or a license file that is not one of the card's four) has its rows named and left
+out.
 
 A request is an OpenAI chat request: the trajectory's messages before a turn, unchanged, each tool message given the
 id of the call it answers, which bellwether writes and ``origin`` marks (``WRITTEN``), and ``tools.json`` as the
@@ -110,20 +111,22 @@ def committed_licenses() -> Licenses:
     return Licenses(notices, dict(table["left_out"]))
 
 
-def license_texts(table: dict, cache_dir: Path) -> dict[str, bytes]:
-    """The bytes of every file the table pins, by its path under the corpus root, fetched by repository, commit and
-    sha256."""
+def license_texts(table: dict, cache_dir: Path, corpus_dir: Path) -> dict[str, bytes]:
+    """The bytes of every file the table pins, by its path under the corpus root: the copy already there when its
+    sha256 is the pinned one, else fetched by repository, commit and sha256."""
     texts = {}
     for name, pin in table["files"].items():
         owner, repository = pin["repository"].split("/")
-        path = github.fetch(owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache_dir)
-        texts[f"{LICENSE_DIR}/{name}"] = path.read_bytes()
+        relative = f"{LICENSE_DIR}/{name}"
+        copy = corpus_dir / relative
+        path = github.fetch(owner, repository, pin["commit"], pin["path"], pin["sha256"], cache=cache_dir, copy=copy)
+        texts[relative] = path.read_bytes()
     return texts
 
 
-def license_files(cache_dir: Path) -> dict[str, bytes]:
+def license_files(cache_dir: Path, corpus_dir: Path) -> dict[str, bytes]:
     """The copies the import writes next to its sets: every file the committed table pins."""
-    return license_texts(load_license_table(), cache_dir)
+    return license_texts(load_license_table(), cache_dir, corpus_dir)
 
 
 class Unusable(ValueError):
@@ -398,7 +401,7 @@ def run(args: argparse.Namespace) -> int:
     # The card's license is checked before any shard is downloaded.
     hf.check_card_license(REPO, REVISION, FILES[hf.CARD], CARD_LICENSE, cache=args.cache)
     tools = check_tools(json.loads(fetch(TOOLS_FILE).read_text(encoding="utf-8")))
-    files = license_files(args.cache)
+    files = license_files(args.cache, args.corpus)
     skipped: list[tuple[str, str]] = []
     sets = iter_sets(fetch, tools, skipped)
     if args.check:

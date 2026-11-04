@@ -585,13 +585,40 @@ def fake_licenses(tmp_path, monkeypatch, texts: dict[str, str]) -> list[tuple]:
         served[(repository, COMMIT, "LICENSE", sha256)].parent.mkdir(parents=True, exist_ok=True)
         served[(repository, COMMIT, "LICENSE", sha256)].write_text(text)
 
-    def fetch(owner, repo, commit, path, sha256, cache=pinned.CACHE):
+    def fetch(owner, repo, commit, path, sha256, cache=pinned.CACHE, copy=None):
         calls.append((owner, repo, commit, path, sha256))
         return served[(f"{owner}/{repo}", commit, path, sha256)]
 
     monkeypatch.setattr(swebench, "load_license_table", lambda: {"files": files, "versions": versions})
     monkeypatch.setattr(github, "fetch", fetch)
     return calls
+
+
+def test_every_copy_the_committed_table_pins_is_in_the_corpus_with_its_sha256_so_the_check_fetches_nothing(tmp_path):
+    # No network in tests (conftest): a copy that is missing or differs would send the import to GitHub and fail here.
+    table = swebench.load_license_table()
+    texts = swebench.license_texts(table, tmp_path / "cache", CORPUS)
+    assert set(texts) == set(table["files"])
+    for name, pin in table["files"].items():
+        assert hashlib.sha256(texts[name]).hexdigest() == pin["sha256"], name
+    assert not (tmp_path / "cache").exists()
+
+
+def test_license_texts_hands_fetch_the_copy_next_to_the_sets(tmp_path, monkeypatch):
+    name = f"swebench-org-repo-{COMMIT[:12]}-LICENSE"
+    handed = []
+
+    def fetch(owner, repo, commit, path, sha256, cache, copy):
+        handed.append((owner, repo, commit, path, sha256, cache, copy))
+        (tmp_path / "served").write_bytes(b"MIT License\n")
+        return tmp_path / "served"
+
+    monkeypatch.setattr(github, "fetch", fetch)
+    pin = {"repository": "org/repo", "commit": COMMIT, "path": "LICENSE", "sha256": "0" * 64}
+    texts = swebench.license_texts({"files": {name: pin}}, tmp_path / "cache", tmp_path / "corpus")
+    assert texts == {name: b"MIT License\n"}
+    copy = tmp_path / "corpus" / "licenses" / name
+    assert handed == [("org", "repo", COMMIT, "LICENSE", "0" * 64, tmp_path / "cache", copy)]
 
 
 def test_the_command_writes_then_checks_and_names_what_it_leaves_out(tmp_path, monkeypatch, capsys):

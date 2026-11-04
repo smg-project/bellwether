@@ -402,8 +402,10 @@ prose and tool calls in the assistant turns, code and shell commands in the argu
 MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause. The import copies each kept repository's license file, and its NOTICE
 file if it has one, next to the sets: one copy per repository. `scripts/swehero_licenses.py` reads each repository's
 root through GitHub's API and pins the files by repository, commit, path and sha256 in
-`src/bellwether/importers/swehero_licenses.json`. The import fetches them through `importers/github.py` and copies them
-to `corpus/licenses/swehero-<owner>-<repo>-<commit>-<file>`, and each case names its copies in `origin.notices`.
+`src/bellwether/importers/swehero_licenses.json`. The import copies them to
+`corpus/licenses/swehero-<owner>-<repo>-<commit>-<file>`, reading each from the copy already there when its sha256 is
+the pinned one and fetching it through `importers/github.py` otherwise, and each case names its copies in
+`origin.notices`.
 `--check` compares the copies as it does a set: 1,709 files for 1,642 repositories.
 - **Which commit:** the one the repository's first kept row names. That is the commit in the row's `instance_id`
   (`owner__repo-<commit>`), or, where the id names a pull request (`owner__repo-<number>`, as SWE-rebench's and
@@ -594,9 +596,12 @@ did not write, `bellwether import glaive-v2` any `glaive-v2-*` one, `bellwether 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` (`--cache`) and downloads them on a miss. It then
 needs PyPI to still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from
 PyPI does not, and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL
-import copies, the License the Hermes and glaive-v2 imports copy and the license files the SWE-bench and SWE-Hero
-imports copy are read from `raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository
-keeps that commit. `bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports. The
+import copies and the License the Hermes and glaive-v2 imports copy are read from `raw.githubusercontent.com` at the
+pinned commit, which serves them as long as the repository keeps that commit. The license files the SWE-bench and
+SWE-Hero imports copy are read from their copies in `corpus/licenses/` when a copy's sha256 is the pinned one, so a
+repository that leaves GitHub (one of SWE-Hero's 1,642 has) stops neither import nor its `--check`; a copy that is
+missing or differs is read from `raw.githubusercontent.com` as the other files are. `bellwether import shapes --check`
+reads the same pinned files as the BFCL and GSM8K imports. The
 Hermes and SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under
 `huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their
 sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history

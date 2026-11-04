@@ -1,6 +1,8 @@
 import hashlib
+import io
 import json
 import re
+from pathlib import Path
 
 import huggingface_hub
 import pyarrow as pa
@@ -8,9 +10,10 @@ import pyarrow.parquet as pq
 import pytest
 
 from bellwether.cli import main
-from bellwether.importers import corpus_sets, hf, swehero
+from bellwether.importers import corpus_sets, github, hf, swehero
 from bellwether.record.corpus import read_cases
 
+CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 TOOLS = [
     {
         "type": "function",
@@ -44,7 +47,7 @@ COMMITTED_LICENSES = swehero.committed_licenses
 @pytest.fixture(autouse=True)
 def license_table(monkeypatch):
     monkeypatch.setattr(swehero, "committed_licenses", lambda: LICENSES)
-    monkeypatch.setattr(swehero, "license_files", lambda cache: LICENSE_TEXTS)
+    monkeypatch.setattr(swehero, "license_files", lambda cache, corpus: LICENSE_TEXTS)
 
 
 def test_tools_in_openai_shape_pass_unchanged():
@@ -413,6 +416,38 @@ def test_the_committed_license_table_pins_every_copy_it_names():
     assert set(licenses.notices) == set(repositories) and licenses.left_out == left_out
     some = next(iter(repositories))
     assert licenses.notices[some] == tuple(f"licenses/{name}" for name in repositories[some]["files"])
+
+
+def test_every_copy_the_committed_table_pins_is_in_the_corpus_with_its_sha256_so_the_check_fetches_nothing(tmp_path):
+    # No network in tests (conftest): a copy that is missing or differs would send the import to GitHub and fail here.
+    table = swehero.load_license_table()
+    texts = swehero.license_texts(table, tmp_path / "cache", CORPUS)
+    assert set(texts) == {f"licenses/{name}" for name in table["files"]}
+    for name, pin in table["files"].items():
+        assert hashlib.sha256(texts[f"licenses/{name}"]).hexdigest() == pin["sha256"], name
+    assert not (tmp_path / "cache").exists()
+
+
+def test_license_texts_reads_a_copy_next_to_the_sets_whose_hash_is_the_pin_and_fetches_another(tmp_path, monkeypatch):
+    text = b"MIT License\n"
+    commit = "0123456789ab" + "c" * 28
+    pin = {"repository": "owner/repo", "commit": commit, "path": "LICENSE", "sha256": hashlib.sha256(text).hexdigest()}
+    table = {"files": {"swehero-owner-repo-0123456789ab-LICENSE": pin}}
+    corpus = tmp_path / "corpus"
+    (corpus / NOTICE).parent.mkdir(parents=True)
+    (corpus / NOTICE).write_bytes(text)
+    assert swehero.license_texts(table, tmp_path / "cache", corpus) == {NOTICE: text}  # no network: conftest refuses it
+    (corpus / NOTICE).write_bytes(b"changed\n")
+    calls: list[str] = []
+
+    def urlopen(url, timeout):
+        calls.append(url)
+        return io.BytesIO(text)
+
+    monkeypatch.setattr(github, "urlopen", urlopen)
+    assert swehero.license_texts(table, tmp_path / "cache", corpus) == {NOTICE: text}
+    assert calls == [f"https://raw.githubusercontent.com/owner/repo/{commit}/LICENSE"]
+    assert (corpus / NOTICE).read_bytes() == b"changed\n"  # what check_sets then names as differing
 
 
 def test_a_row_that_gives_no_turn_is_named(monkeypatch):

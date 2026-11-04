@@ -49,6 +49,30 @@ def test_fetch_uses_a_cached_file_whose_hash_matches_without_the_network(tmp_pat
     assert github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path) == path
 
 
+def test_fetch_returns_a_copy_whose_hash_matches_before_the_cache_or_the_network(tmp_path, monkeypatch):
+    copy = tmp_path / "corpus" / "licenses" / "sums-LICENSE"
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(b"rows")
+    monkeypatch.setattr(github, "urlopen", lambda *a, **k: pytest.fail("no download expected"))
+    cache = tmp_path / "cache"
+    assert github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=cache, copy=copy) == copy
+    assert not cache.exists()
+
+
+def test_fetch_passes_over_a_copy_that_is_missing_or_holds_other_bytes(tmp_path, monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(github, "urlopen", opener(b"rows", calls))
+    url = f"https://raw.githubusercontent.com/acme/sums/{COMMIT}/data/test.jsonl"
+    copy = tmp_path / "corpus" / "licenses" / "sums-LICENSE"
+    path = github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path / "missing", copy=copy)
+    assert path == tmp_path / "missing" / "github" / "acme" / "sums" / COMMIT / FILE and path.read_bytes() == b"rows"
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(b"other")
+    path = github.fetch("acme", "sums", COMMIT, FILE, sha(b"rows"), cache=tmp_path / "other", copy=copy)
+    assert path == tmp_path / "other" / "github" / "acme" / "sums" / COMMIT / FILE and path.read_bytes() == b"rows"
+    assert calls == [url, url] and copy.read_bytes() == b"other"
+
+
 def test_fetch_rejects_a_download_that_is_not_the_pinned_one_and_caches_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(github, "urlopen", opener(b"tampered", []))
     with pytest.raises(ValueError, match="is not the pinned"):
