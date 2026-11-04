@@ -1,16 +1,16 @@
 """GQA's photographs as an image set, one shard at a time: the Visual Genome photographs behind the balanced test-dev
-questions.
+and challenge questions.
 
-The data is the GQA dataset as the lmms-lab mirror publishes it on the Hugging Face Hub at a pinned commit,
-its ``testdev_balanced_images`` configuration: one parquet file of 398 photographs in the ``image`` column,
-stored as the datasets library stores images (the bytes and a path), each with its ``id``.
-Every row gives a line in file and row order; a photograph whose bytes repeat an earlier image's is left out and named,
-as the text imports name their repeats. The files are read as data (``image_sets.parquet_images``); nothing in them
-runs. The set grows a shard at a time: ``FILES`` lists the files imported so far, in order, and a file added later
-appends its photographs after the earlier ones, so the names already written do not move. The dataset card states
-``mit``, which the import checks on every run; the photographs are Visual Genome's, whose own terms the card does not
-restate. The dataset ships no licence file, so the import copies the MIT License text as the SPDX license list publishes
-it, from that list's repository at a pinned commit."""
+The data is the GQA dataset as the lmms-lab mirror publishes it on the Hugging Face Hub at a pinned commit, its
+``testdev_balanced_images`` and ``challenge_balanced_images`` configurations: one parquet file each, the photographs
+in the ``image`` column, stored as the datasets library stores images (the bytes and a path), each with its ``id``.
+Every row gives a line in file and row order; a photograph whose bytes repeat an earlier image's is left out and
+named, as the text imports name their repeats. The files are read as data (``image_sets.parquet_images``); nothing in
+them runs. The set grows a shard at a time: ``FILES`` lists the files imported so far, in order, and a file added
+later appends its photographs after the earlier ones, so the names already written do not move. The dataset card
+states ``mit``, which the import checks on every run; the photographs are Visual Genome's, whose own terms the card
+does not restate. The dataset ships no licence file, so the import copies the MIT License text as the SPDX license
+list publishes it, from that list's repository at a pinned commit."""
 
 from __future__ import annotations
 
@@ -41,6 +41,9 @@ COLUMNS = ("image",)
 FILES = {
     "testdev_balanced_images/testdev-00000-of-00001.parquet": (
         "ba0a57a72c483d6e4a390ecbbee05d07a55365aeac3e93f4a923ac61c9e465eb"
+    ),
+    "challenge_balanced_images/challenge-00000-of-00001.parquet": (
+        "ee9a88a519993a341314035875513a3e7999c0236b48d781e494286890332145"
     ),
 }
 

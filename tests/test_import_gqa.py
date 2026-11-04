@@ -12,6 +12,7 @@ from bellwether.importers import github, gqa, hf, image_sets
 
 LICENSE_TEXT = b"MIT License\n\n(the body of the text)\n"
 CARD = b"---\nlicense: mit\n---\n# GQA\n"
+FILE2 = "challenge_balanced_images/challenge-00000-of-00001.parquet"
 FILE = "testdev_balanced_images/testdev-00000-of-00001.parquet"
 
 
@@ -32,7 +33,8 @@ def pinned(tmp_path, monkeypatch):
     and ``github.fetch`` signatures with no network."""
     first, second, third = jpeg(8, 6), jpeg(10, 4), png(3, 3)
     pq.write_table(table([first, first, second, b"not an image", None, third, second]), tmp_path / "shard.parquet")
-    files = {FILE: tmp_path / "shard.parquet"}
+    pq.write_table(table([]), tmp_path / "empty.parquet")
+    files = {FILE: tmp_path / "shard.parquet", FILE2: tmp_path / "empty.parquet"}
     served = {}
 
     def fetch_hf(repo, revision, filename, sha256, cache):
@@ -62,7 +64,8 @@ def pinned(tmp_path, monkeypatch):
 
 def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert re.fullmatch(r"[0-9a-f]{40}", gqa.REVISION)
-    assert list(gqa.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", gqa.FILES[FILE])
+    assert list(gqa.FILES) == [FILE, FILE2]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", gqa.FILES[f]) for f in (FILE, FILE2))
     assert gqa.SOURCE == f"hf:datasets/lmms-lab-encoder/GQA@{gqa.REVISION}"
     assert gqa.CARD_LICENSE == "mit" and gqa.LICENSE == "MIT"
 
@@ -115,6 +118,7 @@ def test_import_writes_the_set_the_photographs_and_the_licence_copy_and_check_pa
     assert (corpus / lines[0]["path"]).read_bytes() == first
     assert (corpus / "licenses" / "gqa-LICENSE").read_bytes() == LICENSE_TEXT
     assert pinned["served"][hf.CARD] == gqa.CARD_SHA256 and pinned["served"][FILE] == gqa.FILES[FILE]
+    assert pinned["served"][FILE2] == gqa.FILES[FILE2]
     assert out == [
         f"no line for GQA testdev row 1, image: it repeats gqa-00001-{sha(first)[:8]}",
         f"no line for GQA testdev row 6, image: it repeats gqa-00002-{sha(second)[:8]}",
