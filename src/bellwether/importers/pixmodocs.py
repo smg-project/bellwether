@@ -1,14 +1,17 @@
-"""PixMo-Docs's charts as an image set, one shard at a time: synthetic charts, rendered by code a language model wrote.
+"""PixMo-Docs's charts and diagrams as an image set, one shard at a time: synthetic pictures, rendered by code a
+language model wrote.
 
-The data is the PixMo-Docs dataset on the Hugging Face Hub at a pinned commit, its ``charts`` configuration:
-50 parquet files of the train split, each row a rendered chart in the ``image`` column, stored as the datasets
-library stores images (the bytes and a path), with its id and its questions.
-Every row gives a line in file and row order; a chart whose bytes repeat an earlier image's is left out and named, as
-the text imports name their repeats. The files are read as data (``image_sets.parquet_images``); nothing in them runs.
-The set grows a shard at a time: ``FILES`` lists the files imported so far, in order, and a file added later appends its
-charts after the earlier ones, so the names already written do not move. The dataset card states ``odc-by``, which the
-import checks on every run. The dataset ships no licence file, so the import copies the ODC Attribution License text as
-the SPDX license list publishes it (``text/ODC-By-1.0.txt``), from that list's repository at a pinned commit."""
+The data is the PixMo-Docs dataset on the Hugging Face Hub at a pinned commit: its ``charts`` configuration (50
+parquet files of the train split) and its ``diagrams`` configuration (6 files), each row a rendered picture in the
+``image`` column, stored as the datasets library stores images (the bytes and a path), with its id and its questions.
+Every row gives a line in file and row order; a picture whose bytes repeat an earlier image's is left out and named,
+as the text imports name their repeats. The files are read as data (``image_sets.parquet_images``); nothing in them
+runs. The set grows a shard at a time: ``FILES`` lists the files imported so far, in order, whatever their
+configuration, and a file added later appends its pictures after the earlier ones, so the names already written do not
+move. The dataset card states ``odc-by``, which the import checks on every run. The dataset ships no licence file, so
+the import copies the ODC Attribution License text as the SPDX license list publishes it (``text/ODC-By-1.0.txt``),
+from that list's repository at a pinned commit.
+"""
 
 from __future__ import annotations
 
@@ -38,6 +41,7 @@ COLUMNS = ("image",)
 # The shards imported so far, by the sha256 of their bytes, in the order the lines are built; a new shard goes last.
 FILES = {
     "charts/train-00000-of-00050.parquet": ("bec02f60b35fc8b6d8bb2d275b8295751bcd5ee4204e22315f5d11b4de2f357f"),
+    "diagrams/train-00000-of-00006.parquet": ("69f895512f9518b9ec64b69eb3598426c045c21f60f53e1ce09e1902ad8ede59"),
 }
 
 
