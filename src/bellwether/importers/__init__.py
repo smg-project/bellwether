@@ -58,4 +58,8 @@ def run(args: argparse.Namespace) -> int:
         from .coco import run as run_coco
 
         return run_coco(args)
+    if args.dataset == "chartqa":
+        from .chartqa import run as run_chartqa
+
+        return run_chartqa(args)
     raise ValueError(f"no importer for {args.dataset!r}")
