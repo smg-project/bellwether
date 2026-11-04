@@ -168,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
             "textvqa",
             "vizwiz",
             "voxpopuli",
+            "vqarad",
             "websight",
             "wit",
         ],
