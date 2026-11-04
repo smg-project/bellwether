@@ -971,6 +971,7 @@ The images the references of every processor family are recorded over, by the da
 | mathvista | hf:datasets/AI4Math/MathVista@2b6ad694 | CC-BY-SA-4.0 | 972 | 134.9 MB |
 | mmmu | hf:datasets/MMMU/MMMU@876ce5cb | Apache-2.0 | 959 | 340.6 MB |
 | ocrbench | hf:datasets/echo840/OCRBench@92a54bd1 | MIT | 930 | 75.2 MB |
+| pathvqa | hf:datasets/flaviagiammarino/path-vqa@16858328 | MIT | 253 | 40.8 MB |
 | pets | hf:datasets/timm/oxford-iiit-pet@089695c8 | CC-BY-SA-4.0 | 3669 | 412.9 MB |
 | pixmocap | hf:datasets/allenai/pixmo-cap@edce6390 | ODC-By-1.0 | 1801 | 984.7 MB |
 | pixmodocs | hf:datasets/allenai/pixmo-docs@d887597b | ODC-By-1.0 | 2337 | 500.5 MB |
@@ -981,7 +982,7 @@ The images the references of every processor family are recorded over, by the da
 | vqarad | hf:datasets/flaviagiammarino/vqa-rad@bcf91e76 | CC0-1.0 | 314 | 16.5 MB |
 | websight | hf:datasets/HuggingFaceM4/WebSight@b11f8172 | CC-BY-4.0 | 2603 | 520.3 MB |
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 2000 | 59.5 MB |
-| all | | | 38297 | 8.86 GB |
+| all | | | 38550 | 8.90 GB |
 
 <!-- end of what bellwether count --readme writes -->
 
