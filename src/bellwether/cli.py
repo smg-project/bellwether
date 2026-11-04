@@ -150,6 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
             "hermes",
             "infovqa",
             "invoices",
+            "latexocr",
             "librispeech",
             "mathvista",
             "mgsm",
