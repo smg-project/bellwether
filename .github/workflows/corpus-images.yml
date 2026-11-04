@@ -24,6 +24,7 @@ on:
       - src/bellwether/importers/pixmodocs.py
       - src/bellwether/importers/websight.py
       - src/bellwether/importers/docmatix.py
+      - src/bellwether/importers/mathvista.py
       - .github/workflows/corpus-images.yml
 
 permissions:
@@ -41,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix]
+        dataset: [mmmu, docvqa, textvqa, coco, chartqa, scienceqa, ocrbench, gqa, wit, doclaynet, pixmodocs, websight, docmatix, mathvista]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
