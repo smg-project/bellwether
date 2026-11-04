@@ -42,6 +42,9 @@ FILES = {
     "v0.2/train-00000-of-00738-80a58552f2fb3344.parquet": (
         "d26f5a5eb90223549052895be36f7ecf38cdcc3cf4596a680f3531e65346ee1f"
     ),
+    "v0.2/train-00001-of-00738-b79d703dc79dce91.parquet": (
+        "83720eb408682061180a3755444853f44b8299ee69d05289de708bf6a7f0de7f"
+    ),
 }
 
 

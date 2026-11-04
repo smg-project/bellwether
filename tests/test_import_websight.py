@@ -12,6 +12,7 @@ from bellwether.importers import github, hf, image_sets, websight
 
 CC_BY = b"Creative Commons Attribution 4.0 International\n\n Creative Commons Corporation is not a law firm\n"
 CARD = b"---\nlicense: cc-by-4.0\n---\n# WebSight\n"
+FILE2 = "v0.2/train-00001-of-00738-b79d703dc79dce91.parquet"
 FILE = "v0.2/train-00000-of-00738-80a58552f2fb3344.parquet"
 
 
@@ -33,7 +34,8 @@ def pinned(tmp_path, monkeypatch):
     and ``github.fetch`` signatures with no network."""
     first, second, third = jpeg(8, 6), jpeg(10, 4), png(3, 3)
     pq.write_table(table([first, first, second, b"not an image", None, third, second]), tmp_path / "shard.parquet")
-    files = {FILE: tmp_path / "shard.parquet"}
+    pq.write_table(table([]), tmp_path / "empty.parquet")
+    files = {FILE: tmp_path / "shard.parquet", FILE2: tmp_path / "empty.parquet"}
     served = {}
 
     def fetch_hf(repo, revision, filename, sha256, cache):
@@ -63,7 +65,8 @@ def pinned(tmp_path, monkeypatch):
 
 def test_the_shard_is_pinned_by_a_full_commit_and_a_sha256():
     assert re.fullmatch(r"[0-9a-f]{40}", websight.REVISION)
-    assert list(websight.FILES) == [FILE] and re.fullmatch(r"[0-9a-f]{64}", websight.FILES[FILE])
+    assert list(websight.FILES) == [FILE, FILE2]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", websight.FILES[f]) for f in (FILE, FILE2))
     assert websight.SOURCE == f"hf:datasets/HuggingFaceM4/WebSight@{websight.REVISION}"
     assert websight.CARD_LICENSE == "cc-by-4.0" and websight.LICENSE == "CC-BY-4.0"
 
@@ -115,6 +118,7 @@ def test_import_writes_the_set_the_screenshots_and_the_licence_copy_and_check_pa
     assert (corpus / lines[0]["path"]).read_bytes() == first
     assert (corpus / "licenses" / "websight-LICENSE").read_bytes() == CC_BY
     assert pinned["served"][hf.CARD] == websight.CARD_SHA256 and pinned["served"][FILE] == websight.FILES[FILE]
+    assert pinned["served"][FILE2] == websight.FILES[FILE2]
     assert out == [
         f"no line for WebSight train row 1, image: it repeats websight-00001-{sha(first)[:8]}",
         f"no line for WebSight train row 6, image: it repeats websight-00002-{sha(second)[:8]}",
