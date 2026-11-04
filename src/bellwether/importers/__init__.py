@@ -150,4 +150,8 @@ def run(args: argparse.Namespace) -> int:
         from .pathvqa import run as run_pathvqa
 
         return run_pathvqa(args)
+    if args.dataset == "mnist":
+        from .mnist import run as run_mnist
+
+        return run_mnist(args)
     raise ValueError(f"no importer for {args.dataset!r}")
