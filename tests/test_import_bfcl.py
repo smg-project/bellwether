@@ -921,7 +921,7 @@ def test_the_command_writes_first_turn_parse_cases_and_names_the_rows_without_a_
     ]
     path = multi_turn_wheel(tmp_path, "multi_turn_miss_param", rows, answers)
     monkeypatch.setattr(bfcl, "CATEGORIES", ("multi_turn_miss_param",))
-    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: path)
+    serve_pins(tmp_path, monkeypatch, path)
     corpus = tmp_path / "corpus"
     assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
     out = capsys.readouterr().out
@@ -963,7 +963,7 @@ def test_the_command_leaves_out_a_multi_turn_first_turn_that_repeats_an_earlier_
         members[f"bfcl_eval/data/BFCL_v4_{category}.json"] = questions
         members[f"bfcl_eval/data/possible_answer/BFCL_v4_{category}.json"] = answers
     monkeypatch.setattr(bfcl, "CATEGORIES", tuple(rows))
-    monkeypatch.setattr(pypi, "fetch", lambda *a, **k: fake_wheel(tmp_path, members))
+    serve_pins(tmp_path, monkeypatch, fake_wheel(tmp_path, members))
     corpus = tmp_path / "corpus"
     assert main(["import", "bfcl", "--corpus", str(corpus)]) == 0
     assert main(["import", "bfcl", "--corpus", str(corpus), "--check"]) == 0
