@@ -263,13 +263,14 @@ def check_sets(sets: dict[tuple[str, str], list[dict]], corpus_dir: Path, licens
     return corpus_sets.check(sets, corpus_dir, "mgsm-", "MGSM file", {LICENSE_COPY: license_text})
 
 
-def fetch(path: str, sha256: str, cache: Path) -> bytes:
-    """The bytes of ``path`` in the repository at the pinned commit, checked against ``sha256``."""
-    return github.fetch(OWNER, REPO, COMMIT, path, sha256, cache=cache).read_bytes()
+def fetch(path: str, sha256: str, cache: Path, copy: Path | None = None) -> bytes:
+    """The bytes of ``path`` in the repository at the pinned commit, checked against ``sha256``; ``copy``, a file
+    written from the pin before, is read first when its sha256 is ``sha256`` (``github.fetch``)."""
+    return github.fetch(OWNER, REPO, COMMIT, path, sha256, cache=cache, copy=copy).read_bytes()
 
 
 def run(args: argparse.Namespace) -> int:
-    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache)
+    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache, copy=args.corpus / LICENSE_COPY)
     check_license(license_text)
     files = {lang: fetch(data_file(lang), sha256, args.cache) for lang, sha256 in SHA256.items()}
     exemplars = fetch(EXEMPLARS_FILE, EXEMPLARS_SHA256, args.cache)

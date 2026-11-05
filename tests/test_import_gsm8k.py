@@ -276,9 +276,10 @@ def serve(tmp_path, monkeypatch, files: dict[str, bytes]) -> None:
     """Stand in for ``github.fetch``: each pinned path is served from ``files``, and nothing is downloaded."""
     pins = {"LICENSE": sha(MIT), TRAIN: gsm8k.SHA256["train"], TEST: gsm8k.SHA256["test"]}
 
-    def fetch(owner, repo, commit, path, sha256, cache):
+    def fetch(owner, repo, commit, path, sha256, cache, copy=None):
         assert (owner, repo, commit) == ("openai", "grade-school-math", gsm8k.COMMIT)
         assert (sha256, cache) == (pins[path], tmp_path)
+        assert copy == (tmp_path / "corpus" / gsm8k.LICENSE_COPY if path == gsm8k.LICENSE_FILE else None)
         served = tmp_path / "served" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(files[path])

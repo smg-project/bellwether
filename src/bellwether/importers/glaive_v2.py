@@ -333,7 +333,7 @@ def check_license_text(text: bytes) -> None:
 def run(args: argparse.Namespace) -> int:
     hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, cache=args.cache)
     pin = (LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256)
-    license_text = github.fetch(*pin, cache=args.cache).read_bytes()
+    license_text = github.fetch(*pin, cache=args.cache, copy=args.corpus / LICENSE_COPY).read_bytes()
     check_license_text(license_text)
     rows = json.loads(hf.fetch(REPO, REVISION, DATA, DATA_SHA256, cache=args.cache).read_bytes())
     skipped: list[tuple[int, str]] = []

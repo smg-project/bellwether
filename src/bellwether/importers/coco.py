@@ -73,8 +73,9 @@ def fetch(cache: Path) -> Path:
 
 
 def run(args: argparse.Namespace) -> int:
+    copy = args.corpus / LICENSE_COPY
     license_text = github.fetch(
-        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache
+        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache, copy=copy
     ).read_bytes()
     check_license(license_text)
     archive = fetch(args.cache)

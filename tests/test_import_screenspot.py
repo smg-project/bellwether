@@ -46,7 +46,7 @@ def pinned(tmp_path, monkeypatch):
         assert filename == screenspot.ARCHIVE
         return archive
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             screenspot.LICENSE_OWNER,
             screenspot.LICENSE_REPO,
@@ -54,6 +54,7 @@ def pinned(tmp_path, monkeypatch):
             screenspot.LICENSE_PATH,
         )
         assert (sha256, cache) == (screenspot.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / screenspot.LICENSE_COPY
         (tmp_path / "LICENSE").write_bytes(APACHE_TEXT)
         return tmp_path / "LICENSE"
 

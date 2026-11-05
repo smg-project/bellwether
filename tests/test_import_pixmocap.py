@@ -66,7 +66,7 @@ def pinned(tmp_path, monkeypatch):
             return path
         return files[filename]
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             pixmocap.LICENSE_OWNER,
             pixmocap.LICENSE_REPO,
@@ -74,6 +74,7 @@ def pinned(tmp_path, monkeypatch):
             pixmocap.LICENSE_PATH,
         )
         assert (sha256, cache) == (pixmocap.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / pixmocap.LICENSE_COPY
         target = tmp_path / "ODC-By-1.0.txt"
         target.write_bytes(ODC_TEXT)
         return target

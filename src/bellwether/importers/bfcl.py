@@ -690,7 +690,10 @@ def check_license_file(text: bytes) -> None:
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
-    license_text = github.fetch(OWNER, REPO, COMMIT, LICENSE_FILE, LICENSE_SHA256, cache=args.cache).read_bytes()
+    copy = args.corpus / LICENSE_COPY
+    license_text = github.fetch(
+        OWNER, REPO, COMMIT, LICENSE_FILE, LICENSE_SHA256, cache=args.cache, copy=copy
+    ).read_bytes()
     check_license_file(license_text)
     skipped: list[tuple[str, str]] = []
     with zipfile.ZipFile(pypi.fetch(PROJECT, VERSION, WHEEL, SHA256, cache=args.cache)) as wheel:

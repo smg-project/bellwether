@@ -375,8 +375,9 @@ def serve_pins(tmp_path, monkeypatch, wheel, license_text: bytes = APACHE) -> No
     """Stand in for both pinned fetches, so tests never touch the network: the wheel, and the LICENSE it lacks."""
     monkeypatch.setattr(pypi, "fetch", lambda *a, **k: wheel)
 
-    def fetch(owner, repo, commit, path, sha256, cache):
+    def fetch(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path, sha256) == LICENSE_PIN
+        assert copy == tmp_path / "corpus" / bfcl.LICENSE_COPY
         served = tmp_path / "served" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(license_text)

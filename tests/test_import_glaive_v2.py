@@ -630,7 +630,8 @@ def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD, license_tex
     ``github.fetch`` serving ``license_text``.
 
     The importer's pins are set to these files' sha256, so ``hf.fetch`` passes them. Returns the downloads asked for:
-    ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256).
+    ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256), ``github_copies`` the copy
+    next to the sets each ``github`` fetch was handed.
     """
     files = {"README.md": card.encode("utf-8"), "glaive-function-calling-v2.json": json.dumps(rows).encode("utf-8")}
     for pin, filename in (("CARD_SHA256", "README.md"), ("DATA_SHA256", "glaive-function-calling-v2.json")):
@@ -646,16 +647,18 @@ def serve(monkeypatch, tmp_path, rows: list[dict], card: str = CARD, license_tex
 
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
     fetched: list = []
+    copies: list = []
 
-    def fetch(owner, repo, commit, path, sha256, cache=None):
+    def fetch(owner, repo, commit, path, sha256, cache=None, copy=None):
         fetched.append((owner, repo, commit, path, sha256))
+        copies.append(copy)
         served = tmp_path / "github" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(license_text)
         return served
 
     monkeypatch.setattr(github, "fetch", fetch)
-    return SimpleNamespace(hub=downloads, github=fetched)
+    return SimpleNamespace(hub=downloads, github=fetched, github_copies=copies)
 
 
 def test_the_command_writes_then_checks(tmp_path, monkeypatch, capsys):
@@ -735,6 +738,7 @@ def test_the_command_writes_the_apache_license_next_to_the_sets(tmp_path, monkey
     # Software Foundation publishes it, from its website's repository at the one commit that file has.
     commit, sha256 = "01b1be9fbc5cd93b6794f5653a58b9b863807f84", glaive_v2.LICENSE_SHA256
     assert served.github == [("apache", "www-site", commit, "content/licenses/LICENSE-2.0.txt", sha256)]
+    assert served.github_copies == [corpus / glaive_v2.LICENSE_COPY]
     assert sha256 == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 
 

@@ -382,9 +382,10 @@ def serve(
         )
         return wheel
 
-    def fetch_file(owner, repo, commit, path, sha256, cache):
+    def fetch_file(owner, repo, commit, path, sha256, cache, copy=None):
         assert (owner, repo, commit, cache) == ("openai", "grade-school-math", gsm8k.COMMIT, tmp_path)
         assert sha256 == {"LICENSE": mit_sha256, TEST: gsm8k.SHA256["test"]}[path]
+        assert copy == (tmp_path / "corpus" / gsm8k.LICENSE_COPY if path == gsm8k.LICENSE_FILE else None)
         served = tmp_path / "served" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes({"LICENSE": gsm8k_license, TEST: test_file}[path])

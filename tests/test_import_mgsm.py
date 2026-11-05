@@ -402,9 +402,10 @@ def serve(tmp_path, monkeypatch, files: dict[str, bytes]) -> None:
     pins = {"mgsm/LICENSE": mgsm.LICENSE_SHA256, "mgsm/exemplars.py": mgsm.EXEMPLARS_SHA256}
     pins.update({f"mgsm/mgsm_{lang}.tsv": sha256 for lang, sha256 in mgsm.SHA256.items()})
 
-    def fetch(owner, repo, commit, path, sha256, cache):
+    def fetch(owner, repo, commit, path, sha256, cache, copy=None):
         assert (owner, repo, commit) == ("google-research", "url-nlp", mgsm.COMMIT)
         assert (sha256, cache) == (pins[path], tmp_path)
+        assert copy == (tmp_path / "corpus" / mgsm.LICENSE_COPY if path == mgsm.LICENSE_FILE else None)
         served = tmp_path / "served" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(files[path])

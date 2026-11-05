@@ -342,9 +342,10 @@ def serve(tmp_path, monkeypatch, runs: dict[str, dict]) -> list[tuple[str, str]]
     monkeypatch.setattr(tau2, "load_tools", lambda: TOOLS)
     fetched = []
 
-    def fetch(owner, repo, commit, path, sha256, cache):
+    def fetch(owner, repo, commit, path, sha256, cache, copy=None):
         assert (owner, repo) == (tau2.OWNER, tau2.REPO)
         assert sha256 == digest[(commit, path)]
+        assert copy == (tmp_path / "corpus" / tau2.LICENSE_COPY if path == tau2.LICENSE_FILE else None)
         fetched.append((commit, path))
         target = cache / "github" / owner / repo / commit / path
         target.parent.mkdir(parents=True, exist_ok=True)

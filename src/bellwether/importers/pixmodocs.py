@@ -84,8 +84,9 @@ def fetch(filename: str, sha256: str, cache: Path) -> Path:
 
 def run(args: argparse.Namespace) -> int:
     hf.check_card_license(REPO, REVISION, CARD_SHA256, CARD_LICENSE, args.cache)
+    copy = args.corpus / LICENSE_COPY
     license_text = github.fetch(
-        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache
+        LICENSE_OWNER, LICENSE_REPO, LICENSE_COMMIT, LICENSE_PATH, LICENSE_SHA256, cache=args.cache, copy=copy
     ).read_bytes()
     check_license(license_text)
     files = {name: fetch(name, sha256, args.cache) for name, sha256 in FILES.items()}

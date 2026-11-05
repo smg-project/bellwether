@@ -52,7 +52,7 @@ def pinned(tmp_path, monkeypatch):
             return path
         return files[filename]
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             docmatix.LICENSE_OWNER,
             docmatix.LICENSE_REPO,
@@ -60,6 +60,7 @@ def pinned(tmp_path, monkeypatch):
             docmatix.LICENSE_PATH,
         )
         assert (sha256, cache) == (docmatix.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / docmatix.LICENSE_COPY
         (tmp_path / "LICENSE").write_bytes(MIT_TEXT)
         return tmp_path / "LICENSE"
 
