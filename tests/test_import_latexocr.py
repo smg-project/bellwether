@@ -46,7 +46,7 @@ def pinned(tmp_path, monkeypatch):
             return path
         return files[filename]
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             latexocr.LICENSE_OWNER,
             latexocr.LICENSE_REPO,
@@ -54,6 +54,7 @@ def pinned(tmp_path, monkeypatch):
             latexocr.LICENSE_PATH,
         )
         assert (sha256, cache) == (latexocr.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / latexocr.LICENSE_COPY
         (tmp_path / "LICENSE").write_bytes(LICENSE_TEXT)
         return tmp_path / "LICENSE"
 

@@ -453,7 +453,7 @@ def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE,
     """``hf_hub_download`` served from files written here, each pinned by its sha256 in place of the dataset's: the
     card, and each config's rows (no config given: none); and ``github.fetch`` serving ``license_text``. Returns the
     downloads asked for: ``hub`` as (repo, file, options), ``github`` as (owner, repo, commit, path, sha256), with
-    ``github_caches`` the cache each was given.
+    ``github_caches`` the cache each was given and ``github_copies`` the copy next to the sets each was handed.
     """
     paths = {hf.CARD: tmp_path / "hub" / hf.CARD}
     paths[hf.CARD].parent.mkdir(parents=True)
@@ -473,17 +473,19 @@ def serve(tmp_path, monkeypatch, card: str = CARD, license_text: bytes = APACHE,
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
     fetched: list[tuple] = []
     caches: list = []
+    copies: list = []
 
-    def fetch(owner, repo, commit, path, sha256, cache=None):
+    def fetch(owner, repo, commit, path, sha256, cache=None, copy=None):
         fetched.append((owner, repo, commit, path, sha256))
         caches.append(cache)
+        copies.append(copy)
         served = tmp_path / "github" / path
         served.parent.mkdir(parents=True, exist_ok=True)
         served.write_bytes(license_text)
         return served
 
     monkeypatch.setattr(github, "fetch", fetch)
-    return SimpleNamespace(hub=calls, github=fetched, github_caches=caches)
+    return SimpleNamespace(hub=calls, github=fetched, github_caches=caches, github_copies=copies)
 
 
 def test_the_command_writes_names_every_row_it_skips_and_every_case_it_leaves_out_then_checks(
@@ -561,6 +563,7 @@ def test_the_command_writes_the_apache_license_next_to_the_sets(tmp_path, monkey
     # Software Foundation publishes it, from its website's repository at the one commit that file has.
     commit, sha256 = "01b1be9fbc5cd93b6794f5653a58b9b863807f84", hermes.LICENSE_SHA256
     assert served.github == [("apache", "www-site", commit, "content/licenses/LICENSE-2.0.txt", sha256)]
+    assert served.github_copies == [corpus / hermes.LICENSE_COPY]
     assert sha256 == "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
 
 

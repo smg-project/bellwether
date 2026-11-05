@@ -224,7 +224,8 @@ def report_skipped(skipped: list[tuple[str, str]]) -> None:
 def run(args: argparse.Namespace) -> int:
     from . import pypi
 
-    gsm8k.check_license(gsm8k.fetch(gsm8k.LICENSE_FILE, gsm8k.LICENSE_SHA256, args.cache))
+    copy = args.corpus / gsm8k.LICENSE_COPY  # the GSM8K import's copy: the notice these sets' GSM8K parts are under
+    gsm8k.check_license(gsm8k.fetch(gsm8k.LICENSE_FILE, gsm8k.LICENSE_SHA256, args.cache, copy=copy))
     test_file = gsm8k.fetch(gsm8k.data_file(SPLIT), gsm8k.SHA256[SPLIT], args.cache)
     with zipfile.ZipFile(pypi.fetch(bfcl.PROJECT, bfcl.VERSION, bfcl.WHEEL, bfcl.SHA256, cache=args.cache)) as wheel:
         bfcl.check_license(wheel)

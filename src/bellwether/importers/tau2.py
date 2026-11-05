@@ -354,8 +354,8 @@ def iter_sets(
         yield "parse", set_name(file_name), parse
 
 
-def fetch(path: str, sha256: str, cache: Path, commit: str = COMMIT) -> Path:
-    return github.fetch(OWNER, REPO, commit, path, sha256, cache=cache)
+def fetch(path: str, sha256: str, cache: Path, commit: str = COMMIT, copy: Path | None = None) -> Path:
+    return github.fetch(OWNER, REPO, commit, path, sha256, cache=cache, copy=copy)
 
 
 def read_runs(cache: Path) -> Iterator[tuple[str, str, dict]]:
@@ -386,7 +386,7 @@ def check_sets(sets: corpus_sets.Sets, corpus_dir: Path, license_text: bytes) ->
 
 
 def run(args: argparse.Namespace) -> int:
-    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache).read_bytes()
+    license_text = fetch(LICENSE_FILE, LICENSE_SHA256, args.cache, copy=args.corpus / LICENSE_COPY).read_bytes()
     check_license(license_text)
     constants = prompts(fetch(AGENT_FILE, AGENT_SHA256, args.cache, PROMPT_COMMIT).read_text("utf-8"))
     tools = load_tools()

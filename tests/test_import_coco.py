@@ -49,7 +49,7 @@ def pinned_archive(tmp_path, monkeypatch):
         served["archive"] = sha256
         return tmp_path / "val2017.zip"
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             coco.LICENSE_OWNER,
             coco.LICENSE_REPO,
@@ -57,6 +57,7 @@ def pinned_archive(tmp_path, monkeypatch):
             coco.LICENSE_PATH,
         )
         assert (sha256, cache) == (coco.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / coco.LICENSE_COPY
         (tmp_path / "termsofuse.htm").write_bytes(TERMS)
         return tmp_path / "termsofuse.htm"
 

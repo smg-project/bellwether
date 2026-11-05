@@ -46,7 +46,7 @@ def pinned(tmp_path, monkeypatch):
             return path
         return files[filename]
 
-    def fetch_github(owner, repo, commit, path, sha256, cache):
+    def fetch_github(owner, repo, commit, path, sha256, cache, copy):
         assert (owner, repo, commit, path) == (
             gqa.LICENSE_OWNER,
             gqa.LICENSE_REPO,
@@ -54,6 +54,7 @@ def pinned(tmp_path, monkeypatch):
             gqa.LICENSE_PATH,
         )
         assert (sha256, cache) == (gqa.LICENSE_SHA256, tmp_path / "cache")
+        assert copy == tmp_path / "corpus" / gqa.LICENSE_COPY
         (tmp_path / "LICENSE").write_bytes(LICENSE_TEXT)
         return tmp_path / "LICENSE"
 

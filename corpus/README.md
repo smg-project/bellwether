@@ -595,13 +595,15 @@ did not write, `bellwether import glaive-v2` any `glaive-v2-*` one, `bellwether 
 
 `--check` reads the pinned files from `~/.cache/bellwether/datasets` (`--cache`) and downloads them on a miss. It then
 needs PyPI to still serve that exact wheel: a yanked release still does when pinned by version; a release deleted from
-PyPI does not, and the check fails until the importer pins another. GSM8K's and MGSM's files, the LICENSE the BFCL
-import copies and the License the Hermes and glaive-v2 imports copy are read from `raw.githubusercontent.com` at the
-pinned commit, which serves them as long as the repository keeps that commit. The license files the SWE-bench and
-SWE-Hero imports copy are read from their copies in `corpus/licenses/` when a copy's sha256 is the pinned one, so a
-repository that leaves GitHub (one of SWE-Hero's 1,642 has) stops neither import nor its `--check`; a copy that is
-missing or differs is read from `raw.githubusercontent.com` as the other files are. `bellwether import shapes --check`
-reads the same pinned files as the BFCL and GSM8K imports. The
+PyPI does not, and the check fails until the importer pins another. GSM8K's and MGSM's data files are read from
+`raw.githubusercontent.com` at the pinned commit, which serves them as long as the repository keeps that commit. Every
+license file an import copies (GSM8K's, MGSM's, BFCL's and tau2-bench's LICENSE; the License the Hermes, glaive-v2,
+MMMU and DocVQA imports copy; each image and audio import's licence; the SWE-bench and SWE-Hero repositories' files) is
+read from its copy in `corpus/licenses/` when the copy's sha256 is the pinned one, before the cache or the network, so
+a repository that leaves GitHub (one of SWE-Hero's 1,642 has) stops neither import nor its `--check`; a copy that is
+missing or differs is read from `raw.githubusercontent.com` as the other files are, and `--check` then names it.
+`bellwether import shapes --check` reads the same pinned files as the BFCL and GSM8K imports, the LICENSE from its
+copy too. The
 Hermes and SWE-bench files are read from the Hugging Face Hub at the pinned commit and kept in the same cache, under
 `huggingface/`, so a cached copy also serves `HF_HUB_OFFLINE=1`. SWE-bench's parquet files are checked against their
 sha256 on every read, and the Hub serves them as long as each dataset keeps its pinned commit, which a squashed history
@@ -609,9 +611,9 @@ or a deleted dataset would end. SWE-Hero's 16 files are read from the Hugging Fa
 `huggingface/` under the same cache (2.4 GB for the 14 shards), and `HF_HUB_OFFLINE=1` turns a miss into an error. The
 SWE-Hero import holds one shard's cases at a time, 2.8 GB at its peak, and on an M5 Max takes about 25 minutes to write
 its sets; `--check` builds them again to compare.
-tau2-bench's runs, its LICENSE and `llm_agent.py` are read from `raw.githubusercontent.com` at the pinned commits
-(576 MB for the 26 runs). The tau2 import holds one run's cases at a time, 0.63 GB at its peak, and takes about 4
-minutes to write its sets; `--check` takes about 2 minutes and 3.1 GB.
+tau2-bench's runs and `llm_agent.py` are read from `raw.githubusercontent.com` at the pinned commits (576 MB for the 26
+runs), its LICENSE from its copy as above. The tau2 import holds one run's cases at a time, 0.63 GB at its peak, and
+takes about 4 minutes to write its sets; `--check` takes about 2 minutes and 3.1 GB.
 
 The glaive-v2 file and card come through `hf.fetch`, which keeps them in the Hugging Face cache layout under the same
 `~/.cache/bellwether/datasets` (`huggingface/`) and downloads them on a miss; with `HF_HUB_OFFLINE=1` it reads the
