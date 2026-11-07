@@ -272,11 +272,11 @@ def test_readme_names_a_corpus_line_that_is_not_a_json_object(tmp_path, capsys, 
     assert f"{corpus / 'parse' / 'bfcl-x.jsonl'}{why}" in capsys.readouterr().err
 
 
-def test_readme_gets_an_images_table_once_the_corpus_holds_image_sets(tmp_path):
-    from bellwether.count import image_rows, render_readme
+def test_readme_gets_a_table_per_kind_of_media_set_once_the_corpus_holds_one(tmp_path):
+    from bellwether.count import media_rows, render_readme
 
     corpus = tmp_path / "corpus"
-    assert image_rows(corpus) == []
+    assert media_rows(corpus) == {}
     source = "hf:datasets/org/pics@" + "a" * 40
     write_lines(
         corpus / "image" / "pics.jsonl",
@@ -301,17 +301,20 @@ def test_readme_gets_an_images_table_once_the_corpus_holds_image_sets(tmp_path):
         corpus / "image" / "drawn.jsonl",
         [{"name": "drawn-00001-cccccccc", "path": "images/drawn/c.png", "bytes": 7, "sha256": "c" * 64}],
     )
-    rows = image_rows(corpus)
-    assert rows == [
-        {"source": "drawn", "from": set(), "licenses": set(), "images": 1, "bytes": 7},
-        {
-            "source": "pics",
-            "from": {"hf:datasets/org/pics@aaaaaaaa"},
-            "licenses": {"Apache-2.0"},
-            "images": 2,
-            "bytes": 1500,
-        },
-    ]
+    rows = media_rows(corpus)
+    assert rows == {
+        "image": [
+            {"source": "drawn", "from": set(), "licenses": set(), "files": 1, "bytes": 7, "seconds": 0.0},
+            {
+                "source": "pics",
+                "from": {"hf:datasets/org/pics@aaaaaaaa"},
+                "licenses": {"Apache-2.0"},
+                "files": 2,
+                "bytes": 1500,
+                "seconds": 0.0,
+            },
+        ]
+    }
     block = render_readme([], [], tmp_path, rows)
     assert block.splitlines()[-7:-1] == [
         "| Dataset | From | Licenses | Images | Bytes |",
@@ -322,3 +325,70 @@ def test_readme_gets_an_images_table_once_the_corpus_holds_image_sets(tmp_path):
         "",
     ]
     assert "### Images" not in render_readme([], [], tmp_path)
+
+
+def test_readme_s_audio_and_video_tables_carry_the_clips_duration_and_name_many_sources_by_count(tmp_path):
+    from bellwether.count import media_rows, render_readme
+
+    corpus = tmp_path / "corpus"
+    speech = "hf:datasets/org/speech@" + "d" * 40
+    write_lines(
+        corpus / "audio" / "speech.jsonl",
+        [
+            {
+                "name": f"speech-0000{n}-{c * 8}",
+                "path": f"audios/speech/{c}.flac",
+                "bytes": 4000,
+                "sha256": c * 64,
+                "duration_s": seconds,
+                "origin": {"dataset": "speech", "source": speech, "license": "CC-BY-4.0"},
+            }
+            for n, c, seconds in [(1, "a", 5400.0), (2, "b", 1800.0)]
+        ],
+    )
+    write_lines(
+        corpus / "video" / "clips.jsonl",
+        [
+            {
+                "name": f"clip-{n}",
+                "path": f"videos/clips/{n}.mp4",
+                "bytes": 300,
+                "sha256": "c" * 64,
+                "duration_s": 5.0,
+                "origin": {
+                    "dataset": "clips",
+                    "source": f"made for this repository, clip {n}",
+                    "license": "Apache-2.0",
+                },
+            }
+            for n in range(5)
+        ],
+    )
+    tables = media_rows(corpus)
+    assert list(tables) == ["audio", "video"]
+    assert tables["audio"] == [
+        {
+            "source": "speech",
+            "from": {"hf:datasets/org/speech@dddddddd"},
+            "licenses": {"CC-BY-4.0"},
+            "files": 2,
+            "bytes": 8000,
+            "seconds": 7200.0,
+        }
+    ]
+    assert tables["video"][0]["from"] == {f"made for this repository, clip {n}" for n in range(5)}
+    block = render_readme([], [], tmp_path, tables)
+    assert "### Images" not in block
+    audio, _, video = block.partition("### Video")
+    assert audio.splitlines()[-5:] == [
+        "| Dataset | From | Licenses | Clips | Duration | Bytes |",
+        "|---|---|---|---:|---:|---:|",
+        "| speech | hf:datasets/org/speech@dddddddd | CC-BY-4.0 | 2 | 2.0 h | 0.0 MB |",
+        "| all | | | 2 | 2.0 h | 0.0 MB |",
+        "",
+    ]
+    assert video.splitlines()[-4:-1] == [
+        "| clips | 5 sources | Apache-2.0 | 5 | 0.4 min | 0.0 MB |",
+        "| all | | | 5 | 0.4 min | 0.0 MB |",
+        "",
+    ]
