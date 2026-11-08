@@ -146,6 +146,34 @@ def test_the_schema_takes_a_witness_message_or_a_refusal_and_never_both():
     assert list(validator.iter_errors(parse_line("a", "ab", {"some-other-reader": message})))
 
 
+def test_a_refusal_text_is_never_empty():
+    assert witness.refusal(ValueError("bad tool schema")) == "bad tool schema"
+    assert witness.refusal(ValueError()) == "ValueError"
+
+
+def test_a_set_table_is_written_before_the_next_set_is_read(tmp_path, monkeypatch):
+    fixtures = a_tree(tmp_path)
+    slug = fixtures / "tiny-chat"
+    write_fixture_file(slug / "parse" / "turns.jsonl", {"tiny-chat/parse/t": parse_line("t", "ef")})
+    manifest = find_manifest(fixtures, MODEL)
+    real = witness.write_fixture_file
+
+    def failing_on_turns(path, cases):
+        if path.name == "turns.jsonl":
+            raise OSError("disk full")
+        real(path, cases)
+
+    monkeypatch.setattr(witness, "write_fixture_file", failing_on_turns)
+    with pytest.raises(OSError):
+        witness.witness_sets(fixtures, manifest, LIBRARY, a_reader)
+    # The first set and its table are in step; the second set is untouched, as its table is.
+    common = slug / "parse" / "common.jsonl"
+    table = set_tables.read(slug / "sets.toml")[("parse", "common")]
+    assert table["plain_sha256"] == hashlib.sha256(common.read_bytes()).hexdigest()
+    assert LIBRARY in read_fixture_file(common)["tiny-chat/parse/a"]["witnesses"]
+    assert "witnesses" not in read_fixture_file(slug / "parse" / "turns.jsonl")["tiny-chat/parse/t"]
+
+
 def test_the_library_body_spells_the_template_switches_as_the_librarys_fields():
     request = {
         "messages": [{"role": "user", "content": "hi"}],
@@ -164,6 +192,9 @@ def test_the_library_body_spells_the_template_switches_as_the_librarys_fields():
     assert witness.library_body({"messages": []}, MODEL) == {"model": MODEL, "messages": []}
     spelled = {"messages": [], "thinking": {"type": "enabled"}, "chat_template_kwargs": {"thinking": False}}
     assert witness.library_body(spelled, MODEL)["thinking"] == {"type": "enabled"}
+    # The kwargs as a list of pairs, a shape the recorder reads as a dict too.
+    paired = {"messages": [], "chat_template_kwargs": [["enable_thinking", False]]}
+    assert witness.library_body(paired, MODEL)["thinking"] == {"type": "disabled"}
 
 
 def test_run_says_when_the_library_is_missing_or_the_kind_is_not_served(tmp_path, monkeypatch, capsys):

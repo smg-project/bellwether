@@ -64,7 +64,7 @@ def deepseek_recipe_reader(manifest: Manifest) -> tuple[str, Reader]:
         try:
             converted = recipe.ChatCompletionRequest(body).convert(options)
         except recipe.ConversionError as error:
-            return {"version": recipe.__version__, "rejected": str(error)}
+            return {"version": recipe.__version__, "rejected": refusal(error)}
         generator = recipe.ChatCompletionRequest.chunk_generator(converted, case["id"], manifest.model)
         processor = recipe.StreamProcessor(generator, converted.parsing_options, tokenizer)
         response = recipe.ChatCompletionResponse(case["id"], manifest.model, 0, 0, 0)
@@ -99,6 +99,12 @@ def deepseek_recipe_reader(manifest: Manifest) -> tuple[str, Reader]:
     return recipe.__version__, read
 
 
+def refusal(error: BaseException) -> str:
+    """The text a witness records for a refusal: the error's message, or its type's name when it has none (the
+    schema asks for at least one character)."""
+    return str(error) or type(error).__name__
+
+
 def library_body(request: dict, model: str) -> dict:
     """The library's Chat Completions body for a recorded request: the messages and tools as recorded, the thinking
     switch and the effort the request states through its template kwargs spelled as the library's own fields."""
@@ -108,7 +114,7 @@ def library_body(request: dict, model: str) -> dict:
     for key in ("tool_choice", "reasoning_effort", "thinking", "response_format"):
         if key in request:
             body[key] = request[key]
-    kwargs = request.get("chat_template_kwargs") or {}
+    kwargs = dict(request.get("chat_template_kwargs") or {})
     for key in ("thinking", "enable_thinking"):
         if isinstance(kwargs.get(key), bool) and "thinking" not in body:
             body["thinking"] = {"type": "enabled" if kwargs[key] else "disabled"}
@@ -125,13 +131,12 @@ def witness_sets(
     fixtures: Path, manifest: Manifest, library: str, reader: Reader, wanted: list[str] | None = None
 ) -> list[str]:
     """Add ``library``'s reading to every case of the manifest's parse sets (or of ``wanted``), rewrite each set
-    canonically and refresh its ``sets.toml`` table; return one summary line per set. A set Git LFS has not fetched
-    is reported and left alone."""
+    canonically and refresh its ``sets.toml`` table as soon as it is written (a failure on a later set leaves no
+    stale table behind); return one summary line per set. A set Git LFS has not fetched is reported and left alone."""
     kind_dir = fixtures / manifest.slug / "parse"
     tables_path = fixtures / manifest.slug / set_tables.FILE
     existing = set_tables.read(tables_path)
     summaries: list[str] = []
-    tables: dict[str, dict | None] = {}
     for path in sorted(p for p in kind_dir.iterdir() if p.is_file() and stem(p) is not None):
         name = stem(path)
         if wanted and name not in wanted:
@@ -152,13 +157,12 @@ def witness_sets(
         old = existing.get(("parse", name), {})
         form = "zstd" if is_compressed(path) else "plain"
         generate = {field: old[field] for field in set_tables.GENERATE_FIELDS if field in old}
-        tables[name] = set_tables.entry(form, plain_text(path), len(cases), old.get("rejected", 0), **generate)
+        table = set_tables.entry(form, plain_text(path), len(cases), old.get("rejected", 0), **generate)
+        set_tables.update(tables_path, "parse", {name: table})
         summaries.append(
             f"{path}: {len(cases)} cases witnessed by {library}, {refused} refused by it, "
             f"{time.monotonic() - started:.1f} s"
         )
-    if tables:
-        set_tables.update(tables_path, "parse", tables)
     return summaries
 
 
