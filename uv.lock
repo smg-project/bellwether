@@ -50,6 +50,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+deepseek = [
+    { name = "deepseek-recipe" },
+]
 dev = [
     { name = "jsonschema-rs" },
     { name = "pytest" },
@@ -61,21 +64,24 @@ vendor = [
 
 [package.metadata]
 requires-dist = [
+    { name = "deepseek-recipe", marker = "extra == 'deepseek'", specifier = "==0.2.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "huggingface-hub", specifier = ">=1.33" },
     { name = "jinja2", specifier = "==3.1.6" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "jsonschema-rs", marker = "extra == 'dev'", specifier = ">=0.60.3" },
     { name = "pyarrow", specifier = ">=26.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.2.0" },
     { name = "regex", specifier = "==2026.9.29" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "tiktoken", marker = "extra == 'vendor'", specifier = ">=0.9" },
     { name = "tokenizers", specifier = "==0.23.2" },
     { name = "transformers", specifier = "==5.17.0" },
     { name = "zstandard", specifier = ">=0.25.0" },
 ]
-provides-extras = ["dev", "vendor"]
+provides-extras = ["dev", "vendor", "deepseek"]
 
 [[package]]
 name = "certifi"
@@ -143,6 +149,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "deepseek-recipe"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/9d/0b86feb9f32d35ff93f9404fb797a4ab40eb6d9616f87ed5c5b3613e26d3/deepseek_recipe-0.2.0.tar.gz", hash = "sha256:5dfd65dc201004f6382b13c8432a406cd2af7188831944ac5cef22f260111f68", size = 249190, upload-time = "2026-10-20T05:15:50.31Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/04/c9c4dda8c4c9a004a356888c68543458237b07b72431edc7e33e0cab740b/deepseek_recipe-0.2.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:624bb4d0fb3ed541b9e34d2ef96ff66057026ded7d6708b0b9088cc6d6723999", size = 9549388, upload-time = "2026-10-20T05:15:05.726Z" },
+    { url = "https://files.pythonhosted.org/packages/05/bb/70c92b4d9672130a52783a0b9b496ff7cedf0360d40bf2a3da1cbf8f7800/deepseek_recipe-0.2.0-cp310-abi3-macosx_11_0_x86_64.whl", hash = "sha256:fb0d02291c43ef1ab10c2abcb7191e8326a71ea3e76cd01c6b2e79b75e6ce73f", size = 10276726, upload-time = "2026-10-20T05:15:20.911Z" },
+    { url = "https://files.pythonhosted.org/packages/13/57/56cbc6d4084460ed5866804c775c9cff7919e2567c71a5e3e0bc8cc2fabd/deepseek_recipe-0.2.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:7c31fa6ed6ff8319670fa6efdf682e724f4e78f76218f6d08dfc4c0d6f47a071", size = 11358225, upload-time = "2026-10-20T05:15:39.608Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/50/bfc176a196e438509e5821b9b5e668d866ccc791aefc01fa1119e857d8e9/deepseek_recipe-0.2.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:259812bf382bc82668b672707c5922095cc4f5f60a6c514ff89640bb62a746f7", size = 12846711, upload-time = "2026-10-20T05:15:29.717Z" },
+    { url = "https://files.pythonhosted.org/packages/21/e8/5b30c76e4f17ab2bf2c1d8abeff28cf41f62e8bd8571b6eee45c074db251/deepseek_recipe-0.2.0-cp310-abi3-manylinux_2_39_riscv64.whl", hash = "sha256:622e222aa6290be1bea38f021549a05eddb0c84096663e5424acff0a9d528c9d", size = 10567523, upload-time = "2026-10-20T05:15:46.53Z" },
 ]
 
 [[package]]

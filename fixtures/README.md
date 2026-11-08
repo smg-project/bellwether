@@ -112,6 +112,16 @@ against the schema. A re-run with the reference oracle replaces each line's
 (M2, second half). The directory mirrors the corpus: a case or a set the corpus no longer has is removed
 from it.
 
+`witnesses` holds other readers' readings of a case, kept by id while its request is unchanged: the engines, and
+a library. `witness --model <id> --library deepseek-recipe` adds the vendor's own request and output library for
+the DeepSeek V4 line (its Python distribution, the `deepseek` extra) to every parse case of the model: it converts
+the recorded request, feeds the recorded `output_ids` to its stream processor and writes the message it folds and
+the finish reason under `witnesses["deepseek-recipe"]` with the library's version, or the reason it refused the
+case (its request validation is the vendor API's: a tool choice it does not serve in thinking mode, a tool schema
+that is not an object). The reference and the output stay; the set's table in `sets.toml` takes the new plain size
+and hash. A third reader beside the template round trip and the engines: where the reference and the library agree
+against a parser, the parser is wrong; where they disagree, the case is a finding about one of them.
+
 ## Parse lines
 
 `record --kind parse --oracle reference` records the round trip: the corpus states the assistant
