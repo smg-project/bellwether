@@ -994,6 +994,28 @@ The images the references of every processor family are recorded over, by the da
 | wit | hf:datasets/wikimedia/wit_base@ff6d4fb3 | CC-BY-SA-4.0 | 6000 | 184.7 MB |
 | all | | | 60454 | 12.35 GB |
 
+### Audio
+
+The clips of the audio sets, by the dataset they were imported from; the files are in Git LFS.
+
+| Dataset | From | Licenses | Clips | Duration | Bytes |
+|---|---|---|---:|---:|---:|
+| fleurs | hf:datasets/google/fleurs@70bb2e84 | CC-BY-4.0 | 647 | 1.8 h | 408.9 MB |
+| librispeech | hf:datasets/openslr/librispeech_asr@71cacbfb | CC-BY-4.0 | 1000 | 2.1 h | 142.1 MB |
+| mls | hf:datasets/facebook/multilingual_librispeech@2e83e618 | CC-BY-4.0 | 520 | 2.1 h | 33.5 MB |
+| peoplesspeech | hf:datasets/MLCommons/peoples_speech@f10597c5 | CC-BY-4.0 | 1000 | 1.7 h | 111.4 MB |
+| voxpopuli | hf:datasets/facebook/voxpopuli@42f01879 | CC0-1.0 | 300 | 57.8 min | 222.1 MB |
+| all | | | 3467 | 8.7 h | 917.9 MB |
+
+### Video
+
+The clips of the video sets, by the dataset they were imported from; the files are in Git LFS.
+
+| Dataset | From | Licenses | Clips | Duration | Bytes |
+|---|---|---|---:|---:|---:|
+| clips | 7 sources | Apache-2.0 | 7 | 10.9 min | 10.8 MB |
+| all | | | 7 | 10.9 min | 10.8 MB |
+
 <!-- end of what bellwether count --readme writes -->
 
 ## Quick start
