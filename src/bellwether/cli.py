@@ -31,6 +31,8 @@ from bellwether.sandbox import run as sandbox_run
 from bellwether.unpack import run as unpack_run
 from bellwether.verify import run as verify_run
 from bellwether.videos import run as videos_check_run
+from bellwether.witness import LIBRARIES
+from bellwether.witness import run as witness_run
 
 NOT_IMPLEMENTED = 2
 
@@ -109,6 +111,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="record only this corpus set (repeat for more); other sets' fixture files are left as they are",
     )
     record.set_defaults(func=record_run)
+
+    witnessed = sub.add_parser(
+        "witness", help="add a library's reading of the recorded parse cases beside each case's reference"
+    )
+    witnessed.add_argument("--model", required=True, help="Hugging Face model id, e.g. deepseek-ai/DeepSeek-V4.1-Flash")
+    witnessed.add_argument("--library", required=True, choices=sorted(LIBRARIES), help="the library that reads")
+    witnessed.add_argument("--kind", default="parse", choices=["parse"], help="fixtures to witness; parse only so far")
+    witnessed.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="fixture root holding the manifests")
+    witnessed.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        metavar="NAME",
+        help="witness only this set (repeat for more); other sets' fixture files are left as they are",
+    )
+    witnessed.set_defaults(func=witness_run)
 
     sandboxed = sub.add_parser(
         "sandbox-record",

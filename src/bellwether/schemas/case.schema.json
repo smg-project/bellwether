@@ -158,11 +158,21 @@
     },
     "witnesses": {
       "type": "object",
-      "propertyNames": {"enum": ["vllm", "sglang"]},
+      "description": "other readers' readings of the case, kept by id while the request is unchanged: the engines (vLLM, SGLang) and the vendor's own request and output library for the DeepSeek V4 line (deepseek-recipe, bellwether witness)",
+      "propertyNames": {"enum": ["vllm", "sglang", "deepseek-recipe"]},
       "additionalProperties": {
         "type": "object",
+        "description": "a witness names its version (and an engine its image); a library witness gives the message it folds and the finish reason, or the reason it refused the case, never both",
         "required": ["version"],
-        "properties": {"version": {"type": "string"}, "image": {"type": "string"}}
+        "properties": {
+          "version": {"type": "string"},
+          "image": {"type": "string"},
+          "message": {"type": "object", "description": "parse: the assistant message the witness folds from the recorded output"},
+          "finish_reason": {"enum": ["stop", "length", "tool_calls", "content_filter"]},
+          "rejected": {"$ref": "#/$defs/rejected"}
+        },
+        "dependentRequired": {"message": ["finish_reason"], "finish_reason": ["message"]},
+        "not": {"required": ["message", "rejected"]}
       }
     }
   },

@@ -30,6 +30,9 @@ dev = [
 ]
 # What vendor tokenizers import, installed in the vendor-code oracle's sandbox image only (docker/vendor).
 vendor = ["tiktoken>=0.9"]
+# The vendor's own request and output library for the DeepSeek V4 line, which `bellwether witness` reads the
+# recorded parse cases with (bellwether.witness); a prebuilt wheel, no engine in it.
+deepseek = ["deepseek-recipe==0.2.0"]
 # Engine oracles (vLLM, SGLang) are deliberately not extras: they must never share one
 # environment. `bellwether record --oracle vllm|sglang` runs inside the engine's official image.
 
