@@ -95,8 +95,8 @@ jobs:
         run: uv run bellwether derive
       - name: The audio sets and their files agree
         run: uv run bellwether audio check
-      - name: The README's tables are what fixtures/ and corpus/ hold
-        run: uv run bellwether count --readme README.md --check
+      - name: INVENTORY.md's tables are what fixtures/ and corpus/ hold
+        run: uv run bellwether count --readme INVENTORY.md --check
       - uses: actions/cache@v6
         with:
           path: ~/.cache/bellwether/registries
