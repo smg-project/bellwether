@@ -14,6 +14,11 @@ does not serve in thinking mode, a tool schema that is not an object) records th
 whose reading fails records that error. The reference, the output and every other field of the line stay as they
 are; ``sets.toml`` gets the set's new plain size and hash and keeps its counts and stop ids.
 
+The witness keeps the library's bytes. Two of its spellings are its own and are read as such by a compare
+(``fixtures/README.md``, the witness paragraph): ``reasoning_content: ""`` on an output without a thought, where
+the reference writes no field, is no reasoning; and a case the library reads wrongly where the reference is right
+is listed in ``waivers/library_defects.toml`` with the library's version, so it is not held against a parser.
+
 The library is an optional dependency (``pip install -e .[deepseek]``): without it the command says so and exits 2.
 The checkpoint's ``tokenizer.json`` at the manifest's revision decodes the output ids, read from the Hugging Face
 cache as the other oracles read their inputs (``bellwether.inputs.checkpoint_dir``).

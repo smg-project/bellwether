@@ -122,6 +122,21 @@ that is not an object). The reference and the output stay; the set's table in `s
 and hash. A third reader beside the template round trip and the engines: where the reference and the library agree
 against a parser, the parser is wrong; where they disagree, the case is a finding about one of them.
 
+The first compare of the library's reading (the record of bellwether #292 on the DeepSeek V4 Flash and V4.1 Flash
+groups, read whole against the reference and against a table parser) found three classes, kept here so the next
+compare reads them as known. (1) The library writes `reasoning_content: ""` on every output without a thought
+where the reference writes no field: 436,634 of the 449,569 readings in the record, every thinking-off output of
+the V4.1 Flash benchmark sets and the two hand-written content-thinking-on cases. It is the library's spelling of
+no reasoning, not a reading difference (content, calls and finish reason are the reference's); a compare reads the
+empty string as the reference's absent field. (2) On the two hand-written `reasoning-with-marker-text` probes the
+library reads the first `</think>` inside the thought as the marker and drops the stray second one, where the
+reference keeps the whole thought: the probe is the reference's construction (the round trip knows where its own
+message ends, a reader of the output cannot), so a reader's way with the stray marker is declared on the reader's
+side and not held against it. (3) On one case, `deepseek-v4.1-flash/parse/tau2-o4-mini-2025-04-16-telecom-workflow-default-150-10`,
+the library cuts a quoted parameter name at its first space and hands arguments that are no longer JSON, where the
+reference keeps the whole name; `waivers/library_defects.toml` records it as the library's reading at its version,
+in the shape of `waivers/engine_defects.toml`, so a compare does not hold it against a parser that keeps the name.
+
 ## Parse lines
 
 `record --kind parse --oracle reference` records the round trip: the corpus states the assistant
