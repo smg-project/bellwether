@@ -246,3 +246,23 @@ def test_the_library_reads_a_recorded_case_through_its_stream_processor(tmp_path
         "message": {"role": "assistant", "content": text},
         "finish_reason": "stop",
     }
+
+
+def test_the_library_defect_waivers_name_a_recorded_set_of_the_model_they_claim():
+    """``waivers/library_defects.toml``: every entry names a witness reader, a version range, the model of the
+    set its evidence points at, a case of that set, a reason and an evidence file that is in the tree."""
+    import tomllib
+
+    root = Path(__file__).resolve().parents[1]
+    entries = tomllib.loads((root / "waivers" / "library_defects.toml").read_text(encoding="utf-8"))["library_defect"]
+    assert entries, "the file lists at least the case it was made for"
+    for entry in entries:
+        assert set(entry) == {"library", "versions", "model", "case", "reason", "evidence", "upstream"}, entry
+        assert entry["library"] == LIBRARY and entry["versions"] and entry["reason"], entry
+        evidence = root / entry["evidence"]
+        assert evidence.is_file(), entry["evidence"]
+        slug = evidence.relative_to(root / "fixtures").parts[0]
+        set_name = evidence.name.removesuffix(".zst").removesuffix(".jsonl")
+        assert entry["case"].startswith(f"{slug}/parse/{set_name}-"), entry["case"]
+        manifest = tomllib.loads((root / "fixtures" / slug / "manifest.toml").read_text(encoding="utf-8"))
+        assert entry["model"] == manifest["model"], (entry["model"], manifest["model"])

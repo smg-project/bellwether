@@ -1,0 +1,24 @@
+# Accepted library_defect readings. One entry per library, version range, model and case: a case the
+# vendor's own library (a `witnesses` reader, see fixtures/README.md) reads differently from the reference
+# where the reference is right. An entry is only accepted with evidence; the upstream link comes when the
+# vendor is told. When `witness` runs with a newer library and the library reads the case as the reference
+# does again, the entry is stale and is removed. This file is therefore the live list of library bugs the
+# witness record has found, beside waivers/engine_defects.toml for the engines.
+#
+# [[library_defect]]
+# library  = "deepseek-recipe"
+# versions = "==0.2.0"
+# model    = "deepseek-ai/DeepSeek-V4.1-Flash"
+# case     = "deepseek-v4.1-flash/parse/<set>-<n>"
+# reason   = "what the library reads and what the reference keeps"
+# evidence = "fixtures/deepseek-v4.1-flash/parse/<set>.jsonl.zst"
+# upstream = ""
+
+[[library_defect]]
+library  = "deepseek-recipe"
+versions = "==0.2.0"
+model    = "deepseek-ai/DeepSeek-V4.1-Flash"
+case     = "deepseek-v4.1-flash/parse/tau2-o4-mini-2025-04-16-telecom-workflow-default-150-10"
+reason   = "the model wrote a second parameter whose quoted name is a run of words with spaces; the library cuts the name at its first space and hands arguments that are no longer JSON, where the reference keeps the whole quoted name as the second key (the same call name, content and finish reason)"
+evidence = "fixtures/deepseek-v4.1-flash/parse/tau2-o4-mini-2025-04-16-telecom-workflow-default.jsonl.zst"
+upstream = ""
