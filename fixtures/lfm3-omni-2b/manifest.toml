@@ -1,0 +1,11 @@
+model    = "LiquidAI/LFM3-Omni-2B"
+revision = "21d75123f86c1f7ffb4bef1ea202710c4e7ebe67"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "ea74cc1d14319ed436dc0f37632893004d436913113e7605267f2b01694d65e4"
+"config.json"            = "b9bab7db1789ab6e63991d94f6699bad97319ddc2b929d9f05db1ca7e44b06b4"
+"generation_config.json" = "b8c32d141b74d8171afa59498cbd398c1fb66c5fbd747673b46e64b3d228d3f7"
+"processor_config.json"  = "f1c33a73a80eaa98a140edee842a6b78587c9ee410b620cf9f31bf8c15fe2c21"
+"tokenizer.json"         = "41927bd314d17d7d7fadb44e10cd0919f7b71528d7741596d8cbd15c6945ec44"
+"tokenizer_config.json"  = "ee4860abad5b84284f816d2812fc23a7477ce827ed6b4708af9a02c68ed00c7c"
