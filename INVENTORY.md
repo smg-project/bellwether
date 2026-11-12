@@ -482,6 +482,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [minicpm5-2b](fixtures/minicpm5-2b/sets.toml) | openbmb/MiniCPM5-2B @ f9740005 | 1 | 2 | 238494 | 589289 | 278854 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm5-2b-base](fixtures/minicpm5-2b-base/sets.toml) | openbmb/MiniCPM5-2B-Base @ 96a57cd5 | 1 | 2 | 238494 | 589277 | 278854 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm5-2b-sft](fixtures/minicpm5-2b-sft/sets.toml) | openbmb/MiniCPM5-2B-SFT @ 3e0690c5 | 2 | 2 | 238494 | 589277 | 278854 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [minimax-h3-image-pe](fixtures/minimax-h3-image-pe/sets.toml) | MiniMaxAI/MiniMax-H3-Image-PE @ 35603d4b | 1 | 2 | 23 | 28 | 1 | hand-written |
 | [minimax-m2](fixtures/minimax-m2/sets.toml) | MiniMaxAI/MiniMax-M2 @ 757303d4 | 1 | 2 | 238494 | 12825 | 278555 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2.1](fixtures/minimax-m2.1/sets.toml) | MiniMaxAI/MiniMax-M2.1 @ cd97f591 | 1 | 2 | 238494 | 12821 | 278547 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2.5](fixtures/minimax-m2.5/sets.toml) | MiniMaxAI/MiniMax-M2.5 @ f710177d | 1 | 2 | 238494 | 12821 | 278547 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -857,7 +858,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1318 | | 361289161 | 267337862 | 108727531 | |
+| all | | 1319 | | 361289184 | 267337890 | 108727532 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
