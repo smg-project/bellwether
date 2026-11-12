@@ -1,0 +1,11 @@
+model    = "tencent/WeVisOne-VL-4B"
+revision = "6b44a45873b4bbc7dca383922504430dc60eca23"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "3636d0f0bd6bef02654cdffdc447b79cb2cef8ab02cc75267345946291a489e4"
+"config.json"            = "835534592b6adc7e444776766ada41d708f32ee4d139d11ce982094024880049"
+"generation_config.json" = "034d50ac7beea2fcc554abd773e2fcee1d554a1f0f56426918f38e222044edb0"
+"processor_config.json"  = "d0509e284a83a7c30f1b7170c22f0302ad656e220ff3d0259eed1f8e51b0c224"
+"tokenizer.json"         = "3bb172429b952469b51c64783f52fa01c26d1b30f1f31a4693e385a43f9cfc5e"
+"tokenizer_config.json"  = "af3b0fe802740ae544beb2b395b9b498fc942d8df2323cd0117bf1dfdec1d943"
