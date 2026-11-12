@@ -724,6 +724,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [seed-coder-8b-reasoning-bf16](fixtures/seed-coder-8b-reasoning-bf16/sets.toml) | ByteDance-Seed/Seed-Coder-8B-Reasoning-bf16 @ aa146343 | 1 | 3 | 86317 | 47052 | 530046 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes |
 | [seed-oss-36b-base](fixtures/seed-oss-36b-base/sets.toml) | ByteDance-Seed/Seed-OSS-36B-Base @ 866afe24 | 1 | 3 | 236467 | 495977 | 373181 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [seed-oss-36b-instruct](fixtures/seed-oss-36b-instruct/sets.toml) | ByteDance-Seed/Seed-OSS-36B-Instruct @ 497f1dca | 2 | 2 | 236467 | 495989 | 373181 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [sentiment-analysis-7b](fixtures/sentiment-analysis-7b/sets.toml) | microsoft/Sentiment-Analysis-7B @ ac332405 | 1 | 2 | 17 | 0 | 7 | hand-written |
 | [sepsisagent-4b](fixtures/sepsisagent-4b/sets.toml) | FreedomIntelligence/SepsisAgent-4B @ 39193beb | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [sera-32b](fixtures/sera-32b/sets.toml) | allenai/SERA-32B @ b4f53836 | 2 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [sera-8b](fixtures/sera-8b/sets.toml) | allenai/SERA-8B @ 359cef1e | 3 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -855,7 +856,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1316 | | 361289120 | 267337862 | 108727524 | |
+| all | | 1317 | | 361289137 | 267337862 | 108727531 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 

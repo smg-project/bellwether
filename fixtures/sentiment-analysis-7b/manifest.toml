@@ -1,0 +1,10 @@
+model    = "microsoft/Sentiment-Analysis-7B"
+revision = "ac3324057c2bfeeb2ab56c7a7c786316538552b1"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "796853172235ab3aaa4810013ddfe2eab481bda3306dad4f700c00d436eed596"
+"config.json"            = "4784f5e393ed1be452a813c4e38843b021180513790af359b3c2289d463e50b9"
+"generation_config.json" = "c073f5002fe4a7ca5e9624bd94f442afeff4e9a00b2fd5f4ed6678651d8b84a3"
+"tokenizer.json"         = "835cf54bb933752267652500a9243a9002107bbb4501b99f8d2f46ccfdad2567"
+"tokenizer_config.json"  = "cb01406fcd4f47ac955e5ba05f3d71978644b305611d06d98f4bfed5d2a77791"
