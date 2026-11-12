@@ -551,7 +551,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [nvidia-nemotron-nano-9b-v2-japanese](fixtures/nvidia-nemotron-nano-9b-v2-japanese/sets.toml) | nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese @ 3979dd16 | 1 | 2 | 531726 | 328643 | 111797 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-parse-2.0](fixtures/nvidia-nemotron-parse-2.0/sets.toml) | nvidia/NVIDIA-Nemotron-Parse-2.0 @ b6742064 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nvidia-nemotron-parse-v1.1](fixtures/nvidia-nemotron-parse-v1.1/sets.toml) | nvidia/NVIDIA-Nemotron-Parse-v1.1 @ fd1e3c6b | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
-| [nvidia-nemotronlabs-ai-for-media-sports-basketball](fixtures/nvidia-nemotronlabs-ai-for-media-sports-basketball/sets.toml) | nvidia/NVIDIA-NemotronLabs-AI-for-Media-Sports-Basketball @ 632ddf0d | 1 | 2 | 24 | 20 | 8 | hand-written |
+| [nvidia-nemotronlabs-ai-for-media-sports-basketball](fixtures/nvidia-nemotronlabs-ai-for-media-sports-basketball/sets.toml) | nvidia/NVIDIA-NemotronLabs-AI-for-Media-Sports-Basketball @ 632ddf0d | 1 | 2 | 24 | 11 | 17 | hand-written |
 | [nvidia-nemotronlabs-ai-for-media-sports-tennis](fixtures/nvidia-nemotronlabs-ai-for-media-sports-tennis/sets.toml) | nvidia/NVIDIA-NemotronLabs-AI-for-Media-Sports-Tennis @ af26673c | 1 | 2 | 238489 | 12825 | 278548 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvila-15b-hf](fixtures/nvila-15b-hf/sets.toml) | Efficient-Large-Model/NVILA-15B-hf @ 7735732b | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvila-8b-hd-video](fixtures/nvila-8b-hd-video/sets.toml) | nvidia/NVILA-8B-HD-Video @ 7a5670e2 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -860,7 +860,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1321 | | 361289230 | 267337928 | 108727552 | |
+| all | | 1321 | | 361289230 | 267337919 | 108727561 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
