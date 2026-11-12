@@ -428,6 +428,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [locateanything-3b](fixtures/locateanything-3b/sets.toml) | nvidia/LocateAnything-3B @ c32291ca | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [longcat-flash-thinking](fixtures/longcat-flash-thinking/sets.toml) | meituan-longcat/LongCat-Flash-Thinking @ 7c9aad1e | 1 | 3 | 238489 | 0 | 278477 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [m3-agent-control](fixtures/m3-agent-control/sets.toml) | ByteDance-Seed/M3-Agent-Control @ b06d8a33 | 1 | 3 | 531736 | 328660 | 111770 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [mage-vl-cowork](fixtures/mage-vl-cowork/sets.toml) | microsoft/Mage-VL-Cowork @ 6fbe7f91 | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [magenticbrain](fixtures/magenticbrain/sets.toml) | microsoft/MagenticBrain @ db8eb934 | 1 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mai-ds-r1](fixtures/mai-ds-r1/sets.toml) | microsoft/MAI-DS-R1 @ a96d011a | 1 | 3 | 531731 | 0 | 5 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [marco-deepresearch-8b](fixtures/marco-deepresearch-8b/sets.toml) | ATH-MaaS/Marco-DeepResearch-8B @ 2868bc1d | 1 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -851,7 +852,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1312 | | 361289033 | 267337812 | 108727477 | |
+| all | | 1313 | | 361289057 | 267337840 | 108727477 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
