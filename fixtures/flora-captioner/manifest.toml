@@ -1,0 +1,11 @@
+model    = "nvidia/Flora-Captioner"
+revision = "669b3f4924b29212da609b292babddfef690f579"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "d28ca68768ac2ce0ad42eaaf54d5bac4f8a298f7d017f5a04f3866094c65a839"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "340698c97c859f379c322ad11a39425746076d34ee81bf659348504b37e6cc66"
+"processor_config.json"  = "d0509e284a83a7c30f1b7170c22f0302ad656e220ff3d0259eed1f8e51b0c224"
+"tokenizer.json"         = "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+"tokenizer_config.json"  = "b4c4e0a37983a58c329c8c4e25d59f3305fd344815f4ecb8c66a99323a254cf8"
