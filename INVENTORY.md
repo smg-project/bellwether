@@ -533,7 +533,10 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [nvidia-nemotron-3-super-120b-a12b-bf16](fixtures/nvidia-nemotron-3-super-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 @ 2dc98e2a | 3 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-bf16](fixtures/nvidia-nemotron-3-ultra-550b-a55b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16 @ 77df655d | 7 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-genrm](fixtures/nvidia-nemotron-3-ultra-550b-a55b-genrm/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-GenRM @ 03c50a66 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [nvidia-nemotron-3.5-bolt-74b-a9b-bf16](fixtures/nvidia-nemotron-3.5-bolt-74b-a9b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16 @ e09a4ced | 1 | 2 | 24 | 27 | 1 | hand-written |
+| [nvidia-nemotron-3.5-bolt-e4b-bf16](fixtures/nvidia-nemotron-3.5-bolt-e4b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-BF16 @ 49843eed | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [nvidia-nemotron-3.5-lightning-30b-a3b-bf16](fixtures/nvidia-nemotron-3.5-lightning-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16 @ a9904d24 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [nvidia-nemotron-3.5-super-vl-120b-a12b-bf16](fixtures/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16 @ fb0ee0bc | 1 | 2 | 24 | 27 | 1 | hand-written |
 | [nvidia-nemotron-labs-3-elastic-30b-a3b-bf16](fixtures/nvidia-nemotron-labs-3-elastic-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-Labs-3-Elastic-30B-A3B-BF16 @ 4bcc4326 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-labs-3-puzzle-75b-a9b-bf16](fixtures/nvidia-nemotron-labs-3-puzzle-75b-a9b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16 @ 8fe55468 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-nano-9b-v2](fixtures/nvidia-nemotron-nano-9b-v2/sets.toml) | nvidia/NVIDIA-Nemotron-Nano-9B-v2 @ 6533e8de | 1 | 3 | 531726 | 328643 | 111797 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -843,7 +846,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1304 | | 361288841 | 267337618 | 108727447 | |
+| all | | 1307 | | 361288913 | 267337700 | 108727449 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
