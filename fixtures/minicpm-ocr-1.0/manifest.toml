@@ -1,0 +1,11 @@
+model    = "openbmb/MiniCPM-OCR-1.0"
+revision = "883ca368d17335b9ce5aa6fef4d000ef0684fcaa"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "c6a5f1387c6baa0befecc39e36f293e44baba865a9c7809ac93fae1604b2c210"
+"config.json"            = "d6d3a20242f06a1905e7a38e16006791df1f4d510a4692e3c75815f2a0cbce7a"
+"generation_config.json" = "8b2fdfef429e974481444f24e154e7a6e0b691433dfcf958b3a211c042c13618"
+"processor_config.json"  = "4720a9c6677bb04856d231a35d96bd5a41636e1d82051c16d4b70d0b3f59683a"
+"tokenizer.json"         = "6269eb38f25c20c0f2ba676577f2e5603f79eab3be573dfdaa727ca6eeb5522d"
+"tokenizer_config.json"  = "74f51078120066292803d9dfe5437f67b778c5ef6d16eb04dbc6a3f7a13e5826"
