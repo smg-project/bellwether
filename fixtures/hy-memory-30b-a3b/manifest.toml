@@ -1,0 +1,9 @@
+model    = "tencent/Hy-Memory-30B-A3B"
+revision = "64a460a94d5498b7316fb02395c72d01c47a7347"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"   = "8759492d33deb19b2f58855f62d3e431276da89d698b2800d1e353fbb12d5320"
+"config.json"           = "c63de9875a577b02e62af3793731ff5c9d47ef9ea56096b9fd113fc548ccd490"
+"tokenizer.json"        = "ad96ef9f641b79bb63807bea87cecf1dd0534325b463dad44cccbb3d0c571db7"
+"tokenizer_config.json" = "eb5b3c220423c254911058959222600c621bd41d9c8383a02d00db6405d5420d"

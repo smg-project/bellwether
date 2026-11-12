@@ -252,6 +252,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [hunyuan-a13b-instruct](fixtures/hunyuan-a13b-instruct/sets.toml) | tencent/Hunyuan-A13B-Instruct @ 290ddb9a | 1 | 3 | 531735 | 328662 | 111769 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [hunyuan-mt-7b](fixtures/hunyuan-mt-7b/sets.toml) | tencent/Hunyuan-MT-7B @ 9305c783 | 2 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [hunyuanocr](fixtures/hunyuanocr/sets.toml) | tencent/HunyuanOCR @ 47644ecc | 1 | 2 | 531736 | 328664 | 111766 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [hy-memory-30b-a3b](fixtures/hy-memory-30b-a3b/sets.toml) | tencent/Hy-Memory-30B-A3B @ 64a460a9 | 1 | 2 | 24 | 19 | 9 | hand-written |
 | [hy-mt2-1.8b](fixtures/hy-mt2-1.8b/sets.toml) | tencent/Hy-MT2-1.8B @ 9a341cd1 | 4 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [hy-mt2-30b-a3b](fixtures/hy-mt2-30b-a3b/sets.toml) | tencent/Hy-MT2-30B-A3B @ d3ead4db | 1 | 2 | 238494 | 569901 | 285350 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [hy-mt2-7b](fixtures/hy-mt2-7b/sets.toml) | tencent/Hy-MT2-7B @ 9b0eb4e8 | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -835,7 +836,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1296 | | 361288650 | 267337478 | 108727390 | |
+| all | | 1297 | | 361288674 | 267337497 | 108727399 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
