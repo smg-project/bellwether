@@ -525,6 +525,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [nextstep-1.1](fixtures/nextstep-1.1/sets.toml) | stepfun-ai/NextStep-1.1 @ 05486ff9 | 3 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nft-32b](fixtures/nft-32b/sets.toml) | nvidia/NFT-32B @ f60778f1 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nft-7b](fixtures/nft-7b/sets.toml) | nvidia/NFT-7B @ a7b4aec0 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [nld-uni](fixtures/nld-uni/sets.toml) | nvidia/NLD-Uni @ 5db755a2 | 1 | 2 | 24 | 27 | 1 | hand-written |
 | [north-micro-vision-instruct](fixtures/north-micro-vision-instruct/sets.toml) | CohereLabs/North-Micro-Vision-Instruct @ fa548d9a | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [north-mini-code-1.0](fixtures/north-mini-code-1.0/sets.toml) | CohereLabs/North-Mini-Code-1.0 @ d11e61a8 | 1 | 2 | 531736 | 11885 | 11 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nv-reason-cxr-3b](fixtures/nv-reason-cxr-3b/sets.toml) | nvidia/NV-Reason-CXR-3B @ 056bd038 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -539,10 +540,12 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [nvidia-nemotron-3.5-super-vl-120b-a12b-bf16](fixtures/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16 @ fb0ee0bc | 1 | 2 | 24 | 27 | 1 | hand-written |
 | [nvidia-nemotron-labs-3-elastic-30b-a3b-bf16](fixtures/nvidia-nemotron-labs-3-elastic-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-Labs-3-Elastic-30B-A3B-BF16 @ 4bcc4326 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-labs-3-puzzle-75b-a9b-bf16](fixtures/nvidia-nemotron-labs-3-puzzle-75b-a9b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16 @ 8fe55468 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [nvidia-nemotron-labs-dory1.0-4b-bf16](fixtures/nvidia-nemotron-labs-dory1.0-4b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16 @ f6c832e6 | 1 | 2 | 24 | 27 | 1 | hand-written |
 | [nvidia-nemotron-nano-9b-v2](fixtures/nvidia-nemotron-nano-9b-v2/sets.toml) | nvidia/NVIDIA-Nemotron-Nano-9B-v2 @ 6533e8de | 1 | 3 | 531726 | 328643 | 111797 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-nano-9b-v2-japanese](fixtures/nvidia-nemotron-nano-9b-v2-japanese/sets.toml) | nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese @ 3979dd16 | 1 | 2 | 531726 | 328643 | 111797 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-parse-2.0](fixtures/nvidia-nemotron-parse-2.0/sets.toml) | nvidia/NVIDIA-Nemotron-Parse-2.0 @ b6742064 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nvidia-nemotron-parse-v1.1](fixtures/nvidia-nemotron-parse-v1.1/sets.toml) | nvidia/NVIDIA-Nemotron-Parse-v1.1 @ fd1e3c6b | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [nvidia-nemotronlabs-ai-for-media-sports-basketball](fixtures/nvidia-nemotronlabs-ai-for-media-sports-basketball/sets.toml) | nvidia/NVIDIA-NemotronLabs-AI-for-Media-Sports-Basketball @ 632ddf0d | 1 | 2 | 24 | 20 | 8 | hand-written |
 | [nvidia-nemotronlabs-ai-for-media-sports-tennis](fixtures/nvidia-nemotronlabs-ai-for-media-sports-tennis/sets.toml) | nvidia/NVIDIA-NemotronLabs-AI-for-Media-Sports-Tennis @ af26673c | 1 | 2 | 238489 | 12825 | 278548 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvila-15b-hf](fixtures/nvila-15b-hf/sets.toml) | Efficient-Large-Model/NVILA-15B-hf @ 7735732b | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvila-8b-hd-video](fixtures/nvila-8b-hd-video/sets.toml) | nvidia/NVILA-8B-HD-Video @ 7a5670e2 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -846,7 +849,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1307 | | 361288913 | 267337700 | 108727449 | |
+| all | | 1310 | | 361288985 | 267337774 | 108727459 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 

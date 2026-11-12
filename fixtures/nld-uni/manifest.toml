@@ -1,0 +1,11 @@
+model    = "nvidia/NLD-Uni"
+revision = "5db755a2eb0ab84654e3dcf80c7d0245bfe36a50"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "b80135b85225bef1a5129eb2068d0d5df4975edf4ffb102a50de1fb069c9e78a"
+"config.json"             = "9b005a35b1f1b5d9baf62f381696032a017a25bd7550c2dedb2ff35aa3810d73"
+"generation_config.json"  = "9757e2b1c3d26f4db11c3370262219df94e316e66318d0563cd1c762f72054ff"
+"special_tokens_map.json" = "57cc1f9b3ea2a038d1107bdf4f4b3c45b5ed9ce175e7410d70070e07a3f35a76"
+"tokenizer.json"          = "f9ad3482369ba91711ff939f9eeb761d618b3157fcbfc0715f18e34b918eca97"
+"tokenizer_config.json"   = "5eb18e9f9e0653added53a9200a8d38fdbc1d0cdb4602f8e354f30391f8cb1f3"
