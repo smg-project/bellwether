@@ -485,6 +485,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ministral-3-8b-instruct-2512-bf16](fixtures/ministral-3-8b-instruct-2512-bf16/sets.toml) | mistralai/Ministral-3-8B-Instruct-2512-BF16 @ f6fae979 | 1 | 2 | 531731 | 570194 | 6590 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mistral-7b-instruct-v0.2](fixtures/mistral-7b-instruct-v0.2/sets.toml) | mistralai/Mistral-7B-Instruct-v0.2 @ 63a8b081 | 2 | 3 | 238483 | 0 | 278483 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [mistral-7b-instruct-v0.3](fixtures/mistral-7b-instruct-v0.3/sets.toml) | mistralai/Mistral-7B-Instruct-v0.3 @ c170c708 | 1 | 3 | 238483 | 0 | 278483 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [mistral-large-4-1t-a52b](fixtures/mistral-large-4-1t-a52b/sets.toml) | mistralai/Mistral-Large-4-1T-A52B @ af26e786 | 1 | 2 | 23 | 28 | 1 | hand-written |
 | [mistral-medium-3.5-128b](fixtures/mistral-medium-3.5-128b/sets.toml) | mistralai/Mistral-Medium-3.5-128B @ 22b2b868 | 1 | 2 | 531730 | 583079 | 6586 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mistral-small-24b-instruct-2501](fixtures/mistral-small-24b-instruct-2501/sets.toml) | mistralai/Mistral-Small-24B-Instruct-2501 @ 9527884b | 1 | 3 | 238488 | 184973 | 533020 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mistral-small-4-119b-2603](fixtures/mistral-small-4-119b-2603/sets.toml) | mistralai/Mistral-Small-4-119B-2603 @ a11f36be | 1 | 2 | 531730 | 583079 | 6586 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -836,7 +837,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1297 | | 361288674 | 267337497 | 108727399 | |
+| all | | 1298 | | 361288697 | 267337525 | 108727400 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
