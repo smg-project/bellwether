@@ -1,0 +1,11 @@
+model    = "microsoft/UserLM-2.0"
+revision = "dcb646115d9c3be6d335c2289c05b94a6f52ed97"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "101a67aa607519121d36b453559da657677329cab20d33ec0c0e53026fc36263"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "3f8b82a83b19d807ab510effcfddc33142c82f11c578f7209a5418953214d4ab"
+"special_tokens_map.json" = "f54e78298150f1d8b999e6f862dd76a862826ca888c07b854db83a760d1e62e3"
+"tokenizer.json"          = "6907fce72ed4e07c378f5de832fb91d7fcbc55c6810f95e3e05f046fd726428e"
+"tokenizer_config.json"   = "e506fd05624f940345221565ac338bb759293a472dbd931f3ee62f99546c2638"

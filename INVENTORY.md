@@ -823,6 +823,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ultravox-v0-7-glm-4-6](fixtures/ultravox-v0-7-glm-4-6/sets.toml) | fixie-ai/ultravox-v0_7-glm-4_6 @ a849a095 | 2 | 2 | 238494 | 492389 | 364862 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [unireason-med](fixtures/unireason-med/sets.toml) | IQuestLab/UniReason-Med @ 68d7c25b | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [unirg-cxr](fixtures/unirg-cxr/sets.toml) | microsoft/UniRG-CXR @ cd5a95fa | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [userlm-2.0](fixtures/userlm-2.0/sets.toml) | microsoft/UserLM-2.0 @ dcb64611 | 1 | 2 | 24 | 0 | 0 | hand-written |
 | [userlm-8b](fixtures/userlm-8b/sets.toml) | microsoft/UserLM-8b @ ce576a23 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [vebrain](fixtures/vebrain/sets.toml) | OpenGVLab/VeBrain @ 5d3a3ec2 | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [vibevoice-asr-hf](fixtures/vibevoice-asr-hf/sets.toml) | microsoft/VibeVoice-ASR-HF @ f22241c2 | 1 | 2 | 531735 | 0 | 1 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -856,7 +857,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1317 | | 361289137 | 267337862 | 108727531 | |
+| all | | 1318 | | 361289161 | 267337862 | 108727531 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
