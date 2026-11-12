@@ -43,6 +43,13 @@ this oracle for that case (DeepSeek-R1 never renders ``<think>``, so no rendered
 reported and not recorded, and the run exits 1; recording it is left to the manifest's next
 authority, which nothing here invokes.
 
+A template of the parts format (``content_format``) gets every content as a list of typed parts; an arm
+that writes that list through ``| string`` or ``~`` renders its Python repr around the text (the
+Sports-Basketball template's system and assistant arms do, while its user arm iterates the parts). The
+engine renders the same, so a render case keeps the repr; a parse case's output would carry it and no
+parser could return the message from it, so such a case is reported and not recorded
+(``check_no_content_is_stringified``), like a turn that does not extend the prompt.
+
 The output follows the generation prompt, so a request that asks for no generation prompt or for
 the final message to be continued cannot be recorded this way and is rejected.
 
@@ -91,7 +98,7 @@ from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
 from . import clock, vendor
-from .content_format import ContentFormat
+from .content_format import ContentFormat, in_content_format
 from .reference import HfTemplateOracle, as_vllm_gives_it, checkpoint_file
 
 SOURCE = "roundtrip"
@@ -163,6 +170,7 @@ class RoundtripOracle:
                 "the round trip is lossy for this case"
             )
         turn = rendered[len(prompt) :]
+        self.check_no_content_is_stringified(message, turn, kwargs.get("tools"))
         cut = stop_in_turn(self.tokenizer, turn, self.stop_ids)
         if cut is None:
             continued = self.render_next_message(messages, assistant, message, kwargs)
@@ -405,6 +413,32 @@ class RoundtripOracle:
                         f"the template trims the message's {what}: removing its {edge} character, {char!r}, leaves "
                         "the rendered turn as it was, so the output would not carry it"
                     )
+
+    def check_no_content_is_stringified(self, message: dict, turn: str, tools: list | None) -> None:
+        """The message's content must reach the turn as text, never as the Python repr of its parts list.
+
+        A template of the parts format (``content_format``) gets the content as a list of typed parts, as the engine
+        hands it (``in_content_format``). An arm that writes that list through ``| string`` or ``~`` renders the
+        list's Python repr, ``[{'type': 'text', 'text': ...}]``, around the text: the Sports-Basketball template's
+        system and assistant arms do, while its user arm iterates the parts. The engine renders the same, so a
+        render case keeps the repr. A parse case's output would carry it too, and no parser returns the message from
+        it: the reference content sits inside a string the model never writes, and the other checks pass because the
+        text is in there and changes with it. Such a case is refused, like a turn that does not extend the prompt,
+        instead of being recorded as a round trip nothing can pass. The repr is looked for in the turn alone, so a
+        stringified history turn in the prompt refuses nothing; a content without parts (none) is never looked for,
+        since ``[]`` is ordinary text in a call's arguments.
+        """
+        if self.renderer.content_format(tools) != "openai":
+            return
+        parts = in_content_format([{"role": "assistant", "content": message.get("content")}], "openai")[0]["content"]
+        if not parts:
+            return
+        stringified = repr(parts)
+        if stringified in turn:
+            raise ValueError(
+                "the template stringifies the message's content: the turn carries the parts list's Python repr "
+                f"{stringified[:60]!r} where the text should be, so no output carries the content as written"
+            )
 
     def check_every_argument_is_rendered(self, messages: list, kwargs: dict, message: dict, rendered: str) -> None:
         """Every argument of every call must reach the rendered turn, and so must every null inside one.

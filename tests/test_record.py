@@ -2025,6 +2025,41 @@ def test_roundtrip_encodes_once_for_a_tokenizer_without_unicode_normalization(ti
     assert oracle.tokenizer_without_unicode_normalization is None
 
 
+@pytest.fixture(scope="session")
+def stringified_parts_model(tiny_model, tmp_path_factory) -> pathlib.Path:
+    """A template of the parts format (its user arm iterates the content parts) whose assistant arm writes the content
+    through ``| string``, as the Sports-Basketball template's system and assistant arms do."""
+    template = (
+        "{%- for m in messages %}"
+        "{%- if m['role'] == 'assistant' %}{{ '<|im_start|>assistant\\n' + (m['content'] | string) + '<|im_end|>\\n' }}"
+        "{%- else %}{{ '<|im_start|>' + m['role'] + '\\n' }}"
+        "{%- for part in m['content'] %}{{ part['text'] }}{%- endfor %}{{ '<|im_end|>\\n' }}{%- endif %}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+    return tiny_variant(tiny_model, tmp_path_factory, "stringified-parts-chat", template)
+
+
+def test_roundtrip_reports_a_turn_that_stringifies_the_content_parts(stringified_parts_model):
+    oracle = RoundtripOracle(str(stringified_parts_model), "local")
+    assert oracle.renderer.content_format(None) == "openai"
+    with pytest.raises(ValueError, match="stringifies the message's content"):
+        oracle.render_output({"messages": [user("Hi")]}, {"content": "Paris."})
+
+
+def test_roundtrip_records_a_parts_template_that_writes_the_text_of_each_part(tiny_model, tmp_path_factory):
+    template = (
+        "{%- for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' }}"
+        "{%- for part in m['content'] %}{{ part['text'] }}{%- endfor %}{{ '<|im_end|>\\n' }}"
+        "{%- endfor %}"
+        "{%- if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{%- endif %}"
+    )
+    model = tiny_variant(tiny_model, tmp_path_factory, "parts-text-chat", template)
+    oracle = RoundtripOracle(str(model), "local")
+    assert oracle.renderer.content_format(None) == "openai"
+    assert oracle.render_output({"messages": [user("Hi")]}, {"content": "Paris."}).text == "Paris."
+
+
 def test_roundtrip_reports_a_turn_the_template_cannot_extend(tiny_model):
     oracle = RoundtripOracle(str(tiny_model), "local")
     request = {"messages": [user("Hi")], "chat_template_kwargs": {"enable_thinking": False}}
