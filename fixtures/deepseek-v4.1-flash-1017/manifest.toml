@@ -1,0 +1,11 @@
+model    = "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+revision = "08c8657f02291e11b6f6b63e0e16014f8e748518"
+tier     = 2
+encoder  = "deepseek_v41"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"   = "95b7033a693b321ceaefb6f89ad07d1e0cf2b095305711f934a4ac649456739d"
+"config.json"           = "a2728d45c7766b9a1f0c0fc278f93c7f2c9f9a9e83b8ff575aea04727dad26aa"
+"encoding/encoding.py"  = "13231c592e958fb39e2af6001dae69d90e7a36b265702b9b390236fb387599e2"
+"tokenizer.json"        = "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+"tokenizer_config.json" = "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547"
