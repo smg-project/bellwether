@@ -1,0 +1,24 @@
+[parse.common]
+form = "plain"
+cases = 3
+rejected = 13
+plain_bytes = 6863
+plain_sha256 = "aa50eb47c9e35cb83bb9bf31dbcdb3ecc035d7cb1e19b4a06f9780ab253acf24"
+generate_stop_ids = [151643, 151645]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.turns]
+form = "plain"
+cases = 2
+rejected = 10
+plain_bytes = 5394
+plain_sha256 = "ee4ab077f032f7a568d0161b4ec560541b6166c4261ed90e8d5e31d12af0b9cc"
+generate_stop_ids = [151643, 151645]
+generate_stop_ids_from = "generation_config.json"
+
+[render.common]
+form = "plain"
+cases = 24
+rejected = 0
+plain_bytes = 42323
+plain_sha256 = "8e583e62093b56dc5214952b71ebacf81a261bc3892271678d1bbe9304f96fcc"
