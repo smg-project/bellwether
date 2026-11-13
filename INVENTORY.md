@@ -462,6 +462,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [mellum2-12b-a2.5b-instruct](fixtures/mellum2-12b-a2.5b-instruct/sets.toml) | JetBrains/Mellum2-12B-A2.5B-Instruct @ 273d9c1c | 2 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mellum2-12b-a2.5b-thinking](fixtures/mellum2-12b-a2.5b-thinking/sets.toml) | JetBrains/Mellum2-12B-A2.5B-Thinking @ a7311550 | 2 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mellum2.1-12b-a2.5b-thinking](fixtures/mellum2.1-12b-a2.5b-thinking/sets.toml) | JetBrains/Mellum2.1-12B-A2.5B-Thinking @ 92ddae9f | 1 | 2 | 531736 | 589647 | 12 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [memt-1.0-nano](fixtures/memt-1.0-nano/sets.toml) | MemTensor/MemT-1.0-Nano @ 30fe0b22 | 1 | 2 | 23 | 28 | 1 | hand-written |
 | [meta-llama-3.1-8b-instruct-fp8](fixtures/meta-llama-3.1-8b-instruct-fp8/sets.toml) | RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8 @ 870a1177 | 1 | 3 | 508776 | 458185 | 140114 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [meta-wiki-expert](fixtures/meta-wiki-expert/sets.toml) | facebook/meta-wiki-expert @ 14fafb95 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [midashenglm-0.6b-fp32](fixtures/midashenglm-0.6b-fp32/sets.toml) | mispeech/midashenglm-0.6b-fp32 @ 3969e451 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -887,7 +888,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1359 | | 361289850 | 267338432 | 108727776 | |
+| all | | 1360 | | 361289873 | 267338460 | 108727777 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
