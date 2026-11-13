@@ -168,6 +168,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [flex-reddit-2x7b-1t](fixtures/flex-reddit-2x7b-1t/sets.toml) | allenai/Flex-reddit-2x7B-1T @ 55379e32 | 6 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [flexolmo-7x7b-1t](fixtures/flexolmo-7x7b-1t/sets.toml) | allenai/FlexOlmo-7x7B-1T @ 0dabfa2e | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [flexolmo-7x7b-1t-rt](fixtures/flexolmo-7x7b-1t-rt/sets.toml) | allenai/FlexOlmo-7x7B-1T-RT @ 193b1e91 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [flint](fixtures/flint/sets.toml) | RecursiveSI/flint @ 2a247be0 | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [flora-captioner](fixtures/flora-captioner/sets.toml) | nvidia/Flora-Captioner @ 669b3f49 | 1 | 2 | 16 | 2 | 22 | hand-written |
 | [flora-rewarder](fixtures/flora-rewarder/sets.toml) | nvidia/Flora-Rewarder @ a58b6758 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [frogboss-32b-2510](fixtures/frogboss-32b-2510/sets.toml) | microsoft/FrogBoss-32B-2510 @ cc930952 | 1 | 2 | 238494 | 582708 | 285423 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -894,7 +895,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1367 | | 361290010 | 267338544 | 108727800 | |
+| all | | 1368 | | 361290034 | 267338572 | 108727800 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
