@@ -1,0 +1,13 @@
+model    = "llm-jp/llm-jp-4.1-8b-thinking"
+revision = "7c19bc90e49b717381e4f474ee95964c05217a28"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "d5f35cbd545ce4d0fddc92827fb55891514aafa5fe52c1c4a543551eedad1e3d"
+"config.json"             = "9594d1a8c837106544b61ae88cf8a6e0480a03fae7ee022bf3448b96ac04a1b7"
+"generation_config.json"  = "3816ab6dba814dc6ecb97f78c160b6aa7206c67f78535c01eaa7545369b69d54"
+"llmjp4_harmony.py"       = "1a4e09c66b17d3a8d19bed6b43978b951ba01b5a62feef1a2893d1e4e40f7d2a"
+"llmjp4_tokenizer.py"     = "6bcbcf4e7088b4d2487cff4a47bda90e85d0440797a741667f016efbb13a34ed"
+"special_tokens_map.json" = "1b031761a2ba4d98b731b79d9c432bc37fe3f7704857147bc2b4388bc8c5ad20"
+"tokenizer.json"          = "a35f390c6489427e4dcac7d957f34d9dacd7332972c990f4b4eb6b724c8873f4"
+"tokenizer_config.json"   = "55aa3a433cbbde451a88b449dd46e5cacda76ed79a09347f105f6b08f438e5b2"
