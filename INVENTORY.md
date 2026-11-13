@@ -44,6 +44,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [areal-sea-235b-a22b](fixtures/areal-sea-235b-a22b/sets.toml) | inclusionAI/AReaL-SEA-235B-A22B @ a186e783 | 2 | 2 | 531736 | 554276 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [areal-tau2-telecom-sft-30b](fixtures/areal-tau2-telecom-sft-30b/sets.toml) | inclusionAI/AReaL-tau2-telecom-sft-30B @ 41d6b078 | 3 | 2 | 531736 | 554276 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [areal-tau2-telecom-user-sft-30b](fixtures/areal-tau2-telecom-user-sft-30b/sets.toml) | inclusionAI/AReaL-tau2-telecom-user-sft-30B @ 5a61a868 | 1 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [arete-27b](fixtures/arete-27b/sets.toml) | NousResearch/Arete-27B @ 108f0afb | 1 | 2 | 23 | 28 | 1 | hand-written |
 | [arex-2](fixtures/arex-2/sets.toml) | BAAI/AREX-2 @ d4e3502f | 1 | 2 | 238478 | 474563 | 349811 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [arex-base](fixtures/arex-base/sets.toml) | BAAI/AREX-Base @ 970a3279 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [arex-turbo](fixtures/arex-turbo/sets.toml) | BAAI/AREX-Turbo @ e455a798 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -869,7 +870,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1333 | | 361289441 | 267338078 | 108727659 | |
+| all | | 1334 | | 361289464 | 267338106 | 108727660 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
