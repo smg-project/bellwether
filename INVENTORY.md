@@ -464,6 +464,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [midashenglm-0.6b-fp32](fixtures/midashenglm-0.6b-fp32/sets.toml) | mispeech/midashenglm-0.6b-fp32 @ 3969e451 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [midashenglm-7b-0804-bf16](fixtures/midashenglm-7b-0804-bf16/sets.toml) | mispeech/midashenglm-7b-0804-bf16 @ 2d596167 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [midashenglm-7b-1021-bf16](fixtures/midashenglm-7b-1021-bf16/sets.toml) | mispeech/midashenglm-7b-1021-bf16 @ f7b0fdb7 | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [midashenglm-spatial](fixtures/midashenglm-spatial/sets.toml) | mispeech/midashenglm-spatial @ bc0ee484 | 1 | 2 | 24 | 5 | 23 | hand-written |
 | [mimo-7b-base](fixtures/mimo-7b-base/sets.toml) | XiaomiMiMo/MiMo-7B-Base @ c72df458 | 2 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [mimo-7b-rl-0530](fixtures/mimo-7b-rl-0530/sets.toml) | XiaomiMiMo/MiMo-7B-RL-0530 @ 32340059 | 1 | 3 | 531736 | 576762 | 17 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [mimo-7b-sft](fixtures/mimo-7b-sft/sets.toml) | XiaomiMiMo/MiMo-7B-SFT @ 2c8c99d5 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -881,7 +882,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1348 | | 361289723 | 267338331 | 108727692 | |
+| all | | 1349 | | 361289747 | 267338336 | 108727715 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
