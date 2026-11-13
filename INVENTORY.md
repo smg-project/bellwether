@@ -886,7 +886,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
 | all | | 1354 | | 361289779 | 267338352 | 108727771 | |
 
-118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
+119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
 ### Corpus
 
