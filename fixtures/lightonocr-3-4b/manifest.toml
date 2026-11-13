@@ -1,0 +1,13 @@
+model    = "lightonai/LightOnOCR-3-4B"
+revision = "b71010f095dc3735de7ee6b9969bff8f8f50b39a"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "d5ddb788d5f3df12e32244954037eb535409d24eeb48c2429d7588af4e7b69a7"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "fdf1b55fcdd3e8e3c6d0276d5cd9bcc3f7f46ddc3d66e675a64342c89ee2ca43"
+"merges.txt"             = "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+"processor_config.json"  = "d0509e284a83a7c30f1b7170c22f0302ad656e220ff3d0259eed1f8e51b0c224"
+"tokenizer.json"         = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json"  = "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"
+"vocab.json"             = "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
