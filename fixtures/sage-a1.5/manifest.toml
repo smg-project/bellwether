@@ -1,0 +1,10 @@
+model    = "InternScience/Sage-A1.5"
+revision = "0e3205cf441cf01df0c0d238cc4738d0e43b4ca7"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"   = "0080393e13df7322bed792a78e75daf8a0374a80928996e5cf3cfd2ab4c1e1be"
+"config.json"           = "14ca64606324feee458e5a44ed6564a768b9f8713416aa98f06edd30d214f1ef"
+"processor_config.json" = "d0509e284a83a7c30f1b7170c22f0302ad656e220ff3d0259eed1f8e51b0c224"
+"tokenizer.json"        = "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+"tokenizer_config.json" = "d403d02cf04f618863360c5f6d9043683d54544bab6da2d2e365fbcb089f30ce"
