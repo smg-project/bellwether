@@ -376,11 +376,12 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ling-2.6-1t](fixtures/ling-2.6-1t/sets.toml) | inclusionAI/Ling-2.6-1T @ 653026b0 | 2 | 2 | 531736 | 589657 | 2 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-2.6-1t-base](fixtures/ling-2.6-1t-base/sets.toml) | inclusionAI/Ling-2.6-1T-base @ 64beeb8a | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [ling-2.6-flash](fixtures/ling-2.6-flash/sets.toml) | inclusionAI/Ling-2.6-flash @ 89f8441a | 2 | 2 | 531736 | 589657 | 2 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [ling-3.0-flash](fixtures/ling-3.0-flash/sets.toml) | inclusionAI/Ling-3.0-flash @ ef06d91f | 2 | 3 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [ling-3.0-flash](fixtures/ling-3.0-flash/sets.toml) | inclusionAI/Ling-3.0-flash @ ef06d91f | 3 | 3 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-3.0-flash-fin](fixtures/ling-3.0-flash-fin/sets.toml) | inclusionAI/Ling-3.0-flash-Fin @ a5b4afb4 | 1 | 2 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-3.0-flash-vl-fp4](fixtures/ling-3.0-flash-vl-fp4/sets.toml) | inclusionAI/Ling-3.0-flash-VL-fp4 @ 8dca6a0d | 1 | 2 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-3.0-tiny](fixtures/ling-3.0-tiny/sets.toml) | inclusionAI/Ling-3.0-tiny @ 9a98e35f | 1 | 2 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-3.0-tiny-base](fixtures/ling-3.0-tiny-base/sets.toml) | inclusionAI/Ling-3.0-tiny-base @ bab7297f | 4 | 2 | 238494 | 0 | 278472 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [ling-3.1-flash](fixtures/ling-3.1-flash/sets.toml) | inclusionAI/Ling-3.1-flash @ dde57b1c | 2 | 2 | 24 | 28 | 0 | hand-written |
 | [ling-coder-lite](fixtures/ling-coder-lite/sets.toml) | inclusionAI/Ling-Coder-lite @ e83c3b87 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [ling-flash-2.0](fixtures/ling-flash-2.0/sets.toml) | inclusionAI/Ling-flash-2.0 @ 96f9b7a7 | 1 | 3 | 531736 | 589657 | 2 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ling-lite](fixtures/ling-lite/sets.toml) | inclusionAI/Ling-lite @ d80333a0 | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -867,7 +868,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1328 | | 361289393 | 267338031 | 108727650 | |
+| all | | 1331 | | 361289417 | 267338059 | 108727650 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
