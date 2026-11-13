@@ -1,0 +1,12 @@
+model    = "RedHatAI/OTel-2.0-LLM-31B-IT"
+revision = "3dc01a76fd92d2b8e20ebca69c06fc40bc07047c"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "7d35f613f292abfc52a3d58c3d79e7b5fe60f7118a7a097c8689fa51476b3c0c"
+"config.json"             = "285a6691775003b5c39879f47808f79fb5bb631c52df2bffb914ec7990fc3173"
+"generation_config.json"  = "4468e1ab38c047b3c98169b95cd9cc3a5751fb3bfbfca697558d3b67f3408a0c"
+"processor_config.json"   = "bb247192145f829c16ef2471f271ae8d528c3eb5e8b7c5a4469b65704d698b5b"
+"special_tokens_map.json" = "429d1944fbb8e6166b7bb0d2b4b17c8879ae8c2a99e65709c16d3c862bbbaaf3"
+"tokenizer.json"          = "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"
+"tokenizer_config.json"   = "102c96f5aee6b36a3b5c88471ca2cfb7669e592c0e34a846cedc58a2d8dfa758"
