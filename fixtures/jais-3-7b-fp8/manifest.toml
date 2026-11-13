@@ -1,0 +1,11 @@
+model    = "IFM/Jais-3-7B-FP8"
+revision = "48e94a28b4e2f6307c47a273571432ade548b927"
+tier     = 2
+group    = "jais-3-32b-fp8"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "1b2f6b9c978cedca621fa9bcaade36a363528300e4c8cb82af9b30d8ff49e9d3"
+"config.json"            = "3fc9d4c10ad0bb5b127c6f594cebf641d1f2605537ea9b92f80aa34a0d20527a"
+"generation_config.json" = "2e770419b22cd55fe910b60cc2c0ff133a849fec2cf8b80753d788235bbb89e5"
+"tokenizer.json"         = "838d767b7c9925ff257feb20eaa4299a8e3cc35bb3d805589c373f51d2cc3cb6"
+"tokenizer_config.json"  = "068cfdcf2bcef44fd77f935a9fb41b4d45af547fd41b95079817bd40b24fe518"
