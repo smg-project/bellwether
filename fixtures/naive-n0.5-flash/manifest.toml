@@ -1,0 +1,13 @@
+model    = "NaiveAI/Naive-N0.5-Flash"
+revision = "9c9a11e8d2a6b8507d48b533345ef591cf9a6494"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "e7ecc00653da360dd32df60e7f278f0e7533b3d7d8e70bdb8a877c9a1660770e"
+"config.json"             = "3a8e647f5e215554e382baa7c6849d550757f988c3e2b40d943d1bccefbb1f24"
+"generation_config.json"  = "377c989e380c540e4c3482f258b4372a0b09773b33c90a18f9593b90389ebbbd"
+"merges.txt"              = "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+"special_tokens_map.json" = "bd994a943a5a44bb8c70c4f27d412a83eba9308c5e8689412219da448a2bd2ed"
+"tokenizer.json"          = "2efef62c60dedec64b55ab8b6e6838ca5cee391c00c62f2c554ba5de3d33e030"
+"tokenizer_config.json"   = "a6970b2958597d6463ea3c6737b77797de1261e43dadddb5a6b737c377bec8dd"
+"vocab.json"              = "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"

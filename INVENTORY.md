@@ -532,6 +532,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [moss-vl-realtime-sglang](fixtures/moss-vl-realtime-sglang/sets.toml) | OpenMOSS-Team/MOSS-VL-Realtime-SGLANG @ 3d6407cc | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [muse-glimmer-30b](fixtures/muse-glimmer-30b/sets.toml) | meta-models/Muse-Glimmer-30B @ a4e59da5 | 1 | 2 | 238494 | 494683 | 371460 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [music-flamingo-hf](fixtures/music-flamingo-hf/sets.toml) | nvidia/music-flamingo-hf @ e560c332 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [naive-n0.5-flash](fixtures/naive-n0.5-flash/sets.toml) | NaiveAI/Naive-N0.5-Flash @ 9c9a11e8 | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [nanbeige4-3b-thinking-2510](fixtures/nanbeige4-3b-thinking-2510/sets.toml) | Nanbeige/Nanbeige4-3B-Thinking-2510 @ 78d97933 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nanbeige4-3b-thinking-2511](fixtures/nanbeige4-3b-thinking-2511/sets.toml) | Nanbeige/Nanbeige4-3B-Thinking-2511 @ 396a1fb7 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [nanbeige4.1-3b](fixtures/nanbeige4.1-3b/sets.toml) | Nanbeige/Nanbeige4.1-3B @ 9c4555c3 | 1 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -892,7 +893,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1364 | | 361289962 | 267338515 | 108727785 | |
+| all | | 1365 | | 361289986 | 267338543 | 108727785 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
