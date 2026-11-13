@@ -1,0 +1,10 @@
+model    = "IFM/Jais-3-MoVA-36B-A4B-FP8"
+revision = "07b85858eefd100e3d1ca6d95e34fad93c4ad492"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "1b2f6b9c978cedca621fa9bcaade36a363528300e4c8cb82af9b30d8ff49e9d3"
+"config.json"            = "3fc9d4c10ad0bb5b127c6f594cebf641d1f2605537ea9b92f80aa34a0d20527a"
+"generation_config.json" = "2e770419b22cd55fe910b60cc2c0ff133a849fec2cf8b80753d788235bbb89e5"
+"tokenizer.json"         = "2fa69519ff1ee3ee55ac50927b00058e88b9eb90802fabaf3c6b05804601c53b"
+"tokenizer_config.json"  = "581375b2ce8d56d59f609f08a7165365ac53b6543f3442ef0117b4951b0d747c"

@@ -293,6 +293,8 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [isaac-0.2-1b](fixtures/isaac-0.2-1b/sets.toml) | PerceptronAI/Isaac-0.2-1B @ bf8a8b26 | 1 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ising-calibration-1-35b-a3b](fixtures/ising-calibration-1-35b-a3b/sets.toml) | nvidia/Ising-Calibration-1-35B-A3B @ b07b7d22 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ising-calibration-1.5-31b-bf16](fixtures/ising-calibration-1.5-31b-bf16/sets.toml) | nvidia/Ising-Calibration-1.5-31B-BF16 @ b9b4f513 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [jais-3-32b-fp8](fixtures/jais-3-32b-fp8/sets.toml) | IFM/Jais-3-32B-FP8 @ aabbde79 | 4 | 2 | 16 | 8 | 28 | hand-written |
+| [jais-3-mova-36b-a4b-fp8](fixtures/jais-3-mova-36b-a4b-fp8/sets.toml) | IFM/Jais-3-MoVA-36B-A4B-FP8 @ 07b85858 | 1 | 2 | 16 | 8 | 28 | hand-written |
 | [jamba-tiny-dev](fixtures/jamba-tiny-dev/sets.toml) | ai21labs/Jamba-tiny-dev @ ed303361 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [januscoder-14b](fixtures/januscoder-14b/sets.toml) | internlm/JanusCoder-14B @ 28487c47 | 2 | 2 | 531736 | 583086 | 6573 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [januscoderv-7b](fixtures/januscoderv-7b/sets.toml) | internlm/JanusCoderV-7B @ a78918c8 | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -882,7 +884,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1349 | | 361289747 | 267338336 | 108727715 | |
+| all | | 1354 | | 361289779 | 267338352 | 108727771 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
