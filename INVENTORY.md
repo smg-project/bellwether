@@ -545,7 +545,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [north-mini-code-1.0](fixtures/north-mini-code-1.0/sets.toml) | CohereLabs/North-Mini-Code-1.0 @ d11e61a8 | 1 | 2 | 531736 | 11885 | 11 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nv-reason-cxr-3b](fixtures/nv-reason-cxr-3b/sets.toml) | nvidia/NV-Reason-CXR-3B @ 056bd038 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-nano-30b-a3b-bf16](fixtures/nvidia-nemotron-3-nano-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 @ bf77c317 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [nvidia-nemotron-3-nano-4b-bf16](fixtures/nvidia-nemotron-3-nano-4b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16 @ dfaf35de | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [nvidia-nemotron-3-nano-4b-bf16](fixtures/nvidia-nemotron-3-nano-4b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16 @ dfaf35de | 2 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-super-120b-a12b-bf16](fixtures/nvidia-nemotron-3-super-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 @ 2dc98e2a | 3 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-bf16](fixtures/nvidia-nemotron-3-ultra-550b-a55b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16 @ 77df655d | 7 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-genrm](fixtures/nvidia-nemotron-3-ultra-550b-a55b-genrm/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-GenRM @ 03c50a66 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -870,7 +870,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zr1-1.5b](fixtures/zr1-1.5b/sets.toml) | Zyphra/ZR1-1.5B @ 6108a26d | 1 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-4b](fixtures/zwz-4b/sets.toml) | inclusionAI/ZwZ-4B @ e43981c1 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| all | | 1334 | | 361289464 | 267338106 | 108727660 | |
+| all | | 1335 | | 361289464 | 267338106 | 108727660 | |
 
 118 more groups (185 checkpoints) have a manifest and nothing recorded yet.
 
