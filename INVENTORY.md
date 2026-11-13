@@ -788,6 +788,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [smolvlm2-2.2b-instruct](fixtures/smolvlm2-2.2b-instruct/sets.toml) | HuggingFaceTB/SmolVLM2-2.2B-Instruct @ 482adb53 | 1 | 3 | 498897 | 328664 | 144605 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [solar-10.7b-instruct-v1.0](fixtures/solar-10.7b-instruct-v1.0/sets.toml) | upstage/SOLAR-10.7B-Instruct-v1.0 @ 090d405e | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
 | [songprep-7b](fixtures/songprep-7b/sets.toml) | tencent/SongPrep-7B @ 6edc7950 | 1 | 3 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
+| [spark-x2.6-4b](fixtures/spark-x2.6-4b/sets.toml) | XHToken/Spark-X2.6-4B @ 64ca8f2a | 1 | 2 | 24 | 27 | 1 | hand-written |
 | [spatial-ssrl-7b](fixtures/spatial-ssrl-7b/sets.toml) | internlm/Spatial-SSRL-7B @ 4f7440e1 | 1 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [spatial-ssrl-qwen3vl-4b](fixtures/spatial-ssrl-qwen3vl-4b/sets.toml) | internlm/Spatial-SSRL-Qwen3VL-4B @ 193be56f | 1 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [spec-decoding-subfolder-fixture](fixtures/spec-decoding-subfolder-fixture/sets.toml) | poolside/spec-decoding-subfolder-fixture @ ebd36460 | 1 | 2 | 238485 | 0 | 278481 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
@@ -890,7 +891,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1362 | | 361289915 | 267338460 | 108727783 | |
+| all | | 1363 | | 361289939 | 267338487 | 108727784 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
