@@ -1,0 +1,11 @@
+model    = "meituan-longcat/LongCat-2.5"
+revision = "60032d966e6369b822f0e61d2eff01368d38b111"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"     = "1ae33669733c67a84f0bf598e7d9581d032141570bfef1bf182e6613b983ff64"
+"config.json"             = "405681e67c8ab6c1ab9e99aa5d7f4d94ce84edd8585d6ca912c68c068b596f4f"
+"generation_config.json"  = "1fe0904792688508097442fed4b9beed2a9770c480cb1db8efdd0807b8b3c51f"
+"special_tokens_map.json" = "e0137d1717388944c22ab5a36a7f15e5180a69bead466d9da671a16b6f4e4ee9"
+"tokenizer.json"          = "3ef63b62841e66ca8433bf061daba043f6b6084f07548eeda124778aa2caf98a"
+"tokenizer_config.json"   = "a67220bde5e82e104391a1f08d13cc8c045145d6ac0930568a30dd8d4dbca7d4"
