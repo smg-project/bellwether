@@ -568,7 +568,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [nvidia-nemotron-3-super-120b-a12b-bf16](fixtures/nvidia-nemotron-3-super-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 @ 2dc98e2a | 3 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-bf16](fixtures/nvidia-nemotron-3-ultra-550b-a55b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16 @ 77df655d | 7 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3-ultra-550b-a55b-genrm](fixtures/nvidia-nemotron-3-ultra-550b-a55b-genrm/sets.toml) | nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-GenRM @ 03c50a66 | 1 | 2 | 531736 | 0 | 0 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, swebench, swehero, tau2 |
-| [nvidia-nemotron-3.5-bolt-74b-a9b-bf16](fixtures/nvidia-nemotron-3.5-bolt-74b-a9b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16 @ e09a4ced | 1 | 2 | 24 | 27 | 1 | hand-written |
+| [nvidia-nemotron-3.5-bolt-74b-a9b-bf16](fixtures/nvidia-nemotron-3.5-bolt-74b-a9b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-BF16 @ e09a4ced | 2 | 2 | 24 | 27 | 1 | hand-written |
 | [nvidia-nemotron-3.5-bolt-e4b-bf16](fixtures/nvidia-nemotron-3.5-bolt-e4b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-BF16 @ 49843eed | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [nvidia-nemotron-3.5-lightning-30b-a3b-bf16](fixtures/nvidia-nemotron-3.5-lightning-30b-a3b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16 @ a9904d24 | 1 | 2 | 238494 | 12829 | 278539 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [nvidia-nemotron-3.5-super-vl-120b-a12b-bf16](fixtures/nvidia-nemotron-3.5-super-vl-120b-a12b-bf16/sets.toml) | nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16 @ fb0ee0bc | 2 | 2 | 24 | 27 | 1 | hand-written |
@@ -903,7 +903,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1378 | | 361290253 | 267338734 | 108727790 | |
+| all | | 1379 | | 361290253 | 267338734 | 108727790 | |
 
 122 more groups (190 checkpoints) have a manifest and nothing recorded yet.
 
