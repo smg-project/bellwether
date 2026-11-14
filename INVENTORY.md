@@ -621,6 +621,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [ovis2-4b](fixtures/ovis2-4b/sets.toml) | ATH-MaaS/Ovis2-4B @ 30d3ed68 | 5 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ovis2.5-9b](fixtures/ovis2.5-9b/sets.toml) | ATH-MaaS/Ovis2.5-9B @ d73b2283 | 1 | 3 | 238488 | 184970 | 533011 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ovisocr](fixtures/ovisocr/sets.toml) | ATH-MaaS/OvisOCR @ 5a7a90ff | 1 | 2 | 238488 | 184970 | 533011 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [ovisocr3](fixtures/ovisocr3/sets.toml) | ATH-MaaS/OvisOCR3 @ 5b252386 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [pacore-8b](fixtures/pacore-8b/sets.toml) | stepfun-ai/PaCoRe-8B @ b49e8427 | 2 | 2 | 531736 | 339548 | 111762 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [paddleocr-vl-1.6](fixtures/paddleocr-vl-1.6/sets.toml) | PaddlePaddle/PaddleOCR-VL-1.6 @ c5630aba | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [paham-experimental](fixtures/paham-experimental/sets.toml) | DeepNarra/Paham-Experimental @ 64d3ec8f | 1 | 2 | 24 | 0 | 0 | hand-written |
@@ -900,7 +901,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1373 | | 361290153 | 267338661 | 108727824 | |
+| all | | 1374 | | 361290176 | 267338680 | 108727834 | |
 
 121 more groups (188 checkpoints) have a manifest and nothing recorded yet.
 
