@@ -764,6 +764,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [shieldagent](fixtures/shieldagent/sets.toml) | thu-coai/ShieldAgent @ a62f8413 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [shieldstral-1.0-3b](fixtures/shieldstral-1.0-3b/sets.toml) | mistralai/Shieldstral-1.0-3B @ 003ec7e2 | 1 | 2 | 238483 | 184968 | 533018 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [shieldvlm-7b-qwen](fixtures/shieldvlm-7b-qwen/sets.toml) | thu-coai/ShieldVLM-7B-qwen @ 5166dfe7 | 1 | 3 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [silentvision-52m](fixtures/silentvision-52m/sets.toml) | srmortal/SilentVision-52M @ ae4d254e | 1 | 2 | 24 | 5 | 23 | hand-written |
 | [singguard-0.8b](fixtures/singguard-0.8b/sets.toml) | inclusionAI/SingGuard-0.8b @ 1dc748ec | 1 | 2 | 238478 | 461722 | 349772 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [singguard-2b](fixtures/singguard-2b/sets.toml) | inclusionAI/SingGuard-2b @ 401cda3f | 2 | 2 | 531736 | 439594 | 125643 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [singguard-4b](fixtures/singguard-4b/sets.toml) | inclusionAI/SingGuard-4b @ 4e082d06 | 1 | 2 | 531736 | 439594 | 125643 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -896,7 +897,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1369 | | 361290058 | 267338600 | 108727800 | |
+| all | | 1370 | | 361290082 | 267338605 | 108727823 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 

@@ -1,0 +1,10 @@
+model    = "srmortal/SilentVision-52M"
+revision = "ae4d254e2c4015782f13c6ad7f214f7a6fd743f2"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "3a0ec2f94f9edd3e03ba507c930abe1be13426e49e39c0ff2fcfddcb9f7d8c5f"
+"config.json"            = "1088017d1d7bab2b886c5b535dbff5436f483d4988a88772924da695365a939f"
+"generation_config.json" = "1b279cbc3b21dc0c576636ff9969045d169681a1deddb0ba6c384a2710bfdb02"
+"tokenizer.json"         = "3fd169731d2cbde95e10bf356d66d5997fd885dd8dbb6fb4684da3f23b2585d8"
+"tokenizer_config.json"  = "302197ce2f2009b8748455e986d2d518c798c8009ce573e77fc892e48963aea3"
