@@ -1,0 +1,11 @@
+model    = "Cloudflare/clef-omni"
+revision = "189097bdeaaaea246bd876310d4ae30f9a50415a"
+tier     = 2
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "45777d2e798aae1d1ce6844e69edcb23fc0c710009554711c78efab9044da2c8"
+"config.json"            = "18293b7713673ea0f93c249146f5872df64bbe3e51e25333453ea1a36e3269f9"
+"generation_config.json" = "3de3323d22b1000c1e525fcd9df1bc1963b272520edd3ef86c03bc98f688c4fe"
+"processor_config.json"  = "5d8b1d3f31e3c846d81752bd788e80dbf07d38aef214dc6a26247c5c6f019c35"
+"tokenizer.json"         = "a7d41145c408f3062e824f965be1c29854cd809e111cdf8170aa8b0bcd5d1fab"
+"tokenizer_config.json"  = "2602a7d7336bf7ad4cd3eb385ccf27040cc675081d4cd445b1aaa88b10b87ffb"
