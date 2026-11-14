@@ -515,6 +515,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [minimax-m2.5](fixtures/minimax-m2.5/sets.toml) | MiniMaxAI/MiniMax-M2.5 @ f710177d | 1 | 2 | 238494 | 12821 | 278547 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m2.7](fixtures/minimax-m2.7/sets.toml) | MiniMaxAI/MiniMax-M2.7 @ d494266a | 1 | 3 | 238494 | 12825 | 278555 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minimax-m3](fixtures/minimax-m3/sets.toml) | MiniMaxAI/MiniMax-M3 @ f0e1c1e0 | 1 | 1 | 238494 | 589314 | 278829 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [minimax-m3.1-flash](fixtures/minimax-m3.1-flash/sets.toml) | MiniMaxAI/MiniMax-M3.1-Flash @ ce7f4df8 | 1 | 2 | 42 | 39 | 3 | hand-written |
 | [ministral-3-14b-instruct-2512-bf16](fixtures/ministral-3-14b-instruct-2512-bf16/sets.toml) | mistralai/Ministral-3-14B-Instruct-2512-BF16 @ 3cea74c1 | 1 | 2 | 531731 | 570202 | 6594 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ministral-3-14b-reasoning-2512](fixtures/ministral-3-14b-reasoning-2512/sets.toml) | mistralai/Ministral-3-14B-Reasoning-2512 @ 51f9210f | 3 | 2 | 531731 | 583079 | 6585 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [ministral-3-3b-instruct-2512](fixtures/ministral-3-3b-instruct-2512/sets.toml) | mistralai/Ministral-3-3B-Instruct-2512 @ b35d4dfe | 1 | 2 | 531731 | 570194 | 6590 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -902,7 +903,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1376 | | 361290211 | 267338695 | 108727787 | |
+| all | | 1377 | | 361290253 | 267338734 | 108727790 | |
 
 122 more groups (190 checkpoints) have a manifest and nothing recorded yet.
 
@@ -915,14 +916,14 @@ The cases every group is recorded over, by the source they were imported from.
 | bfcl | pypi:bfcl-eval==2026.3.23 | Apache-2.0 | 17 | 4119 | 14 | 2809 | 37.1 MB | 37.1 MB, plain |
 | glaive-v2 | hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645 | Apache-2.0 | 71 | 289494 | 71 | 306240 | 1.24 GB | 81.4 MB, zstd in Git LFS |
 | gsm8k | github:openai/grade-school-math@3101c7d5 | MIT | 2 | 8792 | 4 | 17584 | 22.6 MB | 22.6 MB, plain |
-| hand-written | written in this repository | | 5 | 3666 | 4 | 48 | 3.1 MB | 3.1 MB, plain |
+| hand-written | written in this repository | | 6 | 3687 | 5 | 59 | 3.2 MB | 3.2 MB, plain |
 | hermes | hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d2 | Apache-2.0 | 3 | 20769 | 3 | 20773 | 99.6 MB | 5.8 MB, zstd in Git LFS |
 | mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
 | shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
 | swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
 | swehero | hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119 | CC-BY-4.0 | 14 | 79627 | 14 | 101568 | 14.84 GB | 882.8 MB, zstd in Git LFS |
 | tau2 | github:sierra-research/tau2-bench@4ce7c039 | MIT | 22 | 124175 | 22 | 127433 | 9.77 GB | 30.8 MB, zstd in Git LFS |
-| all | | | 148 | 535378 | 158 | 589765 | 26.08 GB | 1.13 GB |
+| all | | | 149 | 535399 | 159 | 589776 | 26.08 GB | 1.13 GB |
 
 ### Images
 

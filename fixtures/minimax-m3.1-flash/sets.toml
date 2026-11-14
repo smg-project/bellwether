@@ -1,0 +1,40 @@
+[parse.common]
+form = "plain"
+cases = 16
+rejected = 0
+plain_bytes = 60262
+plain_sha256 = "ac4b846bfe8c519e34f0e0ff34a6ed7f8e33d25dfe931ba49c2eda65c79efbf3"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.native]
+form = "plain"
+cases = 11
+rejected = 0
+plain_bytes = 35250
+plain_sha256 = "539405bc409db030b70d6dc9d09374f6c3f5c268cf931ec4ce3cfaccd5854f76"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[parse.turns]
+form = "plain"
+cases = 12
+rejected = 0
+plain_bytes = 47070
+plain_sha256 = "6aa62edc56bbe95f76c7677c628cbac75ad910fec4e504b56cb821f287272f31"
+generate_stop_ids = [200020]
+generate_stop_ids_from = "generation_config.json"
+
+[render.common]
+form = "plain"
+cases = 24
+rejected = 0
+plain_bytes = 96449
+plain_sha256 = "3f648c7b236de275fa4ae4aafe7ecc155ebf62a80de8cdc4d605a93042272dfc"
+
+[render.native]
+form = "plain"
+cases = 18
+rejected = 3
+plain_bytes = 64026
+plain_sha256 = "baf10044ea46817ac0bab4a57f7ac983a734f41ac2c5190f90bebed37a2377a3"
