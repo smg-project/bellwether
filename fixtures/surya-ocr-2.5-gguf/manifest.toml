@@ -1,0 +1,12 @@
+model    = "datalab-to/surya-ocr-2.5-gguf"
+revision = "eb78671ae9af9bdddfac2e25507c55337b6098e2"
+tier     = 2
+group    = "surya-ocr-2.5"
+
+[inputs]  # sha256 of each oracle input; a JSON file in bellwether.inputs.NARROWED over its fields only
+"chat_template.jinja"    = "86f17a85672e7f367b5e6c6de6f67f53ede0fba4abb3d67c583a6ef647c1aa85"
+"config.json"            = "018973b7af1dde016d3aa04ccbc37f4be2842ed4f65f961351ad592898fe93d5"
+"generation_config.json" = "4c5c0b1b2e792851259fc0256c46681f2418f59db1fc1910fa96c7f9879ee40e"
+"processor_config.json"  = "d0509e284a83a7c30f1b7170c22f0302ad656e220ff3d0259eed1f8e51b0c224"
+"tokenizer.json"         = "49753fd82a5800f975d18d301203450d42f1a46c2b0247343c93239f122684c1"
+"tokenizer_config.json"  = "273af4267d997926aea04103971a6f317c16c503f2ef924150f83ed0eb3bdcfd"
