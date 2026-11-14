@@ -835,6 +835,15 @@ plain_sha256 = "d649eecd15a9713ad538450ccfd0164d784c075863f8462e786bb32efb409936
 generate_stop_ids = [200006]
 generate_stop_ids_from = "config.json"
 
+[parse.json-string]
+form = "plain"
+cases = 17
+rejected = 0
+plain_bytes = 48652
+plain_sha256 = "49e22978f8dd74f75a0161e1f29fb48799446e2330183254bff4241ceabcd2e2"
+generate_stop_ids = [200006]
+generate_stop_ids_from = "config.json"
+
 [parse.mgsm-bn-content]
 form = "zstd"
 cases = 250
