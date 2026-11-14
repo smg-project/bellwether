@@ -280,6 +280,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [if-critic-14b](fixtures/if-critic-14b/sets.toml) | thu-coai/IF-CRITIC-14B @ 091e3cd5 | 3 | 2 | 531736 | 576772 | 7 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [infllm-v2-short-dense-base](fixtures/infllm-v2-short-dense-base/sets.toml) | openbmb/InfLLM-V2-Short-Dense-Base @ aba491d0 | 2 | 2 | 531736 | 328660 | 111770 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [inkling](fixtures/inkling/sets.toml) | thinkingmachines/Inkling @ 828496ee | 2 | 3 | 238489 | 589676 | 278477 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
+| [inkling-2-small](fixtures/inkling-2-small/sets.toml) | thinkingmachines/Inkling-2-Small @ 8361e7a3 | 2 | 2 | 35 | 31 | 0 | hand-written |
 | [intent-aware-lfqa-llama3-8b-intent-explicit](fixtures/intent-aware-lfqa-llama3-8b-intent-explicit/sets.toml) | allenai/intent-aware-lfqa-llama3-8b-intent-explicit @ fdf98cd4 | 4 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [intent-aware-lfqa-qwen3-4b-intent-explicit](fixtures/intent-aware-lfqa-qwen3-4b-intent-explicit/sets.toml) | allenai/intent-aware-lfqa-qwen3-4b-intent-explicit @ 07bd65c9 | 8 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [intern-decision-0.8b](fixtures/intern-decision-0.8b/sets.toml) | internlm/Intern-Decision-0.8B @ 85a0cc5a | 2 | 2 | 238478 | 461722 | 349772 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -901,7 +902,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1374 | | 361290176 | 267338664 | 108727787 | |
+| all | | 1376 | | 361290211 | 267338695 | 108727787 | |
 
 122 more groups (190 checkpoints) have a manifest and nothing recorded yet.
 
@@ -914,14 +915,14 @@ The cases every group is recorded over, by the source they were imported from.
 | bfcl | pypi:bfcl-eval==2026.3.23 | Apache-2.0 | 17 | 4119 | 14 | 2809 | 37.1 MB | 37.1 MB, plain |
 | glaive-v2 | hf:datasets/glaiveai/glaive-function-calling-v2@e7f4b645 | Apache-2.0 | 71 | 289494 | 71 | 306240 | 1.24 GB | 81.4 MB, zstd in Git LFS |
 | gsm8k | github:openai/grade-school-math@3101c7d5 | MIT | 2 | 8792 | 4 | 17584 | 22.6 MB | 22.6 MB, plain |
-| hand-written | written in this repository | | 4 | 3655 | 3 | 45 | 3.1 MB | 3.1 MB, plain |
+| hand-written | written in this repository | | 5 | 3666 | 4 | 48 | 3.1 MB | 3.1 MB, plain |
 | hermes | hf:datasets/NousResearch/hermes-function-calling-v1@dae3e1d2 | Apache-2.0 | 3 | 20769 | 3 | 20773 | 99.6 MB | 5.8 MB, zstd in Git LFS |
 | mgsm | github:google-research/url-nlp@3622039c | CC-BY-4.0 | 10 | 2500 | 12 | 2838 | 4.2 MB | 4.2 MB, plain |
 | shapes | github:openai/grade-school-math@3101c7d5 and pypi:bfcl-eval==2026.3.23 | Apache-2.0, MIT | 0 | 0 | 6 | 6000 | 17.9 MB | 17.9 MB, plain |
 | swebench | hf:datasets/SWE-bench/SWE-bench@c6fe717f, hf:datasets/SWE-bench/SWE-bench_Verified@78f471bf | 8 licenses | 4 | 2236 | 8 | 4472 | 45.8 MB | 45.8 MB, plain |
 | swehero | hf:datasets/nvidia/SWE-Hero-openhands-trajectories@150bc119 | CC-BY-4.0 | 14 | 79627 | 14 | 101568 | 14.84 GB | 882.8 MB, zstd in Git LFS |
 | tau2 | github:sierra-research/tau2-bench@4ce7c039 | MIT | 22 | 124175 | 22 | 127433 | 9.77 GB | 30.8 MB, zstd in Git LFS |
-| all | | | 147 | 535367 | 157 | 589762 | 26.08 GB | 1.13 GB |
+| all | | | 148 | 535378 | 158 | 589765 | 26.08 GB | 1.13 GB |
 
 ### Images
 
