@@ -148,6 +148,7 @@ src/bellwether/      package: cli.py, one subpackage per command, schemas/case.s
 corpus/              request corpora, one JSON Lines file per set, and the media they reference (see corpus/README.md)
 fixtures/            per-model manifests and recorded cases (see fixtures/README.md)
 patterns/            what Python's regex module says about the response templates' patterns (bellwether patterns)
+policy/              what SMG's routing policies pick, recorded for a second implementation to replay (see policy/README.md)
 docs/                the design (benchmark-sets.md) and the command guides
 docker/vendor/       the vendor-code oracle's base image (bellwether sandbox-record)
 waivers/             engine_defects.toml
