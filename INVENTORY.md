@@ -335,6 +335,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [kimi-k2.6](fixtures/kimi-k2.6/sets.toml) | moonshotai/Kimi-K2.6 @ 7eb5002f | 1 | 2 | 24 | 24 | 4 | hand-written |
 | [kimi-k2.7-code](fixtures/kimi-k2.7-code/sets.toml) | moonshotai/Kimi-K2.7-Code @ 74797c9c | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [kimi-k3](fixtures/kimi-k3/sets.toml) | moonshotai/Kimi-K3 @ f831ab66 | 1 | 1 | 38439 | 54430 | 1 | bfcl, gsm8k, hand-written, hermes, mgsm, shapes, swebench |
+| [kolibri-1](fixtures/kolibri-1/sets.toml) | Aleph-Alpha/Kolibri-1 @ abfe85f6 | 1 | 2 | 24 | 28 | 0 | hand-written |
 | [laguna-m.1](fixtures/laguna-m.1/sets.toml) | poolside/Laguna-M.1 @ 2bf8a4ab | 1 | 2 | 238494 | 490452 | 364799 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [laguna-s-2.1](fixtures/laguna-s-2.1/sets.toml) | poolside/Laguna-S-2.1 @ 0f573140 | 1 | 2 | 238494 | 589298 | 278833 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [laguna-xs-2.1](fixtures/laguna-xs-2.1/sets.toml) | poolside/Laguna-XS-2.1 @ c5f36269 | 1 | 2 | 238494 | 576475 | 278776 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -897,7 +898,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1370 | | 361290082 | 267338605 | 108727823 | |
+| all | | 1371 | | 361290106 | 267338633 | 108727823 | |
 
 119 more groups (186 checkpoints) have a manifest and nothing recorded yet.
 
