@@ -492,7 +492,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [minicpm-ocr-jev](fixtures/minicpm-ocr-jev/sets.toml) | openbmb/MiniCPM-OCR-Jev @ a0ed278e | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [minicpm-v-4.6](fixtures/minicpm-v-4.6/sets.toml) | openbmb/MiniCPM-V-4.6 @ 36f34a66 | 1 | 2 | 238478 | 461722 | 349772 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm-v-4.6-thinking](fixtures/minicpm-v-4.6-thinking/sets.toml) | openbmb/MiniCPM-V-4.6-Thinking @ 93d8f4b6 | 1 | 2 | 238478 | 474543 | 349831 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
-| [minicpm-v-4.7-1b](fixtures/minicpm-v-4.7-1b/sets.toml) | openbmb/MiniCPM-V-4.7-1B @ ad9bf379 | 1 | 2 | 23 | 19 | 10 | hand-written |
+| [minicpm-v-4.7-1b](fixtures/minicpm-v-4.7-1b/sets.toml) | openbmb/MiniCPM-V-4.7-1B @ ad9bf379 | 2 | 2 | 23 | 19 | 10 | hand-written |
 | [minicpm-v-4.7-35b-a3b](fixtures/minicpm-v-4.7-35b-a3b/sets.toml) | openbmb/MiniCPM-V-4.7-35B-A3B @ 98e79ba9 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [minicpm4-0.5b](fixtures/minicpm4-0.5b/sets.toml) | openbmb/MiniCPM4-0.5B @ 5253c7fc | 4 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [minicpm4-8b](fixtures/minicpm4-8b/sets.toml) | openbmb/MiniCPM4-8B @ bb2ae14c | 4 | 3 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
@@ -903,7 +903,7 @@ Each checkpoint group is recorded once, by its primary, for every checkpoint tha
 | [zwz-7b](fixtures/zwz-7b/sets.toml) | inclusionAI/ZwZ-7B @ 1843c45a | 2 | 2 | 531736 | 328662 | 111768 | bfcl, glaive-v2, gsm8k, hand-written, hermes, mgsm, shapes, swebench, swehero, tau2 |
 | [zwz2-27b](fixtures/zwz2-27b/sets.toml) | inclusionAI/ZwZ2-27B @ 6decedf0 | 1 | 2 | 23 | 19 | 10 | hand-written |
 | [zwz2-9b](fixtures/zwz2-9b/sets.toml) | inclusionAI/ZwZ2-9B @ de52e729 | 2 | 2 | 23 | 19 | 10 | hand-written |
-| all | | 1379 | | 361290253 | 267338734 | 108727790 | |
+| all | | 1380 | | 361290253 | 267338734 | 108727790 | |
 
 122 more groups (190 checkpoints) have a manifest and nothing recorded yet.
 
