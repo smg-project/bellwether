@@ -2,7 +2,8 @@
 
 Nothing in this repository reads them: SMG's policy controller replays them. The table in the README is then the only
 statement of what each sheet is, so this holds it to the files: every sheet has a row and every row a sheet and a
-recorder, and a row's commit, row counts and sha256 are the file's.
+recorder, and a row's commit, row counts and sha256 are the file's. A sheet of picks states its sequence rows and its
+drawn rows; the pair sheet picks nothing and states its pair rows, each an outcome on both pair wires.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 POLICY = ROOT / "policy"
 ROW = re.compile(
     r"^\| `(?P<sheet>[a-z_]+\.json)` \| [^|]+ \| `(?P<commit>[0-9a-f]{40})` "
-    r"\| (?P<rows>\d+): (?P<sequence>\d+) sequence, (?P<drawn>\d+) drawn "
+    r"\| (?:(?P<rows>\d+): (?P<sequence>\d+) sequence, (?P<drawn>\d+) drawn|(?P<pairs>\d+) pair rows) "
     r"\| `(?P<sha256>[0-9a-f]{64})` \| `(?P<recorder>[a-z_]+\.rs)` \|$"
 )
 
@@ -38,9 +39,16 @@ def test_a_row_states_its_sheets_commit_row_counts_and_sha256():
         data = (POLICY / name).read_bytes()
         sheet = json.loads(data)
         names = [recorded["name"] for recorded in sheet["rows"]]
-        drawn = sum("counts" in recorded["outcome"] for recorded in sheet["rows"])
+        outcomes = [recorded["outcome"] for recorded in sheet["rows"]]
         assert len(set(names)) == len(names), f"{name}: a row name repeats"
         assert sheet["recorded_from"] == row["commit"], name
-        stated = (int(row["rows"]), int(row["sequence"]), int(row["drawn"]))
-        assert (len(names), len(names) - drawn, drawn) == stated, name
+        if row["pairs"] is None:
+            kinds = [next(iter(outcome)) for outcome in outcomes]
+            assert set(kinds) <= {"sequence", "counts"}, f"{name}: a row that is no pick"
+            drawn = kinds.count("counts")
+            stated = (int(row["rows"]), int(row["sequence"]), int(row["drawn"]))
+            assert (len(names), len(names) - drawn, drawn) == stated, name
+        else:
+            assert all(set(outcome) == {"grpc", "http"} for outcome in outcomes), f"{name}: a row that is no pair row"
+            assert len(names) == int(row["pairs"]), name
         assert hashlib.sha256(data).hexdigest() == row["sha256"], name

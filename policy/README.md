@@ -5,12 +5,17 @@ with a load-balancing policy, and its policy controller crate (`crates/policy_co
 second time. The crate's test `tests/classic_rows.rs` replays these rows through the new code and fails on a row it
 decides differently. The reference here is the gateway's policy code at a pinned commit, run, never read.
 
+One sheet records no pick: `pair_index.json` holds which prefill and decode workers the gateway pairs, the lists a
+pair's placement then picks from.
+
 ```
 policy/
   power_of_two.json        one sheet per policy: its recorded rows
   manual.json
+  pair_index.json
   classic_rows.rs          the recorder of power_of_two.json
   classic_manual_rows.rs   the recorder of manual.json
+  classic_pair_rows.rs     the recorder of pair_index.json
 ```
 
 ## A sheet
@@ -28,6 +33,16 @@ routing keys), one request shape and what the policy picked for it. There are tw
   SMG's replay takes two rows as one distribution when a worker never picked on one side is never picked on the
   other and every other share lies within four standard deviations of the difference of two samples of that size.
 
+`pair_index.json` holds a third kind, which picks nothing:
+
+- **pair row:** a prefill pool and a decode pool, with what each worker offers a partner as the gateway derives it
+  from the worker's registration (its runtime, an operator's protocol, the KV transport, the engine version, the KV
+  layout facts) and the pairing key the gateway names the worker's group by. For each of the gateway's two pair
+  wires and each of its three pairing modes the row records the verdict on every prefill and decode (the component
+  the pair is refused on, or none), each prefill's partners by index in the decode pool, and the refusal the gateway
+  reports when no pair is left. Nothing in a row draws: the recorder builds each row twice and stops if the two
+  builds differ, so a pair row is the same in every recording of one commit and replays whole or not at all.
+
 ## The sheets
 
 Each sheet is recorded on its own, so the commit is a column of the sheet's row and never one commit for the
@@ -37,6 +52,7 @@ directory. The sha256 is of the file as committed.
 |---|---|---|---|---|---|
 | `power_of_two.json` | power of two, under each of its four load metrics | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 44: 24 sequence, 20 drawn | `602e1fe790cc5368ad05de2297b6e482b7a8893704ee448699ec467df9e0d87c` | `classic_rows.rs` |
 | `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
+| `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 
 ## Recording
 
@@ -54,6 +70,12 @@ CLASSIC_ROWS_OUT=<dir> CLASSIC_ROWS_COMMIT=<commit> \
 ```
 
 For the manual sheet the test path is `policies::classic_manual_rows`.
+
+The pair sheet's recorder is a child of the module that derives a worker's pairing descriptor, so it records the
+descriptor the gateway derived and never a second reading of the registration. Copy it to
+`model_gateway/src/worker/pd/pairing/classic_pair_rows.rs`, add `#[cfg(test)] mod classic_pair_rows;` at the end of
+`model_gateway/src/worker/pd/pairing.rs`, and run the test path `worker::pd::pairing::classic_pair_rows` with the
+same two variables.
 
 A sheet is never edited by hand. A new recording replaces the whole sheet and its row in the table above, in one
 pull request that names the SMG commit and says which rows moved: a sequence row moves only when the policy's
@@ -77,6 +99,8 @@ A limit is a recorded row the replay does not decide as recorded, with the reaso
 fails once the reason no longer holds.
 
 - `power_of_two.json`: none. All 44 rows replay.
+- `pair_index.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair classes;
+  SMG's replay reads this sheet from the commit its pin then names.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
   keeps a key's pins apart under each role of a prefill and decode pair. The crate refuses a sessions rule under a
   pair plan today, so it cannot build the row; the other 13 rows replay.
