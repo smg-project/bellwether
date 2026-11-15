@@ -218,6 +218,21 @@ fn reported(in_flight: u32, running: u32, resident_tokens: u32) -> WorkerState {
     }
 }
 
+/// A worker whose report holds queued requests beside the running ones.
+fn queued(in_flight: u32, running: u32, queued: u32, resident_tokens: u32) -> WorkerState {
+    WorkerState {
+        in_flight,
+        report: Some(Report {
+            running,
+            queued,
+            resident_tokens: Some(resident_tokens),
+            waiting_tokens: 0,
+            throughput: 0,
+            kv_usage_permille: 0,
+        }),
+    }
+}
+
 /// A worker whose report does not count resident tokens.
 fn uncounted(in_flight: u32, running: u32) -> WorkerState {
     WorkerState {
@@ -245,6 +260,22 @@ fn queueing(in_flight: u32, waiting_tokens: u32) -> WorkerState {
             waiting_tokens,
             throughput: 100,
             kv_usage_permille: 100,
+        }),
+    }
+}
+
+/// A worker whose report runs `running` requests and drains `throughput`
+/// tokens a second (`0`: no rate), with no queue and no KV pressure.
+fn rated(in_flight: u32, running: u32, throughput: u32) -> WorkerState {
+    WorkerState {
+        in_flight,
+        report: Some(Report {
+            running,
+            queued: 0,
+            resident_tokens: None,
+            waiting_tokens: 0,
+            throughput,
+            kv_usage_permille: 0,
         }),
     }
 }
@@ -317,7 +348,7 @@ fn rows() -> Vec<Row> {
     let mut released = picks(3);
     released.push(same_reports(&pair));
     released.extend(picks(3));
-    vec![
+    let mut rows = vec![
         // The resident-token form: the least resident work over every worker.
         sequence_row(
             "resident-tokens-alone-the-fewest-tokens-win",
@@ -353,6 +384,16 @@ fn rows() -> Vec<Row> {
             vec![reported(5, 2, 8_000), reported(3, 3, 21_500), reported(1, 1, 26_500)],
             Some(1_000),
             picks(6),
+        ),
+        // 8,000 tokens over two running and two queued price the one request
+        // in transit at 2,000: 15,000 against 16,000. Over the running alone
+        // it would be 17,000.
+        sequence_row(
+            "resident-tokens-the-mean-context-counts-the-queued-requests-with-the-running",
+            "resident_tokens:1000",
+            vec![queued(5, 2, 2, 8_000), reported(1, 1, 15_000)],
+            Some(1_000),
+            picks(1),
         ),
         sequence_row(
             "resident-tokens-a-worker-that-does-not-count-them-scores-from-its-best-peer",
@@ -561,6 +602,75 @@ fn rows() -> Vec<Row> {
             vec![queueing(2, 50_000), queueing(2, 0), queueing(5, 0)],
             None,
             picks(1),
+        ),
+    ];
+    rows.extend(count_form_rows());
+    rows
+}
+
+/// The count forms' rows: three pools, each under the three forms that
+/// compare a count or a wait. Every row is drawn.
+fn count_form_rows() -> Vec<Row> {
+    // A holds one request and reports one running at 100 tokens a second; B
+    // holds one and has no report; C holds five and reports five running.
+    let fast_peer = || vec![rated(1, 1, 100), dark(1), rated(5, 5, 100_000)];
+    let slow_peer = || vec![rated(1, 1, 100), dark(1), rated(5, 5, 100)];
+    // A reports no rate, B reports 100 a second, C holds five and drains fast.
+    let no_rate = || vec![rated(1, 1, 0), rated(1, 1, 100), rated(5, 5, 100_000)];
+    vec![
+        drawn_row(
+            "least-requests-two-fewest-and-a-fast-peer-of-a-higher-count",
+            "least_requests",
+            fast_peer(),
+            None,
+        ),
+        drawn_row(
+            "requests-two-fewest-and-a-fast-peer-of-a-higher-count",
+            "requests",
+            fast_peer(),
+            None,
+        ),
+        drawn_row(
+            "expected-wait-two-fewest-and-a-fast-peer-of-a-higher-count",
+            "expected_wait",
+            fast_peer(),
+            None,
+        ),
+        drawn_row(
+            "least-requests-two-fewest-and-a-slow-peer-of-a-higher-count",
+            "least_requests",
+            slow_peer(),
+            None,
+        ),
+        drawn_row(
+            "requests-two-fewest-and-a-slow-peer-of-a-higher-count",
+            "requests",
+            slow_peer(),
+            None,
+        ),
+        drawn_row(
+            "expected-wait-two-fewest-and-a-slow-peer-of-a-higher-count",
+            "expected_wait",
+            slow_peer(),
+            None,
+        ),
+        drawn_row(
+            "least-requests-a-worker-with-no-rate-beside-a-rated-one-and-a-fast-peer",
+            "least_requests",
+            no_rate(),
+            None,
+        ),
+        drawn_row(
+            "requests-a-worker-with-no-rate-beside-a-rated-one-and-a-fast-peer",
+            "requests",
+            no_rate(),
+            None,
+        ),
+        drawn_row(
+            "expected-wait-a-worker-with-no-rate-beside-a-rated-one-and-a-fast-peer",
+            "expected_wait",
+            no_rate(),
+            None,
         ),
     ]
 }

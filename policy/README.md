@@ -35,8 +35,8 @@ directory. The sha256 is of the file as committed.
 
 | sheet | policy | recorded from (SMG commit) | rows | sha256 | recorder |
 |---|---|---|---|---|---|
-| `power_of_two.json` | power of two, under each of its four load metrics | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 34: 23 sequence, 11 drawn | `e3a18cd14340a2590bca2327aa163a1ec379f21a5d335adc570abf24a1fff81e` | `classic_rows.rs` |
-| `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 12: 8 sequence, 4 drawn | `335b3506acf0a3223e0dc940b78fb35489c7e21b83f7e3f8e5b1f3b8db295030` | `classic_manual_rows.rs` |
+| `power_of_two.json` | power of two, under each of its four load metrics | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 44: 24 sequence, 20 drawn | `602e1fe790cc5368ad05de2297b6e482b7a8893704ee448699ec467df9e0d87c` | `classic_rows.rs` |
+| `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
 
 ## Recording
 
@@ -61,12 +61,12 @@ behavior did, and the drawn rows are a new sample.
 
 ## Reading
 
-SMG pins this repository by one commit (`.github/versions/bellwether.ref` in SMG). Its replay reads the directory
+SMG pins this repository by commit, in the files under `.github/versions/` of SMG. Its replay reads the directory
 that `SMG_POLICY_CLASSIC_ROWS` names:
 
 ```bash
 SMG_POLICY_CLASSIC_ROWS=<this checkout>/policy \
-  cargo test -p smg-policy-controller --test classic_rows -- --ignored
+  cargo test -p smg-policy-controller --features ingest --test classic_rows -- --ignored
 ```
 
 A few rows of each sheet are also copied into the crate's test source, so every run of its suite replays a subset.
@@ -76,7 +76,7 @@ A few rows of each sheet are also copied into the crate's test source, so every 
 A limit is a recorded row the replay does not decide as recorded, with the reason. The replay names each one and
 fails once the reason no longer holds.
 
-- `power_of_two.json`: none. All 34 rows replay.
+- `power_of_two.json`: none. All 44 rows replay.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
   keeps a key's pins apart under each role of a prefill and decode pair. The crate refuses a sessions rule under a
-  pair plan today, so it cannot build the row; the other 11 rows replay.
+  pair plan today, so it cannot build the row; the other 13 rows replay.
