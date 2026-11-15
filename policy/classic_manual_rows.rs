@@ -369,6 +369,19 @@ fn rows() -> Vec<Row> {
                 keyless(),
             ],
         ),
+        // A request with no key never goes to a worker that is down.
+        sequence_row(
+            "manual-min-load-a-request-with-no-key-passes-over-a-worker-that-is-down",
+            "min_load",
+            loaded(&[0, 3, 2]),
+            vec![Step::Down(0), keyless(), Step::Up(0), keyless()],
+        ),
+        drawn_row(
+            "manual-random-a-request-with-no-key-is-never-drawn-on-a-worker-that-is-down",
+            "random",
+            loaded(&[9, 0, 3]),
+            vec![Step::Down(1), keyless()],
+        ),
         // The pin's two workers: failover, recovery, the oldest dropped.
         sequence_row(
             "manual-a-key-moves-off-a-worker-that-is-down-and-the-first-owner-leads-again",

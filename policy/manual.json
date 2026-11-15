@@ -201,9 +201,9 @@
         "counts": {
           "draws": 6000,
           "counts": [
-            1991,
-            1978,
-            2031
+            1990,
+            1996,
+            2014
           ]
         }
       }
@@ -237,8 +237,8 @@
         "counts": {
           "draws": 6000,
           "counts": [
-            2005,
-            2009,
+            1982,
+            2032,
             1986
           ]
         }
@@ -273,8 +273,8 @@
         "counts": {
           "draws": 6000,
           "counts": [
-            3017,
-            2983,
+            3042,
+            2958,
             0
           ]
         }
@@ -309,8 +309,8 @@
         "counts": {
           "draws": 6000,
           "counts": [
-            2895,
-            3105,
+            2978,
+            3022,
             0
           ]
         }
@@ -373,6 +373,89 @@
           0,
           2
         ]
+      }
+    },
+    {
+      "name": "manual-min-load-a-request-with-no-key-passes-over-a-worker-that-is-down",
+      "assignment": "min_load",
+      "workers": [
+        {
+          "in_flight": 0,
+          "keys": 0
+        },
+        {
+          "in_flight": 3,
+          "keys": 0
+        },
+        {
+          "in_flight": 2,
+          "keys": 0
+        }
+      ],
+      "steps": [
+        {
+          "down": 0
+        },
+        {
+          "pick": {
+            "key": null,
+            "role": "single"
+          }
+        },
+        {
+          "up": 0
+        },
+        {
+          "pick": {
+            "key": null,
+            "role": "single"
+          }
+        }
+      ],
+      "outcome": {
+        "sequence": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "name": "manual-random-a-request-with-no-key-is-never-drawn-on-a-worker-that-is-down",
+      "assignment": "random",
+      "workers": [
+        {
+          "in_flight": 9,
+          "keys": 0
+        },
+        {
+          "in_flight": 0,
+          "keys": 0
+        },
+        {
+          "in_flight": 3,
+          "keys": 0
+        }
+      ],
+      "steps": [
+        {
+          "down": 1
+        },
+        {
+          "pick": {
+            "key": null,
+            "role": "single"
+          }
+        }
+      ],
+      "outcome": {
+        "counts": {
+          "draws": 6000,
+          "counts": [
+            3003,
+            0,
+            2997
+          ]
+        }
       }
     },
     {
