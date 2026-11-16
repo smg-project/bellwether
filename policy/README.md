@@ -9,7 +9,8 @@ One sheet records no pick: `pair_index.json` holds which prefill and decode work
 pair's placement then picks from.
 
 One sheet records one rule under every policy: `all_vetoed.json` holds what the gateway answers when every usable
-worker of a pool is over its overload thresholds.
+worker of a pool is over its overload thresholds, and what a routing key gets under consistent hashing while its
+own worker is over them.
 
 One sheet records a request that carries encode items: `encode_pair.json` holds the pair the gateway picks for it,
 the encoders it offers the request's items and the encoder each item takes, or the name of its refusal.
@@ -54,8 +55,15 @@ under its thresholds), `over` (ready, over them), `stalled` (ready, doubted by t
 ready). A step is a pick (with the routing key the request carries, if any, and the workers an earlier attempt
 tried), new loads for every worker, or new states. A pick is recorded as the worker's place in the row's list. A
 request placed nowhere is a number past the last worker: the count of the workers when the gateway sheds it as an
-overload shed, the count plus one when it finds no worker to use. No row carries a routing key under consistent
-hashing: the sheet records what a request without one gets.
+overload shed, the count plus one when it finds no worker to use.
+
+A ring row carries `ring_key`: its request is placed by that routing key on the hash ring. Two rings put one key on
+different workers, so a ring row lists its workers in the key's ring order: the worker the key lands on first, then
+the one it passes to when that worker is down, and so on. The recorder finds that order on the gateway's ring by
+placing the key with every worker free and then with the members found so far down, and a reader finds it the same
+way on its own ring. A ring row's loads, states, tried lists and answers all count in that order, so an answer of 0
+is the key's own worker and 1 the next member of the ring, on whatever ring replays the row. A row under consistent
+hashing with no `ring_key` records what a request without a routing key gets.
 
 The rows of `encode_pair.json` are sequence rows of their own shape. A row is a fleet: its encoders, its prefill
 workers and its decode workers, each named by its place in its list, with what the gateway reads of it from its
@@ -112,7 +120,7 @@ directory. The sha256 is of the file as committed.
 |---|---|---|---|---|---|
 | `power_of_two.json` | power of two, under each of its four load metrics | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 44: 24 sequence, 20 drawn | `602e1fe790cc5368ad05de2297b6e482b7a8893704ee448699ec467df9e0d87c` | `classic_rows.rs` |
 | `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
-| `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds | `70587e0c735a84fcc3b657651282d2cf39eaaa0b` | 33: 29 sequence, 4 drawn | `b6ca0526c70704a8c736eae5880a9e1ee4c1e50ed95dd6771f383e4513bc2ee5` | `classic_all_vetoed_rows.rs` |
+| `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds; a routing key under consistent hashing whose own worker is over them | `d9f8018881cc54c9b0f6e993849a59f8f7c54ab5` | 42: 38 sequence, 4 drawn | `e5496add4cc24e8438e60849570c6f0113f3537eeb2010f448fb8af5a432527b` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 | `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 52: 52 sequence, 0 drawn | `988bf253da9310aeedd08ec2704d8e01ecc4a1210453353723ba0faa9001de33` | `classic_encode_pair_rows.rs` |
 | `pair_select.json` | the placement of a prefill and decode pair: each side under its policy, a side over its overload thresholds or doubted whole, a decode's rooms, the prefill admission's bound | `4ba2a6431357be5411a2383cdc4916b41471d722` | 33: 18 sequence, 15 drawn | `1ee16ff0019bd2f57564ef556cc9e8ebebb53143667a72ad30c13a5fdd4805fa` | `classic_pair_select_rows.rs` |
@@ -178,7 +186,9 @@ fails once the reason no longer holds.
 - `power_of_two.json`: none. All 44 rows replay.
 - `all_vetoed.json`: four rows are owed, the two rows each of the `prefix_hash` and the `bucket` policy (a pool over
   on every worker, with shedding off and on). The gateway answers them as it answers every other policy; the crate
-  has no preset of either name yet, so it cannot build the rows. The other 29 rows replay.
+  has no preset of either name yet, so it cannot build the rows. The other 38 rows replay. Nine of them, the eight
+  ring rows and the keyed round robin row, replay with SMG's rule for a routing key under the ring; SMG's replay
+  reads them from the commit its pin then names.
 - `pair_index.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair classes;
   SMG's replay reads this sheet from the commit its pin then names.
 - `encode_pair.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's encoder lists
