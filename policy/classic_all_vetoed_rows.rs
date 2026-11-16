@@ -27,6 +27,16 @@
 //! policy and must come out the same each time; a drawn row records how
 //! often each worker took the row's last request over its draws, each draw
 //! from a fresh pool and a fresh policy.
+//!
+//! A ring row (`ring_key`) records a request placed by its routing key on
+//! the hash ring. Two rings put one key on different workers, so such a row
+//! lists its workers in the key's ring order: the worker the key lands on
+//! first, then the one it passes to when that worker is down, and so on.
+//! The recorder finds that order on the gateway's ring by placing the key
+//! with every worker free and then with the members found so far down. A
+//! ring row's loads, states, tried lists and answers all count in that
+//! order, so an answer of 0 is the key's own worker and 1 the next member
+//! of the ring, on whatever ring replays the row.
 
 use std::{fs, path::PathBuf, sync::Arc};
 
@@ -98,6 +108,10 @@ struct Row {
     policy: &'static str,
     /// Whether an all-overloaded pool is shed (`--worker-overload-shed`).
     shed: bool,
+    /// A ring row's routing key: the row's workers are listed in this key's
+    /// ring order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ring_key: Option<&'static str>,
     workers: Vec<WorkerState>,
     steps: Vec<Step>,
     outcome: Outcome,
@@ -137,10 +151,14 @@ struct Bed {
     registry: WorkerRegistry,
     policies: PolicyRegistry,
     workers: Vec<Arc<dyn Worker>>,
+    /// Where each of the row's workers stands in the registered pool: the
+    /// row's own order, or the key's ring order for a ring row.
+    places: Vec<usize>,
 }
 
 impl Bed {
-    fn new(policy: &str, shed: bool, workers: &[WorkerState]) -> Self {
+    fn new(policy: &str, shed: bool, workers: &[WorkerState], places: &[usize]) -> Self {
+        assert_eq!(places.len(), workers.len(), "a place of every worker");
         let registry = WorkerRegistry::new();
         let pool: Vec<Arc<dyn Worker>> = (0..workers.len())
             .map(|i| {
@@ -156,6 +174,7 @@ impl Bed {
             registry,
             policies: PolicyRegistry::new(config_of(policy)),
             workers: pool,
+            places: places.to_vec(),
         };
         bed.loads(&workers.iter().map(|w| w.in_flight).collect::<Vec<_>>());
         bed.states(&workers.iter().map(|w| w.state).collect::<Vec<_>>());
@@ -164,7 +183,8 @@ impl Bed {
 
     fn loads(&self, loads: &[u32]) {
         assert_eq!(loads.len(), self.workers.len(), "a load of every worker");
-        for (worker, &want) in self.workers.iter().zip(loads) {
+        for (&place, &want) in self.places.iter().zip(loads) {
+            let worker = &self.workers[place];
             while worker.load() < want as usize {
                 worker.increment_load();
             }
@@ -176,7 +196,8 @@ impl Bed {
 
     fn states(&self, states: &[State]) {
         assert_eq!(states.len(), self.workers.len(), "a state of every worker");
-        for (worker, &state) in self.workers.iter().zip(states) {
+        for (&place, &state) in self.places.iter().zip(states) {
+            let worker = &self.workers[place];
             worker.set_status(if state == State::Down {
                 WorkerStatus::NotReady
             } else {
@@ -196,7 +217,7 @@ impl Bed {
         if let Some(key) = key {
             headers.insert("x-smg-routing-key", key.parse().expect("a header value"));
         }
-        let tried: Vec<String> = tried.iter().map(|&i| url(i)).collect();
+        let tried: Vec<String> = tried.iter().map(|&i| url(self.places[i])).collect();
         let inputs = PlacementInputs {
             headers: Some(&headers),
             tried: &tried,
@@ -211,11 +232,17 @@ impl Bed {
             inputs,
         );
         match picked {
-            Some(worker) => self
-                .workers
-                .iter()
-                .position(|w| w.url() == worker.url())
-                .expect("a worker of the row"),
+            Some(worker) => {
+                let place = self
+                    .workers
+                    .iter()
+                    .position(|w| w.url() == worker.url())
+                    .expect("a worker of the pool");
+                self.places
+                    .iter()
+                    .position(|&p| p == place)
+                    .expect("a worker of the row")
+            }
             None => {
                 let failure = placement::single_failure(
                     &self.registry,
@@ -241,10 +268,47 @@ impl Bed {
         None
     }
 
-    fn run(policy: &str, shed: bool, workers: &[WorkerState], steps: &[Step]) -> Vec<usize> {
-        let bed = Self::new(policy, shed, workers);
+    fn run(
+        policy: &str,
+        shed: bool,
+        workers: &[WorkerState],
+        steps: &[Step],
+        places: &[usize],
+    ) -> Vec<usize> {
+        let bed = Self::new(policy, shed, workers, places);
         steps.iter().filter_map(|step| bed.step(step)).collect()
     }
+}
+
+/// The row's own order: worker `i` of the row is worker `i` of the pool.
+fn in_order(workers: usize) -> Vec<usize> {
+    (0..workers).collect()
+}
+
+/// The ring order of `key` over a pool of `workers` under `policy`: the
+/// worker the key lands on with every worker free and idle, then with the
+/// members found so far down, until every worker is placed.
+fn ring_order(policy: &str, workers: usize, key: &str) -> Vec<usize> {
+    let mut order: Vec<usize> = Vec::with_capacity(workers);
+    while order.len() < workers {
+        let pool: Vec<WorkerState> = (0..workers)
+            .map(|place| WorkerState {
+                in_flight: 0,
+                state: if order.contains(&place) {
+                    State::Down
+                } else {
+                    State::Free
+                },
+            })
+            .collect();
+        let next = Bed::new(policy, false, &pool, &in_order(workers)).pick(Some(key), &[]);
+        assert!(
+            next < workers && !order.contains(&next),
+            "{policy}: the key's next member is a worker not yet placed, got {next}"
+        );
+        order.push(next);
+    }
+    order
 }
 
 fn sequence_row(
@@ -254,10 +318,11 @@ fn sequence_row(
     workers: Vec<WorkerState>,
     steps: Vec<Step>,
 ) -> Row {
-    let first = Bed::run(policy, shed, &workers, &steps);
+    let places = in_order(workers.len());
+    let first = Bed::run(policy, shed, &workers, &steps, &places);
     for _ in 0..19 {
         assert_eq!(
-            Bed::run(policy, shed, &workers, &steps),
+            Bed::run(policy, shed, &workers, &steps, &places),
             first,
             "{name}: a sequence row must not depend on a draw"
         );
@@ -266,6 +331,42 @@ fn sequence_row(
         name,
         policy,
         shed,
+        ring_key: None,
+        workers,
+        steps,
+        outcome: Outcome::Sequence(first),
+    }
+}
+
+/// A sequence row whose workers are listed in the ring order of `key`: every
+/// request of the row carries that key.
+fn ring_row(
+    name: &'static str,
+    policy: &'static str,
+    shed: bool,
+    key: &'static str,
+    workers: Vec<WorkerState>,
+    steps: Vec<Step>,
+) -> Row {
+    let places = ring_order(policy, workers.len(), key);
+    assert_eq!(
+        ring_order(policy, workers.len(), key),
+        places,
+        "{name}: the ring's order must not depend on a draw"
+    );
+    let first = Bed::run(policy, shed, &workers, &steps, &places);
+    for _ in 0..19 {
+        assert_eq!(
+            Bed::run(policy, shed, &workers, &steps, &places),
+            first,
+            "{name}: a ring row must not depend on a draw"
+        );
+    }
+    Row {
+        name,
+        policy,
+        shed,
+        ring_key: Some(key),
         workers,
         steps,
         outcome: Outcome::Sequence(first),
@@ -281,8 +382,9 @@ fn drawn_row(
 ) -> Row {
     const DRAWS: u32 = 6_000;
     let mut counts = vec![0u32; workers.len() + 2];
+    let places = in_order(workers.len());
     for _ in 0..DRAWS {
-        let picked = Bed::run(policy, shed, &workers, &steps);
+        let picked = Bed::run(policy, shed, &workers, &steps, &places);
         counts[*picked.last().expect("a drawn row ends with a request")] += 1;
     }
     assert_eq!(
@@ -294,6 +396,7 @@ fn drawn_row(
         name,
         policy,
         shed,
+        ring_key: None,
         workers,
         steps,
         outcome: Outcome::Counts {
@@ -336,6 +439,13 @@ fn keyed(key: &'static str) -> Step {
 fn retry(tried: &[usize]) -> Step {
     Step::Pick {
         key: None,
+        tried: tried.to_vec(),
+    }
+}
+
+fn keyed_retry(key: &'static str, tried: &[usize]) -> Step {
+    Step::Pick {
+        key: Some(key),
         tried: tried.to_vec(),
     }
 }
@@ -528,6 +638,106 @@ fn rows() -> Vec<Row> {
             Step::States(vec![State::Free, State::Free, State::Free]),
             keyed("k1"),
         ],
+    ));
+    // A routing key under consistent hashing, the workers in the key's ring
+    // order: its own worker over its thresholds beside free workers, and
+    // with every worker over; the same two pools under shedding; its worker
+    // down; a retry that tried its worker; its worker and the next member
+    // both over; its worker down and the next member over.
+    let ring = "consistent_hashing";
+    let beside_free = [
+        (State::Over, 5),
+        (State::Free, 4),
+        (State::Free, 0),
+        (State::Free, 2),
+    ];
+    rows.push(ring_row(
+        "consistent-hashing-a-key-keeps-its-worker-over-its-thresholds-beside-free-workers",
+        ring,
+        false,
+        "k1",
+        mixed(&beside_free),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-keeps-its-worker-with-every-worker-over",
+        ring,
+        false,
+        "k1",
+        all(State::Over, &[5, 4, 0, 2]),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-leaves-its-worker-over-its-thresholds-under-shedding",
+        ring,
+        true,
+        "k1",
+        mixed(&beside_free),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-is-shed-with-every-worker-over-under-shedding",
+        ring,
+        true,
+        "k1",
+        all(State::Over, &[5, 4, 0, 2]),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-passes-to-the-next-member-when-its-worker-is-down",
+        ring,
+        false,
+        "k1",
+        mixed(&[
+            (State::Down, 0),
+            (State::Free, 4),
+            (State::Free, 0),
+            (State::Free, 2),
+        ]),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-retry-that-tried-the-keys-worker-passes-the-key-on",
+        ring,
+        false,
+        "k1",
+        mixed(&beside_free),
+        vec![keyed_retry("k1", &[0])],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-keeps-its-worker-when-the-next-member-is-over-too",
+        ring,
+        false,
+        "k1",
+        mixed(&[
+            (State::Over, 5),
+            (State::Over, 4),
+            (State::Free, 0),
+            (State::Free, 2),
+        ]),
+        vec![keyed("k1")],
+    ));
+    rows.push(ring_row(
+        "consistent-hashing-a-key-passes-to-a-next-member-over-its-thresholds-when-its-worker-is-down",
+        ring,
+        false,
+        "k1",
+        mixed(&[
+            (State::Down, 0),
+            (State::Over, 4),
+            (State::Free, 0),
+            (State::Free, 2),
+        ]),
+        vec![keyed("k1")],
+    ));
+    // The lift is the ring's alone: under round robin a keyed request leaves
+    // a worker over its thresholds for the free one.
+    rows.push(sequence_row(
+        "round-robin-a-keyed-request-leaves-a-worker-over-its-thresholds",
+        "round_robin",
+        false,
+        mixed(&[(State::Over, 0), (State::Free, 3)]),
+        vec![keyed("k1"), keyed("k1")],
     ));
     rows
 }
