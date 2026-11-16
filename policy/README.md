@@ -18,6 +18,9 @@ the encoders it offers the request's items and the encoder each item takes, or t
 One sheet records the placement of a pair: `pair_select.json` holds which prefill and which decode the gateway
 places a request on, over two pools its pair index has paired.
 
+One sheet records no pick and no policy: `overload.json` holds whether the gateway reads one worker as overloaded
+after each thing its load monitor is handed about the worker.
+
 ```
 policy/
   power_of_two.json        one sheet per policy: its recorded rows
@@ -26,12 +29,14 @@ policy/
   all_vetoed.json
   encode_pair.json
   pair_select.json
+  overload.json
   classic_rows.rs               the recorder of power_of_two.json
   classic_manual_rows.rs        the recorder of manual.json
   classic_pair_rows.rs          the recorder of pair_index.json
   classic_all_vetoed_rows.rs    the recorder of all_vetoed.json
   classic_encode_pair_rows.rs   the recorder of encode_pair.json
   classic_pair_select_rows.rs   the recorder of pair_select.json
+  classic_overload_rows.rs      the recorder of overload.json
 ```
 
 ## A sheet
@@ -112,6 +117,23 @@ under `random`: where the gateway places by its own rule, one pair takes every d
   reports when no pair is left. Nothing in a row draws: the recorder builds each row twice and stops if the two
   builds differ, so a pair row is the same in every recording of one commit and replays whole or not at all.
 
+`overload.json` holds a fourth kind, which picks nothing either:
+
+- **verdict row:** one worker with its data-parallel ranks and two pairs of overload thresholds: the pair the
+  gateway holds for every worker (`gateway`) and the pair the worker names for itself (`worker`). A pair is the
+  queued requests summed over the worker's ranks and the mean KV usage over them, each at or above which the worker
+  is vetoed; `null` leaves a signal off, and a value the worker names stands over the gateway's. A step is what the
+  gateway's load monitor is handed: a poll's answer (`poll`: an entry a rank in rank order, `null` where the answer
+  omits the rank), a poll that brought no report (`no_report`), a load record one rank pushed on its event stream
+  (`record`), or the worker leaving the ready set (`evict`). An entry and a record carry the rank's queued requests
+  (`waiting`), its KV usage (`usage`) and, where the rank reports one, the share of that usage its running requests
+  hold (`active`), which the verdict then reads in the usage's place. The row records whether the worker reads as
+  overloaded after each step. The monitor judges a poll by its answer alone, and an answer with no entry as no
+  report. It judges a pushed record by the worker's pushed report: the ranks that have pushed, each at its last
+  record or at a later poll's figures, less the ranks an answer with no entry took off it. Nothing in a row draws:
+  the recorder runs each row twice, each time from a fresh monitor and a fresh worker, and stops if the two runs
+  differ.
+
 ## The sheets
 
 Each sheet is recorded on its own, so the commit is a column of the sheet's row and never one commit for the
@@ -125,6 +147,7 @@ directory. The sha256 is of the file as committed.
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 | `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 52: 52 sequence, 0 drawn | `988bf253da9310aeedd08ec2704d8e01ecc4a1210453353723ba0faa9001de33` | `classic_encode_pair_rows.rs` |
 | `pair_select.json` | the placement of a prefill and decode pair: each side under its policy, a side over its overload thresholds or doubted whole, a decode's rooms, the prefill admission's bound, the least-loaded default's own rules, a role with no worker | `4ba2a6431357be5411a2383cdc4916b41471d722` | 40: 23 sequence, 17 drawn | `bd8426316ae7337ede82b5a931c1d00cd9dee1aca22c528278f32b2671846eb8` | `classic_pair_select_rows.rs` |
+| `overload.json` | the overload verdict of one worker: the gateway's thresholds and the worker's own, a poll's answer, a poll with no report, a pushed record, an eviction | `436f0c8c5725b0a408b990003d76eaddc72c4be4` | 25 verdict rows | `29c10ee8876e53d23a824a3b7bd0481efd118e8ac5a0d2822477729f6e21283a` | `classic_overload_rows.rs` |
 
 ## Recording
 
@@ -163,6 +186,12 @@ index with the gateway's own types. Copy it to `model_gateway/src/routers/common
 `#[cfg(test)] mod classic_pair_select_rows;` at the end of `model_gateway/src/routers/common/mod.rs`, and run the
 test path `routers::common::classic_pair_select_rows` with the same two variables.
 
+The overload sheet's recorder is a child of the gateway's load monitor, so each step enters the monitor through the
+monitor's own functions and the verdict is read off the worker the monitor wrote it on. Copy it to
+`model_gateway/src/worker/load/monitor/classic_overload_rows.rs`, add `#[cfg(test)] mod classic_overload_rows;` at
+the end of `model_gateway/src/worker/load/monitor.rs`, and run the test path
+`worker::load::monitor::classic_overload_rows` with the same two variables.
+
 A sheet is never edited by hand. A new recording replaces the whole sheet and its row in the table above, in one
 pull request that names the SMG commit and says which rows moved: a sequence row moves only when the policy's
 behavior did, and the drawn rows are a new sample.
@@ -196,6 +225,20 @@ fails once the reason no longer holds.
   and its rule for encode items; SMG's replay reads this sheet from the commit its pin then names.
 - `pair_select.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair
   decision; SMG's replay reads this sheet from the commit its pin then names.
+- `overload.json`: six rows are decided apart, each by a rule of the crate's store that the replay names with the
+  verdicts the store gives. The store holds a usage and its threshold in permille, so a usage within half a permille
+  under the threshold reads at it (`a-usage-under-the-threshold-by-less-than-half-a-permille-is-under-it`). The
+  gateway stops reading a rank at once. The store judges every write over every sample it holds for the worker that
+  lies within three report periods of the worker's newest, and the replay sets one period between two steps. So a
+  rank an answer omits is read for three periods more (`a-rank-an-answer-omits-leaves-the-sum-at-once`,
+  `a-rank-an-answer-omits-leaves-the-mean-at-once`). A pushed record is judged beside a poll's figures for a rank
+  that never pushed until those lie three periods behind
+  (`a-record-after-a-poll-is-judged-over-the-ranks-that-have-pushed`,
+  `a-record-s-usage-is-judged-over-the-ranks-that-have-pushed`). An answer with no entry changes nothing the store
+  holds (`an-answer-that-names-no-rank-takes-the-ranks-that-pushed-before-it-off-the-report`). Each of these five
+  rows repeats the step that leaves a rank unheard, and replays as recorded from its fourth repeat on. The other 19
+  rows replay. The module that replays the sheet arrives in SMG with the rule that ends a sample by its age; SMG's
+  replay reads this sheet from the commit its pin then names.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
   keeps a key's pins apart under each role of a prefill and decode pair. The crate refuses a sessions rule under a
   pair plan today, so it cannot build the row; the other 13 rows replay.

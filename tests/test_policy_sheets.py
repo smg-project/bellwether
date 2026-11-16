@@ -3,7 +3,8 @@
 Nothing in this repository reads them: SMG's policy controller replays them. The table in the README is then the only
 statement of what each sheet is, so this holds it to the files: every sheet has a row and every row a sheet and a
 recorder, and a row's commit, row counts and sha256 are the file's. A sheet of picks states its sequence rows and its
-drawn rows; the pair sheet picks nothing and states its pair rows, each an outcome on both pair wires.
+drawn rows; the pair sheet picks nothing and states its pair rows, each an outcome on both pair wires; the overload
+sheet picks nothing either and states its verdict rows, each a verdict after every step.
 """
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 POLICY = ROOT / "policy"
 ROW = re.compile(
     r"^\| `(?P<sheet>[a-z_]+\.json)` \| [^|]+ \| `(?P<commit>[0-9a-f]{40})` "
-    r"\| (?:(?P<rows>\d+): (?P<sequence>\d+) sequence, (?P<drawn>\d+) drawn|(?P<pairs>\d+) pair rows) "
+    r"\| (?:(?P<rows>\d+): (?P<sequence>\d+) sequence, (?P<drawn>\d+) drawn|(?P<pairs>\d+) pair rows"
+    r"|(?P<verdicts>\d+) verdict rows) "
     r"\| `(?P<sha256>[0-9a-f]{64})` \| `(?P<recorder>[a-z_]+\.rs)` \|$"
 )
 
@@ -42,7 +44,12 @@ def test_a_row_states_its_sheets_commit_row_counts_and_sha256():
         outcomes = [recorded["outcome"] for recorded in sheet["rows"]]
         assert len(set(names)) == len(names), f"{name}: a row name repeats"
         assert sheet["recorded_from"] == row["commit"], name
-        if row["pairs"] is None:
+        if row["verdicts"] is not None:
+            assert all(set(outcome) == {"verdicts"} for outcome in outcomes), f"{name}: a row that is no verdict row"
+            steps = [len(recorded["steps"]) for recorded in sheet["rows"]]
+            assert [len(outcome["verdicts"]) for outcome in outcomes] == steps, f"{name}: a step with no verdict"
+            assert len(names) == int(row["verdicts"]), name
+        elif row["pairs"] is None:
             kinds = [next(iter(outcome)) for outcome in outcomes]
             assert set(kinds) <= {"sequence", "counts"}, f"{name}: a row that is no pick"
             drawn = kinds.count("counts")
