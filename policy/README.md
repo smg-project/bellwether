@@ -8,14 +8,19 @@ decides differently. The reference here is the gateway's policy code at a pinned
 One sheet records no pick: `pair_index.json` holds which prefill and decode workers the gateway pairs, the lists a
 pair's placement then picks from.
 
+One sheet records one rule under every policy: `all_vetoed.json` holds what the gateway answers when every usable
+worker of a pool is over its overload thresholds.
+
 ```
 policy/
   power_of_two.json        one sheet per policy: its recorded rows
   manual.json
   pair_index.json
-  classic_rows.rs          the recorder of power_of_two.json
-  classic_manual_rows.rs   the recorder of manual.json
-  classic_pair_rows.rs     the recorder of pair_index.json
+  all_vetoed.json
+  classic_rows.rs               the recorder of power_of_two.json
+  classic_manual_rows.rs        the recorder of manual.json
+  classic_pair_rows.rs          the recorder of pair_index.json
+  classic_all_vetoed_rows.rs    the recorder of all_vetoed.json
 ```
 
 ## A sheet
@@ -32,6 +37,15 @@ routing keys), one request shape and what the policy picked for it. There are tw
   second recording of the same commit gives other counts within the same spread. Compare shares, never counts.
   SMG's replay takes two rows as one distribution when a worker never picked on one side is never picked on the
   other and every other share lies within four standard deviations of the difference of two samples of that size.
+
+The rows of `all_vetoed.json` are sequence rows and drawn rows of one shape. A row names the policy its pool runs
+under and whether shedding is on. Each worker has the requests the router holds on it and a state: `free` (ready,
+under its thresholds), `over` (ready, over them), `stalled` (ready, doubted by the liveness tracker) or `down` (not
+ready). A step is a pick (with the routing key the request carries, if any, and the workers an earlier attempt
+tried), new loads for every worker, or new states. A pick is recorded as the worker's place in the row's list. A
+request placed nowhere is a number past the last worker: the count of the workers when the gateway sheds it as an
+overload shed, the count plus one when it finds no worker to use. No row carries a routing key under consistent
+hashing: the sheet records what a request without one gets.
 
 `pair_index.json` holds a third kind, which picks nothing:
 
@@ -52,6 +66,7 @@ directory. The sha256 is of the file as committed.
 |---|---|---|---|---|---|
 | `power_of_two.json` | power of two, under each of its four load metrics | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 44: 24 sequence, 20 drawn | `602e1fe790cc5368ad05de2297b6e482b7a8893704ee448699ec467df9e0d87c` | `classic_rows.rs` |
 | `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
+| `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds | `70587e0c735a84fcc3b657651282d2cf39eaaa0b` | 33: 29 sequence, 4 drawn | `b6ca0526c70704a8c736eae5880a9e1ee4c1e50ed95dd6771f383e4513bc2ee5` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 
 ## Recording
@@ -69,7 +84,8 @@ CLASSIC_ROWS_OUT=<dir> CLASSIC_ROWS_COMMIT=<commit> \
   cargo test -p smg --lib policies::classic_rows -- --ignored --nocapture
 ```
 
-For the manual sheet the test path is `policies::classic_manual_rows`.
+For the manual sheet the test path is `policies::classic_manual_rows`; for the all-vetoed sheet the module line is
+`mod classic_all_vetoed_rows;` and the test path `policies::classic_all_vetoed_rows`.
 
 The pair sheet's recorder is a child of the module that derives a worker's pairing descriptor, so it records the
 descriptor the gateway derived and never a second reading of the registration. Copy it to
@@ -99,6 +115,9 @@ A limit is a recorded row the replay does not decide as recorded, with the reaso
 fails once the reason no longer holds.
 
 - `power_of_two.json`: none. All 44 rows replay.
+- `all_vetoed.json`: four rows are owed, the two rows each of the `prefix_hash` and the `bucket` policy (a pool over
+  on every worker, with shedding off and on). The gateway answers them as it answers every other policy; the crate
+  has no preset of either name yet, so it cannot build the rows. The other 29 rows replay.
 - `pair_index.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair classes;
   SMG's replay reads this sheet from the commit its pin then names.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
