@@ -818,6 +818,81 @@ fn rows() -> Vec<Row> {
         )
         .sequence(2),
     );
+
+    // The least-loaded default's own rules, a row each. It runs only over a
+    // pool whose every routable worker is vetoed: one free decode keeps it
+    // off, though no partner of the one ready prefill is open.
+    rows.push(
+        fleet(
+            "pair-the-only-ready-prefills-partners-over-beside-a-free-decode",
+            COUNTED,
+            false,
+            [(0, Free), (0, Down)],
+            [(0, Over), (0, Free), (0, Over)],
+        )
+        .sequence(2),
+    );
+    // It reads a worker's health: the least loaded prefill's least loaded
+    // partner is down.
+    rows.push(
+        fleet(
+            "pair-every-prefill-over-passes-by-a-down-partner",
+            (BY_COUNT, DRAWN),
+            false,
+            both_over,
+            [(1, Free), (0, Down), (5, Free)],
+        )
+        .drawn(),
+    );
+    // Between prefills of one load it weighs the partner's load.
+    rows.push(
+        fleet(
+            "pair-the-default-weighs-the-partners-load-between-tied-prefills",
+            COUNTED,
+            false,
+            [(2, Over), (2, Over)],
+            [(3, Free), (0, Free), (9, Free)],
+        )
+        .drawn(),
+    );
+    // Under shedding it passes by a worker over its thresholds for a
+    // stalled one that holds more.
+    rows.push(
+        fleet(
+            "pair-one-prefill-over-and-one-stalled-with-more-under-shedding",
+            COUNTED,
+            true,
+            [(0, Over), (5, Stalled)],
+            decode_loads,
+        )
+        .sequence(2),
+    );
+    // A weighing policy's pool, every worker over, with no open partner:
+    // the placement names the prefill.
+    rows.push(
+        fleet(
+            "pair-every-prefill-over-under-a-weighing-policy-and-every-decode-down",
+            (WEIGHING, BY_COUNT),
+            false,
+            both_over,
+            [(0, Down), (0, Down), (0, Down)],
+        )
+        .sequence(2),
+    );
+
+    // A role with no worker at all names itself.
+    let one_role = |name: &'static str, prefills: Vec<Member>, decodes: Vec<Member>| Cell {
+        name,
+        prefill_policy: BY_COUNT,
+        decode_policy: BY_COUNT,
+        shed: false,
+        prefill_bound: None,
+        prefills,
+        decodes,
+    };
+    let lone = vec![member(0, Free, Some("a"))];
+    rows.push(one_role("pair-no-prefill-of-the-model", Vec::new(), lone.clone()).sequence(2));
+    rows.push(one_role("pair-no-decode-of-the-model", lone, Vec::new()).sequence(2));
     rows
 }
 

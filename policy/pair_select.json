@@ -96,12 +96,12 @@
             [
               1,
               1,
-              2949
+              2958
             ],
             [
               1,
               2,
-              3051
+              3042
             ]
           ]
         }
@@ -353,12 +353,12 @@
             [
               1,
               1,
-              3033
+              3003
             ],
             [
               1,
               2,
-              2967
+              2997
             ]
           ]
         }
@@ -662,12 +662,12 @@
             [
               0,
               0,
-              2975
+              2981
             ],
             [
               0,
               2,
-              3025
+              3019
             ]
           ]
         }
@@ -1011,12 +1011,12 @@
             [
               0,
               0,
-              3015
+              2989
             ],
             [
               0,
               2,
-              2985
+              3011
             ]
           ]
         }
@@ -1116,12 +1116,12 @@
             [
               0,
               0,
-              3072
+              2998
             ],
             [
               1,
               1,
-              2928
+              3002
             ]
           ]
         }
@@ -1169,17 +1169,17 @@
             [
               0,
               2,
-              3016
+              2981
             ],
             [
               1,
               1,
-              1562
+              1489
             ],
             [
               1,
               2,
-              1422
+              1530
             ]
           ]
         }
@@ -1740,6 +1740,320 @@
               1,
               1
             ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pair-the-only-ready-prefills-partners-over-beside-a-free-decode",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": false,
+      "prefills": [
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "down",
+          "transport": "b"
+        }
+      ],
+      "decodes": [
+        {
+          "in_flight": 0,
+          "state": "over",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "b"
+        },
+        {
+          "in_flight": 0,
+          "state": "over",
+          "transport": null
+        }
+      ],
+      "requests": 2,
+      "outcome": {
+        "sequence": [
+          {
+            "none": {
+              "role": "decode",
+              "why": "unavailable"
+            }
+          },
+          {
+            "none": {
+              "role": "decode",
+              "why": "unavailable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "pair-every-prefill-over-passes-by-a-down-partner",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "random",
+      "shed": false,
+      "prefills": [
+        {
+          "in_flight": 4,
+          "state": "over",
+          "transport": "a"
+        },
+        {
+          "in_flight": 2,
+          "state": "over",
+          "transport": "b"
+        }
+      ],
+      "decodes": [
+        {
+          "in_flight": 1,
+          "state": "free",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "down",
+          "transport": "b"
+        },
+        {
+          "in_flight": 5,
+          "state": "free",
+          "transport": null
+        }
+      ],
+      "requests": 1,
+      "outcome": {
+        "counts": {
+          "draws": 6000,
+          "pairs": [
+            [
+              1,
+              2,
+              6000
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "pair-the-default-weighs-the-partners-load-between-tied-prefills",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": false,
+      "prefills": [
+        {
+          "in_flight": 2,
+          "state": "over",
+          "transport": "a"
+        },
+        {
+          "in_flight": 2,
+          "state": "over",
+          "transport": "b"
+        }
+      ],
+      "decodes": [
+        {
+          "in_flight": 3,
+          "state": "free",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "b"
+        },
+        {
+          "in_flight": 9,
+          "state": "free",
+          "transport": null
+        }
+      ],
+      "requests": 1,
+      "outcome": {
+        "counts": {
+          "draws": 6000,
+          "pairs": [
+            [
+              1,
+              1,
+              6000
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "pair-one-prefill-over-and-one-stalled-with-more-under-shedding",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": true,
+      "prefills": [
+        {
+          "in_flight": 0,
+          "state": "over",
+          "transport": "a"
+        },
+        {
+          "in_flight": 5,
+          "state": "stalled",
+          "transport": "b"
+        }
+      ],
+      "decodes": [
+        {
+          "in_flight": 1,
+          "state": "free",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "b"
+        },
+        {
+          "in_flight": 5,
+          "state": "free",
+          "transport": null
+        }
+      ],
+      "requests": 2,
+      "outcome": {
+        "sequence": [
+          {
+            "pair": [
+              1,
+              1
+            ]
+          },
+          {
+            "pair": [
+              1,
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pair-every-prefill-over-under-a-weighing-policy-and-every-decode-down",
+      "prefill_policy": "cache_aware",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": false,
+      "prefills": [
+        {
+          "in_flight": 4,
+          "state": "over",
+          "transport": "a"
+        },
+        {
+          "in_flight": 2,
+          "state": "over",
+          "transport": "b"
+        }
+      ],
+      "decodes": [
+        {
+          "in_flight": 0,
+          "state": "down",
+          "transport": "a"
+        },
+        {
+          "in_flight": 0,
+          "state": "down",
+          "transport": "b"
+        },
+        {
+          "in_flight": 0,
+          "state": "down",
+          "transport": null
+        }
+      ],
+      "requests": 2,
+      "outcome": {
+        "sequence": [
+          {
+            "none": {
+              "role": "prefill",
+              "why": "unavailable"
+            }
+          },
+          {
+            "none": {
+              "role": "prefill",
+              "why": "unavailable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "pair-no-prefill-of-the-model",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": false,
+      "prefills": [],
+      "decodes": [
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "a"
+        }
+      ],
+      "requests": 2,
+      "outcome": {
+        "sequence": [
+          {
+            "none": {
+              "role": "prefill",
+              "why": "no_candidates"
+            }
+          },
+          {
+            "none": {
+              "role": "prefill",
+              "why": "no_candidates"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "pair-no-decode-of-the-model",
+      "prefill_policy": "power_of_two:least_requests",
+      "decode_policy": "power_of_two:least_requests",
+      "shed": false,
+      "prefills": [
+        {
+          "in_flight": 0,
+          "state": "free",
+          "transport": "a"
+        }
+      ],
+      "decodes": [],
+      "requests": 2,
+      "outcome": {
+        "sequence": [
+          {
+            "none": {
+              "role": "decode",
+              "why": "no_candidates"
+            }
+          },
+          {
+            "none": {
+              "role": "decode",
+              "why": "no_candidates"
+            }
           }
         ]
       }
