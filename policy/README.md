@@ -92,7 +92,7 @@ directory. The sha256 is of the file as committed.
 | `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
 | `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds | `70587e0c735a84fcc3b657651282d2cf39eaaa0b` | 33: 29 sequence, 4 drawn | `b6ca0526c70704a8c736eae5880a9e1ee4c1e50ed95dd6771f383e4513bc2ee5` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
-| `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 46: 46 sequence, 0 drawn | `4e53c1ea92e2254e64e8c26677cb380247279aa421f54dce53f4a06c39b7948e` | `classic_encode_pair_rows.rs` |
+| `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 52: 52 sequence, 0 drawn | `988bf253da9310aeedd08ec2704d8e01ecc4a1210453353723ba0faa9001de33` | `classic_encode_pair_rows.rs` |
 
 ## Recording
 

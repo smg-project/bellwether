@@ -853,6 +853,52 @@ fn rows() -> Vec<Row> {
         vec![items(&[1, 2])],
     ));
     rows.push(row(
+        "push-a-role-without-a-connector-is-no-role",
+        BY_COUNT,
+        &fleet(
+            &[push_encoder(C1).without("ec_connector")],
+            &[push_prefill(C1).without("ec_connector")],
+            &[push_decode()],
+        ),
+        vec![items(&[1])],
+    ));
+    rows.push(row(
+        "push-a-role-on-a-connector-without-a-name-is-no-role",
+        BY_COUNT,
+        &fleet(&[push_encoder("")], &[push_prefill("")], &[push_decode()]),
+        vec![items(&[1])],
+    ));
+    rows.push(row(
+        "push-a-producer-without-the-transfer-label-is-no-producer",
+        BY_COUNT,
+        &fleet(
+            &[push_encoder(C1).without("supports_ec_transfer")],
+            &[push_prefill(C1)],
+            &[push_decode()],
+        ),
+        vec![items(&[1])],
+    ));
+    rows.push(row(
+        "push-a-consumer-without-the-transfer-label-is-no-consumer",
+        BY_COUNT,
+        &fleet(
+            &[push_encoder(C1)],
+            &[push_prefill(C1).without("supports_ec_transfer")],
+            &[push_decode()],
+        ),
+        vec![items(&[1])],
+    ));
+    rows.push(row(
+        "push-an-encoder-without-the-producer-role-is-refused-ready-or-not",
+        BY_COUNT,
+        &fleet(
+            &[push_encoder(C1).with("ec_role", "ec_consumer").closed()],
+            &[push_prefill(C1)],
+            &[push_decode()],
+        ),
+        vec![items(&[1])],
+    ));
+    rows.push(row(
         "push-the-pair-is-picked-on-the-prefill-that-has-a-producer",
         BY_COUNT,
         &fleet(
@@ -902,6 +948,16 @@ fn rows() -> Vec<Row> {
             items(&[1]).references(),
             items(&[1]).references().no_images(),
         ],
+    ));
+    rows.push(row(
+        "rendezvous-a-processor-label-does-not-make-an-encoder-take-references",
+        BY_COUNT,
+        &fleet(
+            &[meet().with("mm_processor", "inprocess")],
+            &[meet()],
+            &[meet()],
+        ),
+        vec![items(&[1]).references(), items(&[1])],
     ));
     rows.push(row(
         "push-references-go-to-the-encoders-that-process-them",
