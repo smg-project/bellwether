@@ -14,6 +14,9 @@ worker of a pool is over its overload thresholds.
 One sheet records a request that carries encode items: `encode_pair.json` holds the pair the gateway picks for it,
 the encoders it offers the request's items and the encoder each item takes, or the name of its refusal.
 
+One sheet records the placement of a pair: `pair_select.json` holds which prefill and which decode the gateway
+places a request on, over two pools its pair index has paired.
+
 ```
 policy/
   power_of_two.json        one sheet per policy: its recorded rows
@@ -21,11 +24,13 @@ policy/
   pair_index.json
   all_vetoed.json
   encode_pair.json
+  pair_select.json
   classic_rows.rs               the recorder of power_of_two.json
   classic_manual_rows.rs        the recorder of manual.json
   classic_pair_rows.rs          the recorder of pair_index.json
   classic_all_vetoed_rows.rs    the recorder of all_vetoed.json
   classic_encode_pair_rows.rs   the recorder of encode_pair.json
+  classic_pair_select_rows.rs   the recorder of pair_select.json
 ```
 
 ## A sheet
@@ -71,6 +76,23 @@ request's items as one key, a hash of them, so such an answer has one key howeve
 `consistent_hashing` a key's encoder is the owner the gateway's ring gives it among the encoders offered; another
 ring gives the same key another of them.
 
+The rows of `pair_select.json` are sequence rows and drawn rows whose pick is a pair. A row names the policy each
+pool runs under (`power_of_two` carries its load metric after a colon), whether shedding is on and, when the row
+runs behind the prefill admission, the most requests that admission lets one prefill hold (`prefill_bound`). Each
+worker has the requests the router holds on it, a state as in the all-vetoed sheet and the KV transport its
+registration names (`a`, `b` or none): two workers pair when their transports are equal or one of them names none.
+A decode may report a running window, with the rooms of it the decode admission has claimed (`rooms`). A row places
+its requests one after another, and no request changes what the router holds. An answer is the pair, the prefill's
+place in its list and then the decode's, or no pair with the role the gateway named and why: `overloaded` (an
+overload shed), `unavailable`, `at_capacity` (the chosen prefill holds its bound), `no_candidates` or `declined`. A
+drawn row counts how often each pair took its one request; a pair never placed is not listed.
+
+Two choices keep those rows replayable. No row runs under `round_robin`: the gateway starts the rotation of a
+candidate set it has not seen at a shared count, so which pick comes first is not the policy's rule. Where a row
+must replay pick for pick, a pool runs under `power_of_two:least_requests`, which takes the fewest requests in
+flight with no draw and no state. Where a row must show whether a side's policy was asked at all, that side runs
+under `random`: where the gateway places by its own rule, one pair takes every draw.
+
 `pair_index.json` holds a third kind, which picks nothing:
 
 - **pair row:** a prefill pool and a decode pool, with what each worker offers a partner as the gateway derives it
@@ -93,6 +115,7 @@ directory. The sha256 is of the file as committed.
 | `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds | `70587e0c735a84fcc3b657651282d2cf39eaaa0b` | 33: 29 sequence, 4 drawn | `b6ca0526c70704a8c736eae5880a9e1ee4c1e50ed95dd6771f383e4513bc2ee5` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 | `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 52: 52 sequence, 0 drawn | `988bf253da9310aeedd08ec2704d8e01ecc4a1210453353723ba0faa9001de33` | `classic_encode_pair_rows.rs` |
+| `pair_select.json` | the placement of a prefill and decode pair: each side under its policy, a side over its overload thresholds or doubted whole, a decode's rooms, the prefill admission's bound | `4ba2a6431357be5411a2383cdc4916b41471d722` | 33: 18 sequence, 15 drawn | `1ee16ff0019bd2f57564ef556cc9e8ebebb53143667a72ad30c13a5fdd4805fa` | `classic_pair_select_rows.rs` |
 
 ## Recording
 
@@ -126,6 +149,11 @@ selection and reads a worker by the stage's own functions. Copy it to
 `worker_selection::classic_encode_pair_rows` with the same two variables. It wraps the encode policy to write down
 each call (the encoders offered and the key) and passes every call on unchanged.
 
+The pair placement sheet's recorder sits beside the placement it calls, and builds its pools, policies and pair
+index with the gateway's own types. Copy it to `model_gateway/src/routers/common/classic_pair_select_rows.rs`, add
+`#[cfg(test)] mod classic_pair_select_rows;` at the end of `model_gateway/src/routers/common/mod.rs`, and run the
+test path `routers::common::classic_pair_select_rows` with the same two variables.
+
 A sheet is never edited by hand. A new recording replaces the whole sheet and its row in the table above, in one
 pull request that names the SMG commit and says which rows moved: a sequence row moves only when the policy's
 behavior did, and the drawn rows are a new sample.
@@ -155,6 +183,8 @@ fails once the reason no longer holds.
   SMG's replay reads this sheet from the commit its pin then names.
 - `encode_pair.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's encoder lists
   and its rule for encode items; SMG's replay reads this sheet from the commit its pin then names.
+- `pair_select.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair
+  decision; SMG's replay reads this sheet from the commit its pin then names.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
   keeps a key's pins apart under each role of a prefill and decode pair. The crate refuses a sessions rule under a
   pair plan today, so it cannot build the row; the other 13 rows replay.
