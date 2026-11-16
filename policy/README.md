@@ -11,16 +11,21 @@ pair's placement then picks from.
 One sheet records one rule under every policy: `all_vetoed.json` holds what the gateway answers when every usable
 worker of a pool is over its overload thresholds.
 
+One sheet records a request that carries encode items: `encode_pair.json` holds the pair the gateway picks for it,
+the encoders it offers the request's items and the encoder each item takes, or the name of its refusal.
+
 ```
 policy/
   power_of_two.json        one sheet per policy: its recorded rows
   manual.json
   pair_index.json
   all_vetoed.json
+  encode_pair.json
   classic_rows.rs               the recorder of power_of_two.json
   classic_manual_rows.rs        the recorder of manual.json
   classic_pair_rows.rs          the recorder of pair_index.json
   classic_all_vetoed_rows.rs    the recorder of all_vetoed.json
+  classic_encode_pair_rows.rs   the recorder of encode_pair.json
 ```
 
 ## A sheet
@@ -47,6 +52,25 @@ request placed nowhere is a number past the last worker: the count of the worker
 overload shed, the count plus one when it finds no worker to use. No row carries a routing key under consistent
 hashing: the sheet records what a request without one gets.
 
+The rows of `encode_pair.json` are sequence rows of their own shape. A row is a fleet: its encoders, its prefill
+workers and its decode workers, each named by its place in its list, with what the gateway reads of it from its
+registration and the requests the router holds on it (`in_flight`). An encoder has its `runtime`, the `handoff` its
+runtime hands an encoded item to a prefill worker in (`push`, `rendezvous`, or none), whether it states the
+producer role of a `connector` (`ec_producer`), whether it takes `images`, whether it processes `references` itself
+and whether it is ready (`open`). A prefill worker has its consumer role and connector and its `partners`, the
+decode workers the gateway pairs it with. A decode worker has whether its registration says it takes images; the
+gateway holds the decode workers of one runtime to that and no other's. A row names the policy each side of its
+pair is picked by and the policy an item's encoder is picked by. No row draws: under `power_of_two:least_requests`
+a row leaves the policy at most two workers, which hold different numbers of requests, and it takes the one that
+holds fewer. A request has the key of each of its encode items and what it asks: whether the items are references,
+whether they carry images, whether the decode side must take images, and whether each item is encoded on its own
+(`fanout`). The answer to a request is `placed` (the prefill and the decode worker, the encoders the items were
+`offered`, the `keys` the items were placed by and the encoder each key took) or `refused` (the refusal's `name`; a
+refused placement of the pair adds the `role` it names and `why`). Without `fanout` a pushing runtime places a
+request's items as one key, a hash of them, so such an answer has one key however many items the request has. Under
+`consistent_hashing` a key's encoder is the owner the gateway's ring gives it among the encoders offered; another
+ring gives the same key another of them.
+
 `pair_index.json` holds a third kind, which picks nothing:
 
 - **pair row:** a prefill pool and a decode pool, with what each worker offers a partner as the gateway derives it
@@ -68,6 +92,7 @@ directory. The sha256 is of the file as committed.
 | `manual.json` | manual, under each of its assignment modes | `1b141d03b5ca9097f54f0ebc4b95d72e810a62c3` | 14: 9 sequence, 5 drawn | `d34189025a50a7a31f925c632ce1964a09dac0baab89370e6e87c5c842db9a5a` | `classic_manual_rows.rs` |
 | `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds | `70587e0c735a84fcc3b657651282d2cf39eaaa0b` | 33: 29 sequence, 4 drawn | `b6ca0526c70704a8c736eae5880a9e1ee4c1e50ed95dd6771f383e4513bc2ee5` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
+| `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 46: 46 sequence, 0 drawn | `4e53c1ea92e2254e64e8c26677cb380247279aa421f54dce53f4a06c39b7948e` | `classic_encode_pair_rows.rs` |
 
 ## Recording
 
@@ -92,6 +117,14 @@ descriptor the gateway derived and never a second reading of the registration. C
 `model_gateway/src/worker/pd/pairing/classic_pair_rows.rs`, add `#[cfg(test)] mod classic_pair_rows;` at the end of
 `model_gateway/src/worker/pd/pairing.rs`, and run the test path `worker::pd::pairing::classic_pair_rows` with the
 same two variables.
+
+The encode sheet's recorder is a child of the gateway's worker selection stage, so it runs the stage's own
+selection and reads a worker by the stage's own functions. Copy it to
+`model_gateway/src/routers/grpc/common/stages/worker_selection/classic_encode_pair_rows.rs`, add
+`#[cfg(test)] mod classic_encode_pair_rows;` at the end of
+`model_gateway/src/routers/grpc/common/stages/worker_selection.rs`, and run the test path
+`worker_selection::classic_encode_pair_rows` with the same two variables. It wraps the encode policy to write down
+each call (the encoders offered and the key) and passes every call on unchanged.
 
 A sheet is never edited by hand. A new recording replaces the whole sheet and its row in the table above, in one
 pull request that names the SMG commit and says which rows moved: a sequence row moves only when the policy's
@@ -120,6 +153,8 @@ fails once the reason no longer holds.
   has no preset of either name yet, so it cannot build the rows. The other 29 rows replay.
 - `pair_index.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's pair classes;
   SMG's replay reads this sheet from the commit its pin then names.
+- `encode_pair.json`: none is recorded yet. The module that replays it arrives in SMG with the crate's encoder lists
+  and its rule for encode items; SMG's replay reads this sheet from the commit its pin then names.
 - `manual.json`: one row is owed, `manual-one-key-pins-apart-under-the-prefill-and-the-decode-role`. The gateway
   keeps a key's pins apart under each role of a prefill and decode pair. The crate refuses a sessions rule under a
   pair plan today, so it cannot build the row; the other 13 rows replay.
