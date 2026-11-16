@@ -92,8 +92,9 @@ registration names (`a`, `b` or none): two workers pair when their transports ar
 A decode may report a running window, with the rooms of it the decode admission has claimed (`rooms`). A row places
 its requests one after another, and no request changes what the router holds. An answer is the pair, the prefill's
 place in its list and then the decode's, or no pair with the role the gateway named and why: `overloaded` (an
-overload shed), `unavailable`, `at_capacity` (the chosen prefill holds its bound), `no_candidates` or `declined`. A
-drawn row counts how often each pair took its one request; a pair never placed is not listed.
+overload shed), `unavailable`, `at_capacity` (the chosen prefill holds its bound), `no_candidates` (the role has no
+worker at all) or `declined`, which no row answers. A drawn row counts how often each pair took its one request; a
+pair never placed is not listed.
 
 Two choices keep those rows replayable. No row runs under `round_robin`: the gateway starts the rotation of a
 candidate set it has not seen at a shared count, so which pick comes first is not the policy's rule. Where a row
@@ -123,7 +124,7 @@ directory. The sha256 is of the file as committed.
 | `all_vetoed.json` | every policy, over a pool whose every usable worker is over its overload thresholds; a routing key under consistent hashing whose own worker is over them | `d9f8018881cc54c9b0f6e993849a59f8f7c54ab5` | 42: 38 sequence, 4 drawn | `e5496add4cc24e8438e60849570c6f0113f3537eeb2010f448fb8af5a432527b` | `classic_all_vetoed_rows.rs` |
 | `pair_index.json` | the prefill and decode pair index, on both pair wires under each pairing mode | `64ff5a437b5007af5079f0492b46f4e5a712b66f` | 23 pair rows | `383783a8a28bdc3d0753111fbb84df4be2713fe332b448938b9cb75f44dec694` | `classic_pair_rows.rs` |
 | `encode_pair.json` | a request with encode items: the pair, the encoders offered and each item's encoder | `4ba2a6431357be5411a2383cdc4916b41471d722` | 52: 52 sequence, 0 drawn | `988bf253da9310aeedd08ec2704d8e01ecc4a1210453353723ba0faa9001de33` | `classic_encode_pair_rows.rs` |
-| `pair_select.json` | the placement of a prefill and decode pair: each side under its policy, a side over its overload thresholds or doubted whole, a decode's rooms, the prefill admission's bound | `4ba2a6431357be5411a2383cdc4916b41471d722` | 33: 18 sequence, 15 drawn | `1ee16ff0019bd2f57564ef556cc9e8ebebb53143667a72ad30c13a5fdd4805fa` | `classic_pair_select_rows.rs` |
+| `pair_select.json` | the placement of a prefill and decode pair: each side under its policy, a side over its overload thresholds or doubted whole, a decode's rooms, the prefill admission's bound, the least-loaded default's own rules, a role with no worker | `4ba2a6431357be5411a2383cdc4916b41471d722` | 40: 23 sequence, 17 drawn | `bd8426316ae7337ede82b5a931c1d00cd9dee1aca22c528278f32b2671846eb8` | `classic_pair_select_rows.rs` |
 
 ## Recording
 
