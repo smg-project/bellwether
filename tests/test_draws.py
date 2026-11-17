@@ -4,6 +4,7 @@ import shutil
 
 import pytest
 
+from bellwether.record import draws
 from bellwether.record.roundtrip import RoundtripOracle
 
 # A nonce after every role, drawn with Jinja's ``random`` filter: no two renders of one conversation agree.
@@ -40,4 +41,20 @@ def test_the_round_trip_gives_the_generator_back_as_it_was(drawing_model):
     random.seed(20261117)
     before = random.getstate()
     oracle.render_output(REQUEST, {"content": "Paris."})
+    assert random.getstate() == before
+
+
+def test_two_renders_under_equal_draws_draw_the_same():
+    with draws.equal_draws():
+        first = random.random()
+    with draws.equal_draws():
+        second = random.random()
+    assert first == second
+
+
+def test_equal_draws_gives_the_generator_back_when_the_render_raises():
+    before = random.getstate()
+    with pytest.raises(RuntimeError), draws.equal_draws():
+        random.random()
+        raise RuntimeError("a render that fails")
     assert random.getstate() == before

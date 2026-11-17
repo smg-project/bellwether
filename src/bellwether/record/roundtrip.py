@@ -97,7 +97,7 @@ from tokenizers import Tokenizer, normalizers
 from tokenizers.decoders import DecodeStream
 from tokenizers.normalizers import Normalizer
 
-from . import clock, vendor
+from . import clock, draws, vendor
 from .content_format import ContentFormat, in_content_format
 from .reference import HfTemplateOracle, as_vllm_gives_it, checkpoint_file
 
@@ -225,12 +225,14 @@ class RoundtripOracle:
             kwargs = {**kwargs, "chat_template": template}
         # At the render oracle's own instant, as its renders are.
         clock.pin_template_clock(self.renderer.rendered_at)
-        return self.tokenizer.apply_chat_template(
-            self.renderer.for_template(messages, tools),
-            tokenize=False,
-            add_generation_prompt=generation_prompt,
-            **kwargs,
-        )
+        # Under equal draws: a round trip compares two renders, and a template that draws would give each its own.
+        with draws.equal_draws():
+            return self.tokenizer.apply_chat_template(
+                self.renderer.for_template(messages, tools),
+                tokenize=False,
+                add_generation_prompt=generation_prompt,
+                **kwargs,
+            )
 
     def check_no_stop_id_in_the_message(self, assistant: dict) -> None:
         """No string of the message, as the template gets it, may hold a stop id.
