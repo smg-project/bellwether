@@ -5,7 +5,7 @@ Benchmark sets are stored compressed in Git LFS, and a clone holds only their po
 (Symphony's fixture test, smg's consumer test) points at the unpacked root instead, where every set is plain JSON
 Lines beside the hand-written ones, and each model's ``manifest.toml`` and ``sets.toml`` come along. So do the shape
 patterns' recordings (``bellwether patterns``), from ``patterns/`` beside the fixture root into ``patterns/`` of the
-tree, so that a consumer reads one root.
+tree, and the parity references (``corpus/parity/``) into ``parity/``, so that a consumer reads one root.
 """
 
 from __future__ import annotations
@@ -34,6 +34,8 @@ from bellwether.storage import (
 INCLUDE_BYTES = 100_000
 # The shape patterns' recordings, beside the fixture root and in the unpacked tree.
 PATTERNS = "patterns"
+# The parity references: ``corpus/parity/`` beside the fixture root, ``parity/`` in the unpacked tree.
+PARITY = "parity"
 
 
 def selected(fixtures: Path, model: str | None) -> list[Manifest]:
@@ -116,6 +118,7 @@ def unpack(
             target.write_bytes(plain_text(path).encode("utf-8"))
             written.append(target)
     written.extend(copy_patterns(fixtures, out))
+    written.extend(copy_parity(fixtures, out))
     return written
 
 
@@ -170,6 +173,18 @@ def copy_patterns(fixtures: Path, out: Path) -> list[Path]:
             shutil.copyfile(source / name, target_dir / name)
             written.append(target_dir / name)
     return written
+
+
+def copy_parity(fixtures: Path, out: Path) -> list[Path]:
+    """The parity references, every family's directory copied whole from ``corpus/parity/`` beside the fixture root
+    into ``parity/`` under ``out``, each file replacing the one an earlier unpack wrote; nothing when the root has
+    none (a fixture tree of a test)."""
+    source = fixtures.resolve().parent / "corpus" / PARITY
+    if not source.is_dir():
+        return []
+    target_dir = out / PARITY
+    shutil.copytree(source, target_dir, dirs_exist_ok=True)
+    return sorted(target_dir / p.relative_to(source) for p in source.rglob("*") if p.is_file())
 
 
 def refuse_out_over_fixtures(out: Path, manifests: list[Manifest]) -> None:

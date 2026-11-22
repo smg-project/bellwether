@@ -51,8 +51,9 @@ module-root = "src"
 line-length = 120
 target-version = "py312"
 # corpus/agentic/ holds the corpus tools as provenance: the corpus manifests pin them by sha256, so they are kept
-# byte for byte and not reformatted (corpus/agentic/README.md).
-extend-exclude = ["corpus/agentic"]
+# byte for byte and not reformatted (corpus/agentic/README.md). So are the generators of the parity references that
+# came from smg (corpus/parity/README.md).
+extend-exclude = ["corpus/agentic", "corpus/parity/*/generate_*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

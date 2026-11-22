@@ -3543,6 +3543,19 @@ def test_unpack_sample_sets_needs_plain(tmp_path, tiny_model, capsys):
     assert not out.exists()
 
 
+def test_unpack_copies_the_parity_references_beside_the_fixture_root_into_the_tree(tmp_path):
+    fixtures, out = tmp_path / "fixtures", tmp_path / "plain"
+    fixtures.mkdir()
+    assert unpack_module.copy_parity(fixtures, out) == []  # a root with no corpus beside it
+    family = tmp_path / "corpus" / "parity" / "some-family"
+    family.mkdir(parents=True)
+    (family / "table.json").write_text("{}\n")
+    (out / "parity" / "some-family").mkdir(parents=True)
+    (out / "parity" / "some-family" / "table.json").write_text("what an earlier unpack wrote\n")
+    assert unpack_module.copy_parity(fixtures, out) == [out / "parity" / "some-family" / "table.json"]
+    assert (out / "parity" / "some-family" / "table.json").read_text() == "{}\n"
+
+
 def test_unpack_model_writes_and_fetches_that_model_only(tmp_path, tiny_model, monkeypatch):
     common = [{"name": "a", "request": {"messages": [user("A")]}}]
     record(tmp_path, tiny_model, ("common", common), ("bench-x", [imported("bench-x-0", "X")]))
