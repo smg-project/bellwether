@@ -512,7 +512,8 @@ Each step is its own pull request.
 - **What consumers read.** `bellwether unpack` writes `<root>/<slug>/<kind>/<set>.jsonl`, the same
   layout as `fixtures/`, with the hand-written sets beside the benchmark sets, so a consumer points
   at one root. Symphony's fixture test and smg's consumer test read plain JSON Lines after one
-  command, and Symphony's dependencies do not change.
+  command, and Symphony's dependencies do not change. The parity references of `corpus/parity/`
+  come along as `<root>/parity/<family>/`, each file as it is stored.
   A consumer that cannot hold the whole tree asks for `--plain` (the hand-written sets alone, every
   `sets.toml` trimmed to them, nothing fetched) and `--sample-sets N` (one compressed set in N
   besides, fetched and written whole; a set's own id, `<slug>/<kind>/<set>`, decides, so the same

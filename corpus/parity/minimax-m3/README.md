@@ -39,3 +39,13 @@ trees disagree on every input: at the pin a 1024x768 image is a 40x54 grid (540 
 a 320x240 frame is 18x22 at the pin and 18x24 at main; a 5 s clip at 30 fps is five picks at the pin and six at main
 (the last frame kept), a 10 s clip ten and eleven. The pin's numbers are what a deployment on vLLM v0.31.0 computes;
 main's are what the next engine release carrying dbd49af22 will compute.
+
+## Video references from smg
+
+Three more files of the family, from `smg-project/smg` byte for byte (`../README.md`); each states its own source:
+
+| file | content | source, as the file states it |
+|---|---|---|
+| `minimax_m3_video_timestamps.json` | 12 cases: for a source rate, the frame picks and the temporal patch size, the timestamps of the prompt | reference `processing_minimax.py`, sha256 0706ae8b93b3489a3b3bc7f48a5f29fb34b1449ebebb37586250e4d5fa8f5e35; `generated_by` names lines 221-245 of that file and spells the expression; no generator stands in smg, no library version |
+| `minimax_narrow_video.json` | 5 cases: for a frame size, the grid, the shape and the values of each channel and frame | `source`: the checkpoint's `video_processor.py` at the Hub revision the field names; `generate_minimax_narrow_video_golden.py` writes it; no library version |
+| `minimax_sglang_video.json` | one 320x240 clip of 20 frames at 8 fps: the sampled frames, the grid, the shape and 257 sampled values | reference "SGLang day0 c1ad2606 get_video_tensor and builtin MiniMaxM31VideoProcessor"; no generator stands in smg, no library version |
